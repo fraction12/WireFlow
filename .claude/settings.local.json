@@ -6,7 +6,9 @@
       "Bash(pnpm run build:*)",
       "Bash(pnpm dev)",
       "Bash(timeout /t 5)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(git fetch:*)",
+      "Bash(git merge:*)"
     ]
   }
 }
