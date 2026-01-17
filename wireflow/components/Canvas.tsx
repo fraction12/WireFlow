@@ -2,6 +2,7 @@
 
 import { useRef, useState, useEffect, useCallback } from 'react';
 import type { CanvasElement, Tool, RectangleElement, TextElement, ArrowElement, Frame, FrameType, ComponentGroup, ComponentTemplate } from '@/lib/types';
+import { saveWorkspace, loadWorkspace } from '@/lib/persistence';
 import { Toolbar } from './Toolbar';
 import { SidePanel } from './SidePanel';
 import { ExportButton } from './ExportButton';
@@ -64,6 +65,41 @@ export function Canvas() {
   // Component grouping state
   const [componentGroups, setComponentGroups] = useState<ComponentGroup[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+
+  // Persistence: track if initial load has completed
+  const hasLoadedRef = useRef(false);
+
+  // Load workspace from localStorage on mount
+  useEffect(() => {
+    if (hasLoadedRef.current) return;
+    hasLoadedRef.current = true;
+
+    const savedState = loadWorkspace();
+    if (savedState && savedState.frames.length > 0) {
+      setFrames(savedState.frames);
+      setComponentGroups(savedState.componentGroups);
+      // Restore active frame, or fall back to first frame if saved frame no longer exists
+      const frameExists = savedState.frames.some(f => f.id === savedState.activeFrameId);
+      setActiveFrameId(frameExists ? savedState.activeFrameId : savedState.frames[0].id);
+    }
+  }, []);
+
+  // Auto-save workspace on meaningful state changes (debounced)
+  useEffect(() => {
+    // Skip saving until initial load completes
+    if (!hasLoadedRef.current) return;
+
+    const timeoutId = setTimeout(() => {
+      saveWorkspace({
+        version: 1,
+        frames,
+        componentGroups,
+        activeFrameId,
+      });
+    }, 500); // 500ms debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [frames, componentGroups, activeFrameId]);
 
   // Helper function to get group elements (defined before redraw)
   const getGroupElements = useCallback((groupId: string): CanvasElement[] => {
