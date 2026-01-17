@@ -52,7 +52,21 @@ export interface ArrowElement extends BaseElement {
 export type CanvasElement = RectangleElement | TextElement | ArrowElement;
 
 // Tool types
-export type Tool = 'select' | 'rectangle' | 'text' | 'arrow';
+export type Tool =
+  | 'select'
+  | 'rectangle'
+  | 'text'
+  | 'arrow'
+  // Layout & Structure
+  | 'section'
+  | 'divider'
+  // UI Intent
+  | 'button'
+  | 'input'
+  | 'checkbox'
+  // Annotation
+  | 'callout'
+  | 'badge';
 
 // Frame types for classification
 export type FrameType = 'page' | 'modal' | 'flyout';

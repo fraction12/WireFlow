@@ -339,8 +339,8 @@ export function Canvas() {
       setIsDrawing(true);
       setStartPoint({ x, y });
 
+      // Immediate creation tools (click-to-place)
       if (currentTool === 'text') {
-        // For text, create element immediately
         const newElement: TextElement = {
           id: generateId(),
           type: 'text',
@@ -352,6 +352,278 @@ export function Canvas() {
         };
         setElements([...elements, newElement]);
         setSelectedElementId(newElement.id);
+        setIsDrawing(false);
+        setStartPoint(null);
+      } else if (currentTool === 'button') {
+        // Button: grouped rectangle + centered text with semantic tag
+        const groupId = generateGroupId();
+        const buttonWidth = 120;
+        const buttonHeight = 40;
+
+        const buttonRect: RectangleElement = {
+          id: generateId(),
+          type: 'rectangle',
+          x,
+          y,
+          width: buttonWidth,
+          height: buttonHeight,
+          semanticTag: 'button',
+          groupId,
+        };
+
+        const buttonText: TextElement = {
+          id: generateId(),
+          type: 'text',
+          x: x + 10,
+          y: y + 10,
+          width: buttonWidth - 20,
+          height: 20,
+          content: 'Button',
+          groupId,
+        };
+
+        setElements([...elements, buttonRect, buttonText]);
+        const group: ComponentGroup = {
+          id: groupId,
+          componentType: 'simple-form', // Reuse existing type for UI elements
+          x,
+          y,
+          elementIds: [buttonRect.id, buttonText.id],
+          createdAt: new Date().toISOString(),
+        };
+        setComponentGroups([...componentGroups, group]);
+        setSelectedGroupId(groupId);
+        setIsDrawing(false);
+        setStartPoint(null);
+      } else if (currentTool === 'input') {
+        // Input field: rectangle + placeholder text
+        const groupId = generateGroupId();
+        const inputWidth = 200;
+        const inputHeight = 36;
+
+        const inputRect: RectangleElement = {
+          id: generateId(),
+          type: 'rectangle',
+          x,
+          y,
+          width: inputWidth,
+          height: inputHeight,
+          semanticTag: 'input',
+          groupId,
+        };
+
+        const placeholderText: TextElement = {
+          id: generateId(),
+          type: 'text',
+          x: x + 8,
+          y: y + 8,
+          width: inputWidth - 16,
+          height: 20,
+          content: 'Placeholder text...',
+          groupId,
+        };
+
+        setElements([...elements, inputRect, placeholderText]);
+        const group: ComponentGroup = {
+          id: groupId,
+          componentType: 'simple-form',
+          x,
+          y,
+          elementIds: [inputRect.id, placeholderText.id],
+          createdAt: new Date().toISOString(),
+        };
+        setComponentGroups([...componentGroups, group]);
+        setSelectedGroupId(groupId);
+        setIsDrawing(false);
+        setStartPoint(null);
+      } else if (currentTool === 'checkbox') {
+        // Checkbox: small square + label text
+        const groupId = generateGroupId();
+        const checkboxSize = 20;
+
+        const checkboxRect: RectangleElement = {
+          id: generateId(),
+          type: 'rectangle',
+          x,
+          y,
+          width: checkboxSize,
+          height: checkboxSize,
+          semanticTag: 'input',
+          groupId,
+        };
+
+        const checkboxLabel: TextElement = {
+          id: generateId(),
+          type: 'text',
+          x: x + checkboxSize + 8,
+          y: y,
+          width: 100,
+          height: 20,
+          content: 'Checkbox label',
+          groupId,
+        };
+
+        setElements([...elements, checkboxRect, checkboxLabel]);
+        const group: ComponentGroup = {
+          id: groupId,
+          componentType: 'simple-form',
+          x,
+          y,
+          elementIds: [checkboxRect.id, checkboxLabel.id],
+          createdAt: new Date().toISOString(),
+        };
+        setComponentGroups([...componentGroups, group]);
+        setSelectedGroupId(groupId);
+        setIsDrawing(false);
+        setStartPoint(null);
+      } else if (currentTool === 'divider') {
+        // Divider: horizontal line (thin rectangle)
+        const newElement: RectangleElement = {
+          id: generateId(),
+          type: 'rectangle',
+          x,
+          y,
+          width: 300,
+          height: 1,
+        };
+        setElements([...elements, newElement]);
+        setSelectedElementId(newElement.id);
+        setIsDrawing(false);
+        setStartPoint(null);
+      } else if (currentTool === 'section') {
+        // Section: labeled bounding box (rectangle + label)
+        const groupId = generateGroupId();
+        const sectionWidth = 300;
+        const sectionHeight = 200;
+
+        const sectionRect: RectangleElement = {
+          id: generateId(),
+          type: 'rectangle',
+          x,
+          y: y + 20,
+          width: sectionWidth,
+          height: sectionHeight,
+          semanticTag: 'section',
+          groupId,
+        };
+
+        const sectionLabel: TextElement = {
+          id: generateId(),
+          type: 'text',
+          x: x + 8,
+          y: y,
+          width: 100,
+          height: 20,
+          content: 'Section',
+          groupId,
+        };
+
+        setElements([...elements, sectionRect, sectionLabel]);
+        const group: ComponentGroup = {
+          id: groupId,
+          componentType: 'simple-form',
+          x,
+          y,
+          elementIds: [sectionRect.id, sectionLabel.id],
+          createdAt: new Date().toISOString(),
+        };
+        setComponentGroups([...componentGroups, group]);
+        setSelectedGroupId(groupId);
+        setIsDrawing(false);
+        setStartPoint(null);
+      } else if (currentTool === 'callout') {
+        // Callout: text box + arrow pointer
+        const groupId = generateGroupId();
+        const noteWidth = 150;
+        const noteHeight = 60;
+
+        const noteRect: RectangleElement = {
+          id: generateId(),
+          type: 'rectangle',
+          x,
+          y,
+          width: noteWidth,
+          height: noteHeight,
+          groupId,
+        };
+
+        const noteText: TextElement = {
+          id: generateId(),
+          type: 'text',
+          x: x + 8,
+          y: y + 8,
+          width: noteWidth - 16,
+          height: 20,
+          content: 'Note text',
+          groupId,
+        };
+
+        // Pointer arrow pointing down-left
+        const pointer: ArrowElement = {
+          id: generateId(),
+          type: 'arrow',
+          x: x,
+          y: y + noteHeight,
+          width: 40,
+          height: 40,
+          startX: x + noteWidth / 2,
+          startY: y + noteHeight,
+          endX: x + noteWidth / 2 + 40,
+          endY: y + noteHeight + 40,
+          groupId,
+        };
+
+        setElements([...elements, noteRect, noteText, pointer]);
+        const group: ComponentGroup = {
+          id: groupId,
+          componentType: 'simple-form',
+          x,
+          y,
+          elementIds: [noteRect.id, noteText.id, pointer.id],
+          createdAt: new Date().toISOString(),
+        };
+        setComponentGroups([...componentGroups, group]);
+        setSelectedGroupId(groupId);
+        setIsDrawing(false);
+        setStartPoint(null);
+      } else if (currentTool === 'badge') {
+        // State badge: small rounded rectangle + state text
+        const groupId = generateGroupId();
+        const badgeWidth = 80;
+        const badgeHeight = 24;
+
+        const badgeRect: RectangleElement = {
+          id: generateId(),
+          type: 'rectangle',
+          x,
+          y,
+          width: badgeWidth,
+          height: badgeHeight,
+          groupId,
+        };
+
+        const badgeText: TextElement = {
+          id: generateId(),
+          type: 'text',
+          x: x + 8,
+          y: y + 2,
+          width: badgeWidth - 16,
+          height: 20,
+          content: 'Empty',
+          groupId,
+        };
+
+        setElements([...elements, badgeRect, badgeText]);
+        const group: ComponentGroup = {
+          id: groupId,
+          componentType: 'empty-state',
+          x,
+          y,
+          elementIds: [badgeRect.id, badgeText.id],
+          createdAt: new Date().toISOString(),
+        };
+        setComponentGroups([...componentGroups, group]);
+        setSelectedGroupId(groupId);
         setIsDrawing(false);
         setStartPoint(null);
       }
