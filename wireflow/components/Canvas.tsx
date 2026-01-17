@@ -11,9 +11,17 @@ import { ComponentPanel } from './ComponentPanel';
 export function Canvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Generate unique IDs
-  const generateId = () => `el_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  const generateFrameId = () => `frame_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  // Constants for sketch rendering and interaction
+  const SKETCH_AMPLITUDE = 1.5;
+  const SEGMENT_DISTANCE = 20;
+  const ARROW_HEAD_LENGTH = 15;
+  const HANDLE_SIZE = 8;
+  const HANDLE_TOLERANCE = 5;
+  const MIN_ELEMENT_SIZE = 20;
+
+  // Generate unique IDs (using substring instead of deprecated substr)
+  const generateId = () => `el_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+  const generateFrameId = () => `frame_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
   // Initialize with default frame
   const defaultFrame: Frame = {
@@ -63,7 +71,7 @@ export function Canvas() {
   }, [elements]);
 
   // Sketch-style rendering helpers
-  const getRandomOffset = (base: number, seed: number, amplitude: number = 1.5): number => {
+  const getRandomOffset = (base: number, seed: number, amplitude: number = SKETCH_AMPLITUDE): number => {
     // Use seed for deterministic randomness based on position
     const pseudo = Math.sin(seed * 12.9898 + base * 78.233) * 43758.5453;
     return (pseudo - Math.floor(pseudo)) * amplitude - amplitude / 2;
@@ -71,7 +79,11 @@ export function Canvas() {
 
   const drawSketchLine = (ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, seed: number = 0) => {
     const distance = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-    const segments = Math.max(3, Math.floor(distance / 20)); // More segments for longer lines
+
+    // Safety: Skip drawing degenerate (zero-length) lines
+    if (distance < 1) return;
+
+    const segments = Math.max(3, Math.floor(distance / SEGMENT_DISTANCE));
 
     ctx.beginPath();
     ctx.moveTo(x1, y1);
@@ -156,12 +168,11 @@ export function Canvas() {
 
         // Draw sketch-style arrowhead
         const angle = Math.atan2(arrowEl.endY - arrowEl.startY, arrowEl.endX - arrowEl.startX);
-        const headLength = 15;
 
-        const head1X = arrowEl.endX - headLength * Math.cos(angle - Math.PI / 6);
-        const head1Y = arrowEl.endY - headLength * Math.sin(angle - Math.PI / 6);
-        const head2X = arrowEl.endX - headLength * Math.cos(angle + Math.PI / 6);
-        const head2Y = arrowEl.endY - headLength * Math.sin(angle + Math.PI / 6);
+        const head1X = arrowEl.endX - ARROW_HEAD_LENGTH * Math.cos(angle - Math.PI / 6);
+        const head1Y = arrowEl.endY - ARROW_HEAD_LENGTH * Math.sin(angle - Math.PI / 6);
+        const head2X = arrowEl.endX - ARROW_HEAD_LENGTH * Math.cos(angle + Math.PI / 6);
+        const head2Y = arrowEl.endY - ARROW_HEAD_LENGTH * Math.sin(angle + Math.PI / 6);
 
         drawSketchLine(ctx, arrowEl.endX, arrowEl.endY, head1X, head1Y, seed + 10);
         drawSketchLine(ctx, arrowEl.endX, arrowEl.endY, head2X, head2Y, seed + 11);
@@ -169,21 +180,20 @@ export function Canvas() {
 
       // Draw resize handles for selected element (only if not grouped)
       if (element.id === selectedElementId && element.type !== 'arrow' && !element.groupId) {
-        const handleSize = 8;
         ctx.fillStyle = '#3b82f6';
         ctx.strokeStyle = '#3b82f6';
 
-        // Corner handles with slight sketch style
+        // Corner handles for resizing
         const handles = [
-          { x: element.x - handleSize / 2, y: element.y - handleSize / 2 }, // NW
-          { x: element.x + element.width - handleSize / 2, y: element.y - handleSize / 2 }, // NE
-          { x: element.x - handleSize / 2, y: element.y + element.height - handleSize / 2 }, // SW
-          { x: element.x + element.width - handleSize / 2, y: element.y + element.height - handleSize / 2 }, // SE
+          { x: element.x - HANDLE_SIZE / 2, y: element.y - HANDLE_SIZE / 2 }, // NW
+          { x: element.x + element.width - HANDLE_SIZE / 2, y: element.y - HANDLE_SIZE / 2 }, // NE
+          { x: element.x - HANDLE_SIZE / 2, y: element.y + element.height - HANDLE_SIZE / 2 }, // SW
+          { x: element.x + element.width - HANDLE_SIZE / 2, y: element.y + element.height - HANDLE_SIZE / 2 }, // SE
         ];
 
-        handles.forEach((handle, i) => {
+        handles.forEach((handle) => {
           ctx.beginPath();
-          ctx.arc(handle.x + handleSize / 2, handle.y + handleSize / 2, handleSize / 2, 0, Math.PI * 2);
+          ctx.arc(handle.x + HANDLE_SIZE / 2, handle.y + HANDLE_SIZE / 2, HANDLE_SIZE / 2, 0, Math.PI * 2);
           ctx.fill();
         });
       }
@@ -280,10 +290,9 @@ export function Canvas() {
   };
 
   // Check if point is on resize handle
+  // Check if click is on a resize handle
   const getResizeHandle = (x: number, y: number, element: CanvasElement): string | null => {
     if (element.type === 'arrow') return null;
-    const handleSize = 8;
-    const tolerance = 5;
 
     const handles = {
       'nw': { x: element.x, y: element.y },
@@ -293,7 +302,7 @@ export function Canvas() {
     };
 
     for (const [key, pos] of Object.entries(handles)) {
-      if (Math.abs(x - pos.x) <= handleSize + tolerance && Math.abs(y - pos.y) <= handleSize + tolerance) {
+      if (Math.abs(x - pos.x) <= HANDLE_SIZE + HANDLE_TOLERANCE && Math.abs(y - pos.y) <= HANDLE_SIZE + HANDLE_TOLERANCE) {
         return key;
       }
     }
@@ -611,22 +620,22 @@ export function Canvas() {
               const newEl = { ...el };
               switch (resizeHandle) {
                 case 'se':
-                  newEl.width = Math.max(20, x - el.x);
-                  newEl.height = Math.max(20, y - el.y);
+                  newEl.width = Math.max(MIN_ELEMENT_SIZE, x - el.x);
+                  newEl.height = Math.max(MIN_ELEMENT_SIZE, y - el.y);
                   break;
                 case 'sw':
-                  newEl.width = Math.max(20, el.x + el.width - x);
-                  newEl.height = Math.max(20, y - el.y);
+                  newEl.width = Math.max(MIN_ELEMENT_SIZE, el.x + el.width - x);
+                  newEl.height = Math.max(MIN_ELEMENT_SIZE, y - el.y);
                   newEl.x = x;
                   break;
                 case 'ne':
-                  newEl.width = Math.max(20, x - el.x);
-                  newEl.height = Math.max(20, el.y + el.height - y);
+                  newEl.width = Math.max(MIN_ELEMENT_SIZE, x - el.x);
+                  newEl.height = Math.max(MIN_ELEMENT_SIZE, el.y + el.height - y);
                   newEl.y = y;
                   break;
                 case 'nw':
-                  newEl.width = Math.max(20, el.x + el.width - x);
-                  newEl.height = Math.max(20, el.y + el.height - y);
+                  newEl.width = Math.max(MIN_ELEMENT_SIZE, el.x + el.width - x);
+                  newEl.height = Math.max(MIN_ELEMENT_SIZE, el.y + el.height - y);
                   newEl.x = x;
                   newEl.y = y;
                   break;
@@ -763,7 +772,8 @@ export function Canvas() {
 
         // If element is grouped, delete entire group with confirmation
         if (element.groupId) {
-          const shouldDelete = window.confirm(`Delete entire ${element.componentType} component?`);
+          const componentName = element.componentType || 'grouped';
+          const shouldDelete = window.confirm(`Delete entire ${componentName} component?`);
           if (shouldDelete) {
             deleteGroup(element.groupId);
           }
@@ -821,19 +831,23 @@ export function Canvas() {
   };
 
   const handleDeleteFrame = (frameId: string) => {
-    if (frames.length === 1) return;  // Prevent deleting last frame
+    // Safety: Prevent deleting the last frame
+    if (frames.length === 1) {
+      alert('Cannot delete the last frame');
+      return;
+    }
 
     const newFrames = frames.filter(f => f.id !== frameId);
     setFrames(newFrames);
 
-    // If deleted active frame, switch to first frame
-    if (frameId === activeFrameId) {
+    // Safety: If deleted active frame, switch to first frame (with bounds check)
+    if (frameId === activeFrameId && newFrames.length > 0) {
       setActiveFrameId(newFrames[0].id);
     }
   };
 
   // Component group operations
-  const generateGroupId = () => `grp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const generateGroupId = () => `grp_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
   const createComponentGroup = (template: ComponentTemplate, insertX: number, insertY: number): ComponentGroup => {
     const groupId = generateGroupId();

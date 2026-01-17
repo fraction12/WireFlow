@@ -51,20 +51,25 @@ export function ExportButton({ frames }: ExportButtonProps) {
       frames: exportableFrames,
     };
 
-    // Create and download JSON file
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `wireflow-export-${Date.now()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    // Create and download JSON file with error handling
+    try {
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `wireflow-export-${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
 
-    // Show success message
-    const totalElements = exportableFrames.reduce((sum, f) => sum + f.taggedElements.length, 0);
-    alert(`Exported ${exportableFrames.length} frame(s) with ${totalElements} tagged element(s)`);
+      // Show success message
+      const totalElements = exportableFrames.reduce((sum, f) => sum + f.taggedElements.length, 0);
+      alert(`Exported ${exportableFrames.length} frame(s) with ${totalElements} tagged element(s)`);
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Failed to export JSON file. Please try again or check the browser console for details.');
+    }
   };
 
   // Count tagged elements across all frames
