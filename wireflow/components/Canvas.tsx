@@ -62,6 +62,13 @@ export function Canvas() {
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
 
+  // Resize snapshot: captures initial element bounds and pointer origin at resize start.
+  // This prevents cumulative drift by computing new bounds from a fixed reference point.
+  const [resizeSnapshot, setResizeSnapshot] = useState<{
+    initialBounds: { x: number; y: number; width: number; height: number };
+    pointerOrigin: { x: number; y: number };
+  } | null>(null);
+
   // Component grouping state
   const [componentGroups, setComponentGroups] = useState<ComponentGroup[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
@@ -366,10 +373,22 @@ export function Canvas() {
           setSelectedGroupId(null);
         }
 
-        const handle = getResizeHandle(x, y, clickedElement);
+        // Check if click is on a resize handle (only for non-grouped elements)
+        const handle = !groupId ? getResizeHandle(x, y, clickedElement) : null;
 
         if (handle) {
+          // Enter resize mode: capture snapshot of initial bounds and pointer position.
+          // This snapshot is the single source of truth for resize calculations.
           setResizeHandle(handle);
+          setResizeSnapshot({
+            initialBounds: {
+              x: clickedElement.x,
+              y: clickedElement.y,
+              width: clickedElement.width,
+              height: clickedElement.height,
+            },
+            pointerOrigin: { x, y },
+          });
           setIsDrawing(true);
         } else {
           // Start dragging
@@ -648,39 +667,74 @@ export function Canvas() {
       const element = elements.find(el => el.id === selectedElementId);
       if (!element) return;
 
-      if (resizeHandle) {
-        // Resize (only for non-grouped elements)
-        if (!selectedGroupId) {
-          setElements(elements.map(el => {
-            if (el.id === selectedElementId && el.type !== 'arrow') {
-              const newEl = { ...el };
-              switch (resizeHandle) {
-                case 'se':
-                  newEl.width = Math.max(MIN_ELEMENT_SIZE, x - el.x);
-                  newEl.height = Math.max(MIN_ELEMENT_SIZE, y - el.y);
-                  break;
-                case 'sw':
-                  newEl.width = Math.max(MIN_ELEMENT_SIZE, el.x + el.width - x);
-                  newEl.height = Math.max(MIN_ELEMENT_SIZE, y - el.y);
-                  newEl.x = x;
-                  break;
-                case 'ne':
-                  newEl.width = Math.max(MIN_ELEMENT_SIZE, x - el.x);
-                  newEl.height = Math.max(MIN_ELEMENT_SIZE, el.y + el.height - y);
-                  newEl.y = y;
-                  break;
-                case 'nw':
-                  newEl.width = Math.max(MIN_ELEMENT_SIZE, el.x + el.width - x);
-                  newEl.height = Math.max(MIN_ELEMENT_SIZE, el.y + el.height - y);
-                  newEl.x = x;
-                  newEl.y = y;
-                  break;
-              }
-              return newEl;
-            }
-            return el;
-          }));
+      if (resizeHandle && resizeSnapshot) {
+        // RESIZE MODE: Compute new bounds from the snapshot (no cumulative drift).
+        //
+        // Handle-to-Anchor Mapping:
+        //   Handle   |  Fixed Anchor Corner
+        //   ---------+----------------------
+        //   'nw'     |  SE corner (x + width, y + height)
+        //   'ne'     |  SW corner (x, y + height)
+        //   'sw'     |  NE corner (x + width, y)
+        //   'se'     |  NW corner (x, y)
+        //
+        // Math: We compute pointer delta from origin, apply it to the initial bounds,
+        // then derive new x/y/width/height while keeping the anchor corner fixed.
+
+        const { initialBounds, pointerOrigin } = resizeSnapshot;
+        const dx = x - pointerOrigin.x; // Pointer delta X
+        const dy = y - pointerOrigin.y; // Pointer delta Y
+
+        // Compute the anchor corner (opposite corner that must stay fixed)
+        const anchorX = resizeHandle.includes('w')
+          ? initialBounds.x + initialBounds.width  // Anchor is on the right (E side)
+          : initialBounds.x;                        // Anchor is on the left (W side)
+        const anchorY = resizeHandle.includes('n')
+          ? initialBounds.y + initialBounds.height // Anchor is on the bottom (S side)
+          : initialBounds.y;                        // Anchor is on the top (N side)
+
+        // Compute new moving corner position (the corner being dragged)
+        // Start from initial corner position, add pointer delta
+        const movingCornerInitialX = resizeHandle.includes('w')
+          ? initialBounds.x
+          : initialBounds.x + initialBounds.width;
+        const movingCornerInitialY = resizeHandle.includes('n')
+          ? initialBounds.y
+          : initialBounds.y + initialBounds.height;
+
+        let newMovingX = movingCornerInitialX + dx;
+        let newMovingY = movingCornerInitialY + dy;
+
+        // Clamp moving corner to enforce minimum size and prevent inversion.
+        // The moving corner can't cross past the anchor beyond MIN_ELEMENT_SIZE.
+        if (resizeHandle.includes('w')) {
+          // Moving corner is on the left; can't go past (anchorX - MIN_ELEMENT_SIZE)
+          newMovingX = Math.min(newMovingX, anchorX - MIN_ELEMENT_SIZE);
+        } else {
+          // Moving corner is on the right; can't go below (anchorX + MIN_ELEMENT_SIZE)
+          newMovingX = Math.max(newMovingX, anchorX + MIN_ELEMENT_SIZE);
         }
+
+        if (resizeHandle.includes('n')) {
+          // Moving corner is on the top; can't go past (anchorY - MIN_ELEMENT_SIZE)
+          newMovingY = Math.min(newMovingY, anchorY - MIN_ELEMENT_SIZE);
+        } else {
+          // Moving corner is on the bottom; can't go below (anchorY + MIN_ELEMENT_SIZE)
+          newMovingY = Math.max(newMovingY, anchorY + MIN_ELEMENT_SIZE);
+        }
+
+        // Derive final x, y, width, height from anchor and clamped moving corner
+        const newX = Math.min(anchorX, newMovingX);
+        const newY = Math.min(anchorY, newMovingY);
+        const newWidth = Math.abs(newMovingX - anchorX);
+        const newHeight = Math.abs(newMovingY - anchorY);
+
+        setElements(elements.map(el => {
+          if (el.id === selectedElementId && el.type !== 'arrow') {
+            return { ...el, x: newX, y: newY, width: newWidth, height: newHeight };
+          }
+          return el;
+        }));
       } else if (dragOffset) {
         // Move - either group or individual element
         if (selectedGroupId) {
@@ -788,6 +842,7 @@ export function Canvas() {
     setStartPoint(null);
     setDragOffset(null);
     setResizeHandle(null);
+    setResizeSnapshot(null); // Clear resize snapshot on pointer up
   };
 
   const selectedElement = elements.find(el => el.id === selectedElementId);
