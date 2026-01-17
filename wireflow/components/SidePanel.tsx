@@ -47,14 +47,14 @@ export function SidePanel({ element, onUpdateElement, onClose, onDelete }: SideP
         <div className="flex items-center gap-2">
           <button
             onClick={onDelete}
-            className="text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded text-sm font-medium transition-colors"
+            className="text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded text-sm font-medium transition-colors"
             title="Delete element (Del)"
           >
             Delete
           </button>
           <button
             onClick={onClose}
-            className="text-zinc-400 hover:text-zinc-600 text-xl leading-none"
+            className="text-zinc-500 hover:text-zinc-600 text-xl leading-none"
           >
             ×
           </button>
@@ -97,7 +97,7 @@ export function SidePanel({ element, onUpdateElement, onClose, onDelete }: SideP
                 className={`
                   px-3 py-2 text-sm rounded border transition-colors
                   ${localElement.semanticTag === tag.value
-                    ? 'bg-green-50 border-green-500 text-green-700'
+                    ? 'bg-green-50 border-green-500 text-green-800'
                     : 'bg-white border-zinc-300 text-zinc-700 hover:border-zinc-400'
                   }
                 `}
@@ -118,7 +118,7 @@ export function SidePanel({ element, onUpdateElement, onClose, onDelete }: SideP
                 value={localElement.description || ''}
                 onChange={(e) => handleFieldChange('description', e.target.value)}
                 placeholder="What is this element?"
-                className="w-full px-3 py-2 border border-zinc-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                className="w-full px-3 py-2 border border-zinc-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none placeholder:text-zinc-600 placeholder:opacity-100"
                 rows={3}
               />
             </div>
@@ -131,7 +131,7 @@ export function SidePanel({ element, onUpdateElement, onClose, onDelete }: SideP
                 value={localElement.intendedBehavior || ''}
                 onChange={(e) => handleFieldChange('intendedBehavior', e.target.value)}
                 placeholder="What should this do when interacted with?"
-                className="w-full px-3 py-2 border border-zinc-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                className="w-full px-3 py-2 border border-zinc-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none placeholder:text-zinc-600 placeholder:opacity-100"
                 rows={4}
               />
             </div>
@@ -144,7 +144,7 @@ export function SidePanel({ element, onUpdateElement, onClose, onDelete }: SideP
                 value={localElement.acceptanceNotes || ''}
                 onChange={(e) => handleFieldChange('acceptanceNotes', e.target.value)}
                 placeholder="How will we verify this works correctly?"
-                className="w-full px-3 py-2 border border-zinc-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                className="w-full px-3 py-2 border border-zinc-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none placeholder:text-zinc-600 placeholder:opacity-100"
                 rows={4}
               />
             </div>

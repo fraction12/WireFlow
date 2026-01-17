@@ -38,15 +38,15 @@ export function FrameList({
 
         <select
           onChange={handleCreateFrame}
-          className="w-full px-3 py-2 text-sm border border-zinc-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full px-3 py-2 text-sm border border-zinc-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-zinc-900"
           defaultValue=""
         >
-          <option value="" disabled>
+          <option value="" disabled className="text-zinc-600">
             + New Frame
           </option>
-          <option value="page">Page</option>
-          <option value="modal">Modal</option>
-          <option value="flyout">Flyout</option>
+          <option value="page" className="text-zinc-900">Page</option>
+          <option value="modal" className="text-zinc-900">Modal</option>
+          <option value="flyout" className="text-zinc-900">Flyout</option>
         </select>
       </div>
 
@@ -100,17 +100,17 @@ export function FrameList({
                   <span
                     className={`px-2 py-0.5 rounded capitalize ${
                       frame.type === 'page'
-                        ? 'bg-blue-100 text-blue-700'
+                        ? 'bg-blue-100 text-blue-800'
                         : frame.type === 'modal'
-                        ? 'bg-purple-100 text-purple-700'
-                        : 'bg-green-100 text-green-700'
+                        ? 'bg-purple-100 text-purple-800'
+                        : 'bg-green-100 text-green-800'
                     }`}
                   >
                     {frame.type}
                   </span>
 
                   {/* Element count */}
-                  <span className="text-zinc-500">{frame.elements.length} elements</span>
+                  <span className="text-zinc-600">{frame.elements.length} elements</span>
                 </div>
 
                 {/* Delete button (only if not last frame) */}
@@ -122,7 +122,7 @@ export function FrameList({
                         onDeleteFrame(frame.id);
                       }
                     }}
-                    className="text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-0.5 rounded transition-colors"
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-0.5 rounded transition-colors"
                     title="Delete frame"
                   >
                     ×

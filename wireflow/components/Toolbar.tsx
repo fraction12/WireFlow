@@ -25,7 +25,7 @@ export function Toolbar({ currentTool, onToolChange }: ToolbarProps) {
             w-12 h-12 flex items-center justify-center text-2xl rounded-lg
             transition-colors
             ${currentTool === tool.name
-              ? 'bg-blue-100 text-blue-600'
+              ? 'bg-blue-100 text-blue-800'
               : 'text-zinc-600 hover:bg-zinc-100'
             }
           `}
