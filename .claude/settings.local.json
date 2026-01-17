@@ -8,7 +8,9 @@
       "Bash(timeout /t 5)",
       "Bash(taskkill:*)",
       "Bash(git fetch:*)",
-      "Bash(git merge:*)"
+      "Bash(git merge:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd component library and Excalidraw-style sketch rendering\n\nThis commit implements two major features for WireFlow:\n\n1. Component Library System:\n   - Added 6 PM-centric component templates \\(Table, Table+Filters, Empty State, Confirmation Modal, Simple Form, Action Footer\\)\n   - Implemented grouping system for component instances with select, move, and ungroup operations\n   - Added ComponentPanel UI with category filtering and click-to-insert functionality\n   - Enhanced SidePanel to show group info and ungroup button\n   - Extended export format to v3.0.0 with componentType and groupId metadata\n   - Keyboard shortcuts: G to ungroup, Delete with confirmation for grouped elements\n\n2. Sketch-Style Rendering:\n   - Implemented custom hand-drawn visual style inspired by Excalidraw\n   - Added deterministic wobble algorithm using element IDs as seeds\n   - Applied sketch rendering to all element types \\(rectangles, text, arrows\\)\n   - Updated selection handles to circular fills\n   - Softer color palette \\(#6b7280\\) with 1.5px rounded strokes\n   - Maintains all existing interactions \\(select, resize, move, delete\\)\n\nTechnical details:\n   - Segmented line drawing \\(3+ segments, 1 per 20px\\) with perpendicular wobble\n   - No external dependencies - 100% custom rendering logic\n   - Performance optimized with useCallback hooks\n   - Fixed circular dependency in getGroupElements by moving definition before redraw\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   }
 }
