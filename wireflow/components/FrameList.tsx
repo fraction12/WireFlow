@@ -31,7 +31,7 @@ export function FrameList({
   };
 
   return (
-    <div className="w-64 bg-white border-r border-zinc-200 flex flex-col h-full">
+    <nav className="w-64 bg-white border-r border-zinc-200 flex flex-col h-full" aria-label="Frames navigation">
       {/* Header with "Add Frame" dropdown */}
       <div className="px-4 py-3 border-b border-zinc-200">
         <h2 className="font-semibold text-zinc-900 mb-2">Frames</h2>
@@ -40,6 +40,7 @@ export function FrameList({
           onChange={handleCreateFrame}
           className="w-full px-3 py-2 text-sm border border-zinc-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 text-zinc-900"
           defaultValue=""
+          aria-label="Create new frame"
         >
           <option value="" disabled className="text-zinc-600">
             + New Frame
@@ -124,6 +125,7 @@ export function FrameList({
                     }}
                     className="text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-0.5 rounded transition-colors"
                     title="Delete frame"
+                    aria-label={`Delete frame ${frame.name}`}
                   >
                     ×
                   </button>
@@ -133,6 +135,6 @@ export function FrameList({
           );
         })}
       </div>
-    </div>
+    </nav>
   );
 }

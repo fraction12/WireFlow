@@ -43,7 +43,7 @@ export function SidePanel({ element, onUpdateElement, onClose, onDelete, onUngro
   ];
 
   return (
-    <div className="w-80 bg-white border-l border-zinc-200 flex flex-col h-full">
+    <aside className="w-80 bg-white border-l border-zinc-200 flex flex-col h-full" aria-label="Element properties">
       <div className="px-4 py-3 border-b border-zinc-200 flex justify-between items-center">
         <h2 className="font-semibold text-zinc-900">Properties</h2>
         <div className="flex items-center gap-2">
@@ -51,12 +51,14 @@ export function SidePanel({ element, onUpdateElement, onClose, onDelete, onUngro
             onClick={onDelete}
             className="text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded text-sm font-medium transition-colors"
             title="Delete element (Del)"
+            aria-label="Delete element"
           >
             Delete
           </button>
           <button
             onClick={onClose}
             className="text-zinc-500 hover:text-zinc-600 text-xl leading-none"
+            aria-label="Close properties panel"
           >
             ×
           </button>
@@ -124,6 +126,8 @@ export function SidePanel({ element, onUpdateElement, onClose, onDelete, onUngro
                     : 'bg-white border-zinc-300 text-zinc-700 hover:border-zinc-400'
                   }
                 `}
+                aria-label={`Tag as ${tag.label}`}
+                aria-pressed={localElement.semanticTag === tag.value}
               >
                 {tag.label}
               </button>
@@ -183,6 +187,6 @@ export function SidePanel({ element, onUpdateElement, onClose, onDelete, onUngro
           </div>
         )}
       </div>
-    </div>
+    </aside>
   );
 }

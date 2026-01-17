@@ -17,7 +17,6 @@ export function Toolbar({ currentTool, onToolChange }: ToolbarProps) {
     { name: 'arrow', label: 'Arrow', icon: '→' },
 
     // Layout & Structure
-    { name: 'section', label: 'Section/Container', icon: '⊡', category: 'Layout' },
     { name: 'divider', label: 'Divider', icon: '─', category: 'Layout' },
 
     // UI Intent
@@ -52,10 +51,12 @@ export function Toolbar({ currentTool, onToolChange }: ToolbarProps) {
             transition-colors
             ${currentTool === tool.name
               ? 'bg-blue-100 text-blue-800'
-              : 'text-zinc-600 hover:bg-zinc-100'
+              : 'text-zinc-700 hover:bg-zinc-100'
             }
           `}
           title={tool.label}
+          aria-label={tool.label}
+          aria-pressed={currentTool === tool.name}
         >
           {tool.icon}
         </button>
@@ -68,8 +69,8 @@ export function Toolbar({ currentTool, onToolChange }: ToolbarProps) {
   };
 
   return (
-    <div className="w-16 bg-white border-r border-zinc-200 flex flex-col items-center py-4 gap-2 overflow-y-auto">
+    <aside className="w-16 bg-white border-r border-zinc-200 flex flex-col items-center py-4 gap-2 overflow-y-auto" aria-label="Drawing tools">
       {renderTools()}
-    </div>
+    </aside>
   );
 }
