@@ -17,7 +17,6 @@ export function Toolbar({ currentTool, onToolChange }: ToolbarProps) {
     { name: 'arrow', label: 'Arrow', icon: '→' },
 
     // Layout & Structure
-    { name: 'section', label: 'Section/Container', icon: '⊡', category: 'Layout' },
     { name: 'divider', label: 'Divider', icon: '─', category: 'Layout' },
 
     // UI Intent

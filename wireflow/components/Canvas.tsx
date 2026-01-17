@@ -490,47 +490,6 @@ export function Canvas() {
         setSelectedElementId(newElement.id);
         setIsDrawing(false);
         setStartPoint(null);
-      } else if (currentTool === 'section') {
-        // Section: labeled bounding box (rectangle + label)
-        const groupId = generateGroupId();
-        const sectionWidth = 300;
-        const sectionHeight = 200;
-
-        const sectionRect: RectangleElement = {
-          id: generateId(),
-          type: 'rectangle',
-          x,
-          y: y + 20,
-          width: sectionWidth,
-          height: sectionHeight,
-          semanticTag: 'section',
-          groupId,
-        };
-
-        const sectionLabel: TextElement = {
-          id: generateId(),
-          type: 'text',
-          x: x + 8,
-          y: y,
-          width: 100,
-          height: 20,
-          content: 'Section',
-          groupId,
-        };
-
-        setElements([...elements, sectionRect, sectionLabel]);
-        const group: ComponentGroup = {
-          id: groupId,
-          componentType: 'simple-form',
-          x,
-          y,
-          elementIds: [sectionRect.id, sectionLabel.id],
-          createdAt: new Date().toISOString(),
-        };
-        setComponentGroups([...componentGroups, group]);
-        setSelectedGroupId(groupId);
-        setIsDrawing(false);
-        setStartPoint(null);
       } else if (currentTool === 'callout') {
         // Callout: text box + arrow pointer
         const groupId = generateGroupId();

@@ -58,7 +58,6 @@ export type Tool =
   | 'text'
   | 'arrow'
   // Layout & Structure
-  | 'section'
   | 'divider'
   // UI Intent
   | 'button'
