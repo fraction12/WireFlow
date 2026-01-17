@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import type { CanvasElement, Tool, RectangleElement, TextElement, ArrowElement, Frame, FrameType, ComponentGroup, ComponentTemplate } from '@/lib/types';
+import type { CanvasElement, Tool, RectangleElement, TextElement, ArrowElement, LineElement, Frame, FrameType, ComponentGroup, ComponentTemplate } from '@/lib/types';
 import { saveWorkspace, loadWorkspace } from '@/lib/persistence';
 import { Toolbar } from './Toolbar';
 import { SidePanel } from './SidePanel';
@@ -221,6 +221,10 @@ export function Canvas() {
 
         drawSketchLine(ctx, arrowEl.endX, arrowEl.endY, head1X, head1Y, seed + 10);
         drawSketchLine(ctx, arrowEl.endX, arrowEl.endY, head2X, head2Y, seed + 11);
+      } else if (element.type === 'line') {
+        // Draw sketch-style line (like arrow but without arrowhead)
+        const lineEl = element as LineElement;
+        drawSketchLine(ctx, lineEl.startX, lineEl.startY, lineEl.endX, lineEl.endY, seed);
       }
 
       // Draw resize handles for selected element (only if not grouped)
@@ -228,15 +232,15 @@ export function Canvas() {
         ctx.fillStyle = '#3b82f6';
         ctx.strokeStyle = '#3b82f6';
 
-        if (element.type === 'arrow') {
-          // Arrow endpoint handles: start and end points for length control
-          const arrowEl = element as ArrowElement;
-          const arrowHandles = [
-            { x: arrowEl.startX, y: arrowEl.startY }, // Start point
-            { x: arrowEl.endX, y: arrowEl.endY },     // End point
+        if (element.type === 'arrow' || element.type === 'line') {
+          // Endpoint handles for arrows and lines: start and end points for length control
+          const lineEl = element as ArrowElement | LineElement;
+          const endpointHandles = [
+            { x: lineEl.startX, y: lineEl.startY }, // Start point
+            { x: lineEl.endX, y: lineEl.endY },     // End point
           ];
 
-          arrowHandles.forEach((handle) => {
+          endpointHandles.forEach((handle) => {
             ctx.beginPath();
             ctx.arc(handle.x, handle.y, HANDLE_SIZE / 2, 0, Math.PI * 2);
             ctx.fill();
@@ -304,10 +308,10 @@ export function Canvas() {
       const el = elements[i];
       let isHit = false;
 
-      if (el.type === 'arrow') {
-        const arrowEl = el as ArrowElement;
-        // Simple distance check for arrow
-        const dist = pointToLineDistance(x, y, arrowEl.startX, arrowEl.startY, arrowEl.endX, arrowEl.endY);
+      if (el.type === 'arrow' || el.type === 'line') {
+        // Point-to-line distance check for arrows and lines
+        const lineEl = el as ArrowElement | LineElement;
+        const dist = pointToLineDistance(x, y, lineEl.startX, lineEl.startY, lineEl.endX, lineEl.endY);
         isHit = dist < 10;
       } else {
         isHit = x >= el.x && x <= el.x + el.width && y >= el.y && y <= el.y + el.height;
@@ -350,17 +354,17 @@ export function Canvas() {
   };
 
   // Check if click is on a resize handle.
-  // Returns handle ID: 'nw'|'ne'|'sw'|'se' for rectangles/text, 'start'|'end' for arrows.
+  // Returns handle ID: 'nw'|'ne'|'sw'|'se' for rectangles/text, 'start'|'end' for arrows/lines.
   const getResizeHandle = (x: number, y: number, element: CanvasElement): string | null => {
-    if (element.type === 'arrow') {
-      // Arrow endpoint handles for length control
-      const arrowEl = element as ArrowElement;
-      const arrowHandles = {
-        'start': { x: arrowEl.startX, y: arrowEl.startY },
-        'end': { x: arrowEl.endX, y: arrowEl.endY },
+    if (element.type === 'arrow' || element.type === 'line') {
+      // Endpoint handles for arrows and lines
+      const lineEl = element as ArrowElement | LineElement;
+      const endpointHandles = {
+        'start': { x: lineEl.startX, y: lineEl.startY },
+        'end': { x: lineEl.endX, y: lineEl.endY },
       };
 
-      for (const [key, pos] of Object.entries(arrowHandles)) {
+      for (const [key, pos] of Object.entries(endpointHandles)) {
         if (Math.abs(x - pos.x) <= HANDLE_SIZE + HANDLE_TOLERANCE &&
             Math.abs(y - pos.y) <= HANDLE_SIZE + HANDLE_TOLERANCE) {
           return key;
@@ -423,14 +427,14 @@ export function Canvas() {
             },
             pointerOrigin: { x, y },
           };
-          // For arrows, also capture initial endpoints
-          if (clickedElement.type === 'arrow') {
-            const arrowEl = clickedElement as ArrowElement;
+          // For arrows and lines, also capture initial endpoints
+          if (clickedElement.type === 'arrow' || clickedElement.type === 'line') {
+            const lineEl = clickedElement as ArrowElement | LineElement;
             snapshot.arrowEndpoints = {
-              startX: arrowEl.startX,
-              startY: arrowEl.startY,
-              endX: arrowEl.endX,
-              endY: arrowEl.endY,
+              startX: lineEl.startX,
+              startY: lineEl.startY,
+              endX: lineEl.endX,
+              endY: lineEl.endY,
             };
           }
           setResizeSnapshot(snapshot);
@@ -591,14 +595,19 @@ export function Canvas() {
         setIsDrawing(false);
         setStartPoint(null);
       } else if (currentTool === 'divider') {
-        // Divider: horizontal line (thin rectangle)
-        const newElement: RectangleElement = {
+        // Divider: horizontal line with endpoint handles
+        const lineLength = 300;
+        const newElement: LineElement = {
           id: generateId(),
-          type: 'rectangle',
+          type: 'line',
           x,
           y,
-          width: 300,
+          width: lineLength,
           height: 1,
+          startX: x,
+          startY: y,
+          endX: x + lineLength,
+          endY: y,
         };
         setElements([...elements, newElement]);
         setSelectedElementId(newElement.id);
@@ -725,8 +734,8 @@ export function Canvas() {
         const dx = x - pointerOrigin.x; // Pointer delta X
         const dy = y - pointerOrigin.y; // Pointer delta Y
 
-        if (element.type === 'arrow' && arrowEndpoints) {
-          // ARROW RESIZE MODE: Move the start or end point to change length/direction.
+        if ((element.type === 'arrow' || element.type === 'line') && arrowEndpoints) {
+          // ARROW/LINE RESIZE MODE: Move the start or end point to change length/direction.
           // The opposite endpoint stays fixed as the anchor.
           //
           // Handle Mapping:
@@ -753,7 +762,7 @@ export function Canvas() {
           const newHeight = Math.abs(newEndY - newStartY) || 1;
 
           setElements(elements.map(el => {
-            if (el.id === selectedElementId && el.type === 'arrow') {
+            if (el.id === selectedElementId && (el.type === 'arrow' || el.type === 'line')) {
               return {
                 ...el,
                 x: newX,
@@ -764,11 +773,11 @@ export function Canvas() {
                 startY: newStartY,
                 endX: newEndX,
                 endY: newEndY,
-              } as ArrowElement;
+              } as ArrowElement | LineElement;
             }
             return el;
           }));
-        } else if (element.type !== 'arrow') {
+        } else if (element.type !== 'arrow' && element.type !== 'line') {
           // RECTANGLE/TEXT RESIZE MODE: Compute new bounds from the snapshot.
           //
           // Handle-to-Anchor Mapping:
@@ -835,18 +844,19 @@ export function Canvas() {
           // Move single element
           setElements(elements.map(el => {
             if (el.id === selectedElementId) {
-              if (el.type === 'arrow') {
-                const arrowEl = el as ArrowElement;
+              if (el.type === 'arrow' || el.type === 'line') {
+                // Arrows and lines need endpoint updates when moved
+                const lineEl = el as ArrowElement | LineElement;
                 const dx = x - dragOffset.x - el.x;
                 const dy = y - dragOffset.y - el.y;
                 return {
-                  ...arrowEl,
+                  ...lineEl,
                   x: x - dragOffset.x,
                   y: y - dragOffset.y,
-                  startX: arrowEl.startX + dx,
-                  startY: arrowEl.startY + dy,
-                  endX: arrowEl.endX + dx,
-                  endY: arrowEl.endY + dy,
+                  startX: lineEl.startX + dx,
+                  startY: lineEl.startY + dy,
+                  endX: lineEl.endX + dx,
+                  endY: lineEl.endY + dy,
                 };
               }
               return { ...el, x: x - dragOffset.x, y: y - dragOffset.y };
@@ -1077,9 +1087,19 @@ export function Canvas() {
           endX: insertX + tplEl.offsetX + tplEl.width,
           endY: insertY + tplEl.offsetY + tplEl.height,
         } as ArrowElement;
+      } else if (tplEl.type === 'line') {
+        // Line support (if needed in future templates)
+        return {
+          ...baseProps,
+          type: 'line',
+          startX: insertX + tplEl.offsetX,
+          startY: insertY + tplEl.offsetY,
+          endX: insertX + tplEl.offsetX + tplEl.width,
+          endY: insertY + tplEl.offsetY,
+        } as LineElement;
       }
       return null;
-    }).filter((el): el is CanvasElement => el !== null);
+    }).filter((el): el is RectangleElement | TextElement | ArrowElement | LineElement => el !== null);
 
     // Add elements to canvas
     setElements([...elements, ...newElements]);
