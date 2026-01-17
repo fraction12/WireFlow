@@ -83,6 +83,11 @@ export function Canvas() {
   const [originalText, setOriginalText] = useState('');
   const textInputRef = useRef<HTMLTextAreaElement>(null);
 
+  // Track if current selection was made by clicking (for Backspace delete behavior)
+  // Backspace should only delete an element if the user clicked to select it,
+  // not after exiting text edit mode or other interactions
+  const [selectedByClick, setSelectedByClick] = useState(false);
+
   // Persistence: track if initial load has completed
   const hasLoadedRef = useRef(false);
 
@@ -478,6 +483,7 @@ export function Canvas() {
     setEditingElementId(element.id);
     setEditingText(element.content || '');
     setOriginalText(element.content || '');
+    setSelectedByClick(false); // Clear click-selection flag (prevents Backspace delete after editing)
     // Focus input after React renders it
     setTimeout(() => textInputRef.current?.focus(), 0);
   };
@@ -559,6 +565,7 @@ export function Canvas() {
 
       if (clickedElement) {
         setSelectedElementId(clickedElement.id);
+        setSelectedByClick(true); // Mark as selected by click (enables Backspace delete)
 
         // If element is part of group, select the group
         if (groupId) {
@@ -913,7 +920,8 @@ export function Canvas() {
       if (!element) return;
 
       // Check for Delete or Backspace key
-      if (e.key === 'Delete' || e.key === 'Backspace') {
+      // Backspace only deletes if element was selected by clicking (not after editing text)
+      if (e.key === 'Delete' || (e.key === 'Backspace' && selectedByClick)) {
         // Prevent default browser behavior (e.g., navigate back)
         e.preventDefault();
 
@@ -929,6 +937,7 @@ export function Canvas() {
           setElements(elements.filter(el => el.id !== selectedElementId));
           setSelectedElementId(null);
         }
+        setSelectedByClick(false);
       }
 
       // Check for 'G' key to ungroup
@@ -947,7 +956,7 @@ export function Canvas() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [selectedElementId, elements, componentGroups, editingElementId]);
+  }, [selectedElementId, elements, componentGroups, editingElementId, selectedByClick]);
 
   // Frame management handlers
   const handleCreateFrame = (type: FrameType) => {
