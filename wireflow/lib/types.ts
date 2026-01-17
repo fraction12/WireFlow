@@ -42,6 +42,18 @@ export type CanvasElement = RectangleElement | TextElement | ArrowElement;
 // Tool types
 export type Tool = 'select' | 'rectangle' | 'text' | 'arrow';
 
+// Frame types for classification
+export type FrameType = 'page' | 'modal' | 'flyout';
+
+// Frame container
+export interface Frame {
+  id: string;
+  name: string;
+  type: FrameType;
+  elements: CanvasElement[];
+  createdAt: string;
+}
+
 // Export format for tagged elements only
 export interface ExportedElement {
   id: string;
@@ -57,8 +69,16 @@ export interface ExportedElement {
   content?: string; // For text elements
 }
 
+// Export format - now includes frames
+export interface FrameExport {
+  id: string;
+  name: string;
+  type: FrameType;
+  taggedElements: ExportedElement[];
+}
+
 export interface ExportData {
   version: string;
   exportedAt: string;
-  taggedElements: ExportedElement[];
+  frames: FrameExport[];
 }

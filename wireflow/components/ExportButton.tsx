@@ -1,40 +1,52 @@
 'use client';
 
-import type { CanvasElement, ExportData, ExportedElement, TextElement } from '@/lib/types';
+import type { Frame, ExportData, ExportedElement, TextElement, FrameExport } from '@/lib/types';
 
 interface ExportButtonProps {
-  elements: CanvasElement[];
+  frames: Frame[];
 }
 
-export function ExportButton({ elements }: ExportButtonProps) {
+export function ExportButton({ frames }: ExportButtonProps) {
   const handleExport = () => {
-    // Filter only tagged elements
-    const taggedElements = elements.filter(el => el.semanticTag);
+    // Transform frames to export format
+    const frameExports: FrameExport[] = frames.map(frame => {
+      // Filter tagged elements in this frame
+      const taggedElements = frame.elements
+        .filter(el => el.semanticTag)
+        .map(el => ({
+          id: el.id,
+          type: el.type,
+          position: { x: el.x, y: el.y },
+          size: { width: el.width, height: el.height },
+          semanticTag: el.semanticTag!,
+          annotations: {
+            description: el.description,
+            intendedBehavior: el.intendedBehavior,
+            acceptanceNotes: el.acceptanceNotes,
+          },
+          ...(el.type === 'text' && { content: (el as TextElement).content }),
+        }));
 
-    if (taggedElements.length === 0) {
-      alert('No tagged elements to export. Add semantic tags (Button, Input, Section) to elements first.');
+      return {
+        id: frame.id,
+        name: frame.name,
+        type: frame.type,
+        taggedElements,
+      };
+    });
+
+    // Filter out frames with no tagged elements
+    const exportableFrames = frameExports.filter(f => f.taggedElements.length > 0);
+
+    if (exportableFrames.length === 0) {
+      alert('No tagged elements to export across any frames. Add semantic tags (Button, Input, Section) to elements first.');
       return;
     }
 
-    // Transform to export format
-    const exportedElements: ExportedElement[] = taggedElements.map(el => ({
-      id: el.id,
-      type: el.type,
-      position: { x: el.x, y: el.y },
-      size: { width: el.width, height: el.height },
-      semanticTag: el.semanticTag!,
-      annotations: {
-        description: el.description,
-        intendedBehavior: el.intendedBehavior,
-        acceptanceNotes: el.acceptanceNotes,
-      },
-      ...(el.type === 'text' && { content: (el as TextElement).content }),
-    }));
-
     const exportData: ExportData = {
-      version: '1.0.0',
+      version: '2.0.0',  // Bump version for frame support
       exportedAt: new Date().toISOString(),
-      taggedElements: exportedElements,
+      frames: exportableFrames,
     };
 
     // Create and download JSON file
@@ -49,21 +61,25 @@ export function ExportButton({ elements }: ExportButtonProps) {
     URL.revokeObjectURL(url);
 
     // Show success message
-    alert(`Exported ${exportedElements.length} tagged element${exportedElements.length !== 1 ? 's' : ''}`);
+    const totalElements = exportableFrames.reduce((sum, f) => sum + f.taggedElements.length, 0);
+    alert(`Exported ${exportableFrames.length} frame(s) with ${totalElements} tagged element(s)`);
   };
 
-  const taggedCount = elements.filter(el => el.semanticTag).length;
+  // Count tagged elements across all frames
+  const totalTagged = frames.reduce((sum, frame) =>
+    sum + frame.elements.filter(el => el.semanticTag).length, 0
+  );
 
   return (
     <button
       onClick={handleExport}
       className="px-4 py-2 bg-zinc-900 text-white text-sm font-medium rounded hover:bg-zinc-800 transition-colors flex items-center gap-2"
-      disabled={taggedCount === 0}
+      disabled={totalTagged === 0}
     >
       <span>Export JSON</span>
-      {taggedCount > 0 && (
+      {totalTagged > 0 && (
         <span className="bg-zinc-700 px-2 py-0.5 rounded text-xs">
-          {taggedCount}
+          {totalTagged}
         </span>
       )}
     </button>

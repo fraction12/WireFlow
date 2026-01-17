@@ -1,23 +1,56 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import type { CanvasElement, Tool, RectangleElement, TextElement, ArrowElement } from '@/lib/types';
+import type { CanvasElement, Tool, RectangleElement, TextElement, ArrowElement, Frame, FrameType } from '@/lib/types';
 import { Toolbar } from './Toolbar';
 import { SidePanel } from './SidePanel';
 import { ExportButton } from './ExportButton';
+import { FrameList } from './FrameList';
 
 export function Canvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [elements, setElements] = useState<CanvasElement[]>([]);
+
+  // Generate unique IDs
+  const generateId = () => `el_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const generateFrameId = () => `frame_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+  // Initialize with default frame
+  const defaultFrame: Frame = {
+    id: generateFrameId(),
+    name: 'Page 1',
+    type: 'page',
+    elements: [],
+    createdAt: new Date().toISOString(),
+  };
+
+  // Frame state
+  const [frames, setFrames] = useState<Frame[]>([defaultFrame]);
+  const [activeFrameId, setActiveFrameId] = useState<string>(defaultFrame.id);
+
+  // Computed: Get active frame and its elements
+  const activeFrame = frames.find(f => f.id === activeFrameId);
+  const elements = activeFrame?.elements || [];
+
+  // Wrapper to update active frame's elements
+  const setElements = (newElements: CanvasElement[] | ((prev: CanvasElement[]) => CanvasElement[])) => {
+    const elementsArray = typeof newElements === 'function'
+      ? newElements(elements)
+      : newElements;
+
+    setFrames(frames.map(frame =>
+      frame.id === activeFrameId
+        ? { ...frame, elements: elementsArray }
+        : frame
+    ));
+  };
+
+  // Tool and interaction state
   const [currentTool, setCurrentTool] = useState<Tool>('select');
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
-
-  // Generate unique ID
-  const generateId = () => `el_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   // Draw all elements on canvas
   const redraw = useCallback(() => {
@@ -387,14 +420,65 @@ export function Canvas() {
     };
   }, [selectedElementId, elements]);
 
+  // Frame management handlers
+  const handleCreateFrame = (type: FrameType) => {
+    const newFrame: Frame = {
+      id: generateFrameId(),
+      name: `${type.charAt(0).toUpperCase() + type.slice(1)} ${frames.length + 1}`,
+      type,
+      elements: [],
+      createdAt: new Date().toISOString(),
+    };
+
+    setFrames([...frames, newFrame]);
+    setActiveFrameId(newFrame.id);  // Auto-switch to new frame
+  };
+
+  const handleSwitchFrame = (frameId: string) => {
+    // Current frame state is already persisted in frames array
+    setActiveFrameId(frameId);
+    setSelectedElementId(null);  // Clear selection when switching
+  };
+
+  const handleRenameFrame = (frameId: string, newName: string) => {
+    setFrames(frames.map(frame =>
+      frame.id === frameId
+        ? { ...frame, name: newName }
+        : frame
+    ));
+  };
+
+  const handleDeleteFrame = (frameId: string) => {
+    if (frames.length === 1) return;  // Prevent deleting last frame
+
+    const newFrames = frames.filter(f => f.id !== frameId);
+    setFrames(newFrames);
+
+    // If deleted active frame, switch to first frame
+    if (frameId === activeFrameId) {
+      setActiveFrameId(newFrames[0].id);
+    }
+  };
+
   return (
     <div className="flex h-screen bg-zinc-50">
+      <FrameList
+        frames={frames}
+        activeFrameId={activeFrameId}
+        onSwitchFrame={handleSwitchFrame}
+        onCreateFrame={handleCreateFrame}
+        onRenameFrame={handleRenameFrame}
+        onDeleteFrame={handleDeleteFrame}
+      />
+
       <Toolbar currentTool={currentTool} onToolChange={setCurrentTool} />
 
       <div className="flex-1 flex flex-col">
         <div className="bg-white border-b border-zinc-200 px-4 py-3 flex justify-between items-center">
-          <h1 className="text-lg font-semibold text-zinc-900">WireFlow</h1>
-          <ExportButton elements={elements} />
+          <h1 className="text-lg font-semibold text-zinc-900">
+            {activeFrame?.name || 'WireFlow'}
+          </h1>
+          <ExportButton frames={frames} />
         </div>
 
         <div className="flex-1 overflow-hidden relative">
