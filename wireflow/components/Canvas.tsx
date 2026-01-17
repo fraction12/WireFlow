@@ -359,6 +359,34 @@ export function Canvas() {
 
   const selectedElement = elements.find(el => el.id === selectedElementId);
 
+  // Keyboard event handler for deletion
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle deletion if an element is selected
+      if (!selectedElementId) return;
+
+      // Check for Delete or Backspace key
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        // Prevent default browser behavior (e.g., navigate back)
+        e.preventDefault();
+
+        // Remove element from state
+        setElements(elements.filter(el => el.id !== selectedElementId));
+
+        // Clear selection
+        setSelectedElementId(null);
+      }
+    };
+
+    // Add event listener
+    window.addEventListener('keydown', handleKeyDown);
+
+    // Cleanup on unmount
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedElementId, elements]);
+
   return (
     <div className="flex h-screen bg-zinc-50">
       <Toolbar currentTool={currentTool} onToolChange={setCurrentTool} />
@@ -391,6 +419,11 @@ export function Canvas() {
             ));
           }}
           onClose={() => setSelectedElementId(null)}
+          onDelete={() => {
+            // Remove element and clear selection
+            setElements(elements.filter(el => el.id !== selectedElementId));
+            setSelectedElementId(null);
+          }}
         />
       )}
     </div>

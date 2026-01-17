@@ -7,9 +7,10 @@ interface SidePanelProps {
   element: CanvasElement;
   onUpdateElement: (element: CanvasElement) => void;
   onClose: () => void;
+  onDelete: () => void;
 }
 
-export function SidePanel({ element, onUpdateElement, onClose }: SidePanelProps) {
+export function SidePanel({ element, onUpdateElement, onClose, onDelete }: SidePanelProps) {
   const [localElement, setLocalElement] = useState(element);
 
   const handleTagChange = (tag: SemanticTag) => {
@@ -43,12 +44,21 @@ export function SidePanel({ element, onUpdateElement, onClose }: SidePanelProps)
     <div className="w-80 bg-white border-l border-zinc-200 flex flex-col h-full">
       <div className="px-4 py-3 border-b border-zinc-200 flex justify-between items-center">
         <h2 className="font-semibold text-zinc-900">Properties</h2>
-        <button
-          onClick={onClose}
-          className="text-zinc-400 hover:text-zinc-600 text-xl leading-none"
-        >
-          ×
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onDelete}
+            className="text-red-500 hover:text-red-700 hover:bg-red-50 px-2 py-1 rounded text-sm font-medium transition-colors"
+            title="Delete element (Del)"
+          >
+            Delete
+          </button>
+          <button
+            onClick={onClose}
+            className="text-zinc-400 hover:text-zinc-600 text-xl leading-none"
+          >
+            ×
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
