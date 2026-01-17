@@ -1,11 +1,12 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import type { CanvasElement, Tool, RectangleElement, TextElement, ArrowElement, Frame, FrameType } from '@/lib/types';
+import type { CanvasElement, Tool, RectangleElement, TextElement, ArrowElement, Frame, FrameType, ComponentGroup, ComponentTemplate } from '@/lib/types';
 import { Toolbar } from './Toolbar';
 import { SidePanel } from './SidePanel';
 import { ExportButton } from './ExportButton';
 import { FrameList } from './FrameList';
+import { ComponentPanel } from './ComponentPanel';
 
 export function Canvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -52,6 +53,59 @@ export function Canvas() {
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
 
+  // Component grouping state
+  const [componentGroups, setComponentGroups] = useState<ComponentGroup[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+
+  // Helper function to get group elements (defined before redraw)
+  const getGroupElements = useCallback((groupId: string): CanvasElement[] => {
+    return elements.filter(el => el.groupId === groupId);
+  }, [elements]);
+
+  // Sketch-style rendering helpers
+  const getRandomOffset = (base: number, seed: number, amplitude: number = 1.5): number => {
+    // Use seed for deterministic randomness based on position
+    const pseudo = Math.sin(seed * 12.9898 + base * 78.233) * 43758.5453;
+    return (pseudo - Math.floor(pseudo)) * amplitude - amplitude / 2;
+  };
+
+  const drawSketchLine = (ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, seed: number = 0) => {
+    const distance = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+    const segments = Math.max(3, Math.floor(distance / 20)); // More segments for longer lines
+
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+
+    for (let i = 1; i <= segments; i++) {
+      const t = i / segments;
+      const x = x1 + (x2 - x1) * t;
+      const y = y1 + (y2 - y1) * t;
+
+      // Add controlled wobble perpendicular to the line direction
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const perpX = -dy / distance;
+      const perpY = dx / distance;
+
+      const wobble = getRandomOffset(i, seed + i * 7);
+      const wobbledX = x + perpX * wobble;
+      const wobbledY = y + perpY * wobble;
+
+      ctx.lineTo(wobbledX, wobbledY);
+    }
+
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  };
+
+  const drawSketchRect = (ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, seed: number = 0) => {
+    // Draw four sides with slight variations
+    drawSketchLine(ctx, x, y, x + width, y, seed);           // Top
+    drawSketchLine(ctx, x + width, y, x + width, y + height, seed + 1); // Right
+    drawSketchLine(ctx, x + width, y + height, x, y + height, seed + 2); // Bottom
+    drawSketchLine(ctx, x, y + height, x, y, seed + 3);      // Left
+  };
+
   // Draw all elements on canvas
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -65,90 +119,138 @@ export function Canvas() {
 
     // Draw all elements
     elements.forEach((element) => {
-      ctx.strokeStyle = '#374151';
-      ctx.fillStyle = '#374151';
-      ctx.lineWidth = 2;
+      // Softer, low-contrast gray for sketch style
+      ctx.strokeStyle = '#6b7280';
+      ctx.fillStyle = '#6b7280';
+      ctx.lineWidth = 1.5;
       ctx.font = '16px sans-serif';
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
 
-      // Highlight selected element
+      // Highlight selected element with blue
       if (element.id === selectedElementId) {
         ctx.strokeStyle = '#3b82f6';
         ctx.fillStyle = '#3b82f6';
       }
 
-      // Highlight semantically tagged elements
+      // Highlight semantically tagged elements with green
       if (element.semanticTag) {
         ctx.strokeStyle = '#10b981';
         ctx.fillStyle = '#10b981';
       }
 
+      // Use element ID as seed for deterministic randomness
+      const seed = parseInt(element.id.split('_')[1]) || 0;
+
       if (element.type === 'rectangle') {
-        ctx.strokeRect(element.x, element.y, element.width, element.height);
+        drawSketchRect(ctx, element.x, element.y, element.width, element.height, seed);
       } else if (element.type === 'text') {
         const textEl = element as TextElement;
-        ctx.fillText(textEl.content || 'Text', element.x, element.y + 16);
-        // Draw bounding box for selection
-        if (element.id === selectedElementId) {
-          ctx.strokeRect(element.x - 2, element.y - 2, element.width + 4, element.height + 4);
-        }
+        ctx.fillText(textEl.content || 'Text', element.x + 4, element.y + 16);
+        // Draw sketch-style bounding box
+        drawSketchRect(ctx, element.x, element.y, element.width, element.height, seed);
       } else if (element.type === 'arrow') {
         const arrowEl = element as ArrowElement;
-        ctx.beginPath();
-        ctx.moveTo(arrowEl.startX, arrowEl.startY);
-        ctx.lineTo(arrowEl.endX, arrowEl.endY);
-        ctx.stroke();
+        // Draw sketch-style arrow line
+        drawSketchLine(ctx, arrowEl.startX, arrowEl.startY, arrowEl.endX, arrowEl.endY, seed);
 
-        // Draw arrowhead
+        // Draw sketch-style arrowhead
         const angle = Math.atan2(arrowEl.endY - arrowEl.startY, arrowEl.endX - arrowEl.startX);
         const headLength = 15;
-        ctx.beginPath();
-        ctx.moveTo(arrowEl.endX, arrowEl.endY);
-        ctx.lineTo(
-          arrowEl.endX - headLength * Math.cos(angle - Math.PI / 6),
-          arrowEl.endY - headLength * Math.sin(angle - Math.PI / 6)
-        );
-        ctx.moveTo(arrowEl.endX, arrowEl.endY);
-        ctx.lineTo(
-          arrowEl.endX - headLength * Math.cos(angle + Math.PI / 6),
-          arrowEl.endY - headLength * Math.sin(angle + Math.PI / 6)
-        );
-        ctx.stroke();
+
+        const head1X = arrowEl.endX - headLength * Math.cos(angle - Math.PI / 6);
+        const head1Y = arrowEl.endY - headLength * Math.sin(angle - Math.PI / 6);
+        const head2X = arrowEl.endX - headLength * Math.cos(angle + Math.PI / 6);
+        const head2Y = arrowEl.endY - headLength * Math.sin(angle + Math.PI / 6);
+
+        drawSketchLine(ctx, arrowEl.endX, arrowEl.endY, head1X, head1Y, seed + 10);
+        drawSketchLine(ctx, arrowEl.endX, arrowEl.endY, head2X, head2Y, seed + 11);
       }
 
-      // Draw resize handles for selected element
-      if (element.id === selectedElementId && element.type !== 'arrow') {
+      // Draw resize handles for selected element (only if not grouped)
+      if (element.id === selectedElementId && element.type !== 'arrow' && !element.groupId) {
         const handleSize = 8;
         ctx.fillStyle = '#3b82f6';
-        // Corner handles
-        ctx.fillRect(element.x - handleSize / 2, element.y - handleSize / 2, handleSize, handleSize);
-        ctx.fillRect(element.x + element.width - handleSize / 2, element.y - handleSize / 2, handleSize, handleSize);
-        ctx.fillRect(element.x - handleSize / 2, element.y + element.height - handleSize / 2, handleSize, handleSize);
-        ctx.fillRect(element.x + element.width - handleSize / 2, element.y + element.height - handleSize / 2, handleSize, handleSize);
+        ctx.strokeStyle = '#3b82f6';
+
+        // Corner handles with slight sketch style
+        const handles = [
+          { x: element.x - handleSize / 2, y: element.y - handleSize / 2 }, // NW
+          { x: element.x + element.width - handleSize / 2, y: element.y - handleSize / 2 }, // NE
+          { x: element.x - handleSize / 2, y: element.y + element.height - handleSize / 2 }, // SW
+          { x: element.x + element.width - handleSize / 2, y: element.y + element.height - handleSize / 2 }, // SE
+        ];
+
+        handles.forEach((handle, i) => {
+          ctx.beginPath();
+          ctx.arc(handle.x + handleSize / 2, handle.y + handleSize / 2, handleSize / 2, 0, Math.PI * 2);
+          ctx.fill();
+        });
       }
     });
-  }, [elements, selectedElementId]);
+
+    // Draw group selection outlines
+    componentGroups.forEach(group => {
+      if (group.id === selectedGroupId) {
+        const groupElements = getGroupElements(group.id);
+        if (groupElements.length === 0) return;
+
+        // Calculate bounding box
+        let minX = Infinity, minY = Infinity;
+        let maxX = -Infinity, maxY = -Infinity;
+
+        groupElements.forEach(el => {
+          minX = Math.min(minX, el.x);
+          minY = Math.min(minY, el.y);
+          maxX = Math.max(maxX, el.x + el.width);
+          maxY = Math.max(maxY, el.y + el.height);
+        });
+
+        // Draw group selection box with sketch style
+        ctx.strokeStyle = '#8b5cf6';  // Purple for groups
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 4]); // Dashed for group outline
+        const groupSeed = parseInt(group.id.split('_')[1]) || 0;
+        drawSketchRect(ctx, minX - 5, minY - 5, maxX - minX + 10, maxY - minY + 10, groupSeed);
+        ctx.setLineDash([]);
+
+        // Draw group label
+        ctx.fillStyle = '#8b5cf6';
+        ctx.font = '12px sans-serif';
+        const label = `Component: ${group.componentType}`;
+        ctx.fillText(label, minX, minY - 10);
+      }
+    });
+  }, [elements, selectedElementId, componentGroups, selectedGroupId, getGroupElements]);
 
   useEffect(() => {
     redraw();
   }, [redraw]);
 
   // Find element at point
-  const findElementAtPoint = (x: number, y: number): CanvasElement | null => {
+  const findElementAtPoint = (x: number, y: number): { element: CanvasElement | null; groupId?: string } => {
     // Search in reverse order (top element first)
     for (let i = elements.length - 1; i >= 0; i--) {
       const el = elements[i];
+      let isHit = false;
+
       if (el.type === 'arrow') {
         const arrowEl = el as ArrowElement;
         // Simple distance check for arrow
         const dist = pointToLineDistance(x, y, arrowEl.startX, arrowEl.startY, arrowEl.endX, arrowEl.endY);
-        if (dist < 10) return el;
+        isHit = dist < 10;
       } else {
-        if (x >= el.x && x <= el.x + el.width && y >= el.y && y <= el.y + el.height) {
-          return el;
-        }
+        isHit = x >= el.x && x <= el.x + el.width && y >= el.y && y <= el.y + el.height;
+      }
+
+      if (isHit) {
+        return {
+          element: el,
+          groupId: el.groupId,
+        };
       }
     }
-    return null;
+    return { element: null };
   };
 
   // Helper function for arrow hit detection
@@ -207,10 +309,18 @@ export function Canvas() {
     const y = e.clientY - rect.top;
 
     if (currentTool === 'select') {
-      const clickedElement = findElementAtPoint(x, y);
+      const { element: clickedElement, groupId } = findElementAtPoint(x, y);
 
       if (clickedElement) {
         setSelectedElementId(clickedElement.id);
+
+        // If element is part of group, select the group
+        if (groupId) {
+          setSelectedGroupId(groupId);
+        } else {
+          setSelectedGroupId(null);
+        }
+
         const handle = getResizeHandle(x, y, clickedElement);
 
         if (handle) {
@@ -223,6 +333,7 @@ export function Canvas() {
         }
       } else {
         setSelectedElementId(null);
+        setSelectedGroupId(null);
       }
     } else {
       setIsDrawing(true);
@@ -262,58 +373,68 @@ export function Canvas() {
       if (!element) return;
 
       if (resizeHandle) {
-        // Resize
-        setElements(elements.map(el => {
-          if (el.id === selectedElementId && el.type !== 'arrow') {
-            const newEl = { ...el };
-            switch (resizeHandle) {
-              case 'se':
-                newEl.width = Math.max(20, x - el.x);
-                newEl.height = Math.max(20, y - el.y);
-                break;
-              case 'sw':
-                newEl.width = Math.max(20, el.x + el.width - x);
-                newEl.height = Math.max(20, y - el.y);
-                newEl.x = x;
-                break;
-              case 'ne':
-                newEl.width = Math.max(20, x - el.x);
-                newEl.height = Math.max(20, el.y + el.height - y);
-                newEl.y = y;
-                break;
-              case 'nw':
-                newEl.width = Math.max(20, el.x + el.width - x);
-                newEl.height = Math.max(20, el.y + el.height - y);
-                newEl.x = x;
-                newEl.y = y;
-                break;
+        // Resize (only for non-grouped elements)
+        if (!selectedGroupId) {
+          setElements(elements.map(el => {
+            if (el.id === selectedElementId && el.type !== 'arrow') {
+              const newEl = { ...el };
+              switch (resizeHandle) {
+                case 'se':
+                  newEl.width = Math.max(20, x - el.x);
+                  newEl.height = Math.max(20, y - el.y);
+                  break;
+                case 'sw':
+                  newEl.width = Math.max(20, el.x + el.width - x);
+                  newEl.height = Math.max(20, y - el.y);
+                  newEl.x = x;
+                  break;
+                case 'ne':
+                  newEl.width = Math.max(20, x - el.x);
+                  newEl.height = Math.max(20, el.y + el.height - y);
+                  newEl.y = y;
+                  break;
+                case 'nw':
+                  newEl.width = Math.max(20, el.x + el.width - x);
+                  newEl.height = Math.max(20, el.y + el.height - y);
+                  newEl.x = x;
+                  newEl.y = y;
+                  break;
+              }
+              return newEl;
             }
-            return newEl;
-          }
-          return el;
-        }));
+            return el;
+          }));
+        }
       } else if (dragOffset) {
-        // Move
-        setElements(elements.map(el => {
-          if (el.id === selectedElementId) {
-            if (el.type === 'arrow') {
-              const arrowEl = el as ArrowElement;
-              const dx = x - dragOffset.x - el.x;
-              const dy = y - dragOffset.y - el.y;
-              return {
-                ...arrowEl,
-                x: x - dragOffset.x,
-                y: y - dragOffset.y,
-                startX: arrowEl.startX + dx,
-                startY: arrowEl.startY + dy,
-                endX: arrowEl.endX + dx,
-                endY: arrowEl.endY + dy,
-              };
+        // Move - either group or individual element
+        if (selectedGroupId) {
+          // Move entire group
+          const dx = x - dragOffset.x - element.x;
+          const dy = y - dragOffset.y - element.y;
+          moveGroup(selectedGroupId, dx, dy);
+        } else {
+          // Move single element
+          setElements(elements.map(el => {
+            if (el.id === selectedElementId) {
+              if (el.type === 'arrow') {
+                const arrowEl = el as ArrowElement;
+                const dx = x - dragOffset.x - el.x;
+                const dy = y - dragOffset.y - el.y;
+                return {
+                  ...arrowEl,
+                  x: x - dragOffset.x,
+                  y: y - dragOffset.y,
+                  startX: arrowEl.startX + dx,
+                  startY: arrowEl.startY + dy,
+                  endX: arrowEl.endX + dx,
+                  endY: arrowEl.endY + dy,
+                };
+              }
+              return { ...el, x: x - dragOffset.x, y: y - dragOffset.y };
             }
-            return { ...el, x: x - dragOffset.x, y: y - dragOffset.y };
-          }
-          return el;
-        }));
+            return el;
+          }));
+        }
       }
     } else if (startPoint && (currentTool === 'rectangle' || currentTool === 'arrow')) {
       // Preview while drawing
@@ -324,17 +445,20 @@ export function Canvas() {
       if (!ctx) return;
 
       ctx.strokeStyle = '#9ca3af';
-      ctx.setLineDash([5, 5]);
+      ctx.lineWidth = 1.5;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.setLineDash([8, 4]);
 
       if (currentTool === 'rectangle') {
         const width = x - startPoint.x;
         const height = y - startPoint.y;
-        ctx.strokeRect(startPoint.x, startPoint.y, width, height);
+        // Use simple sketch rect for preview
+        const previewSeed = Date.now() % 1000;
+        drawSketchRect(ctx, startPoint.x, startPoint.y, width, height, previewSeed);
       } else if (currentTool === 'arrow') {
-        ctx.beginPath();
-        ctx.moveTo(startPoint.x, startPoint.y);
-        ctx.lineTo(x, y);
-        ctx.stroke();
+        const previewSeed = Date.now() % 1000;
+        drawSketchLine(ctx, startPoint.x, startPoint.y, x, y, previewSeed);
       }
 
       ctx.setLineDash([]);
@@ -392,22 +516,39 @@ export function Canvas() {
 
   const selectedElement = elements.find(el => el.id === selectedElementId);
 
-  // Keyboard event handler for deletion
+  // Keyboard event handler for deletion and ungrouping
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Only handle deletion if an element is selected
+      // Only handle if an element is selected
       if (!selectedElementId) return;
+
+      const element = elements.find(el => el.id === selectedElementId);
+      if (!element) return;
 
       // Check for Delete or Backspace key
       if (e.key === 'Delete' || e.key === 'Backspace') {
         // Prevent default browser behavior (e.g., navigate back)
         e.preventDefault();
 
-        // Remove element from state
-        setElements(elements.filter(el => el.id !== selectedElementId));
+        // If element is grouped, delete entire group with confirmation
+        if (element.groupId) {
+          const shouldDelete = window.confirm(`Delete entire ${element.componentType} component?`);
+          if (shouldDelete) {
+            deleteGroup(element.groupId);
+          }
+        } else {
+          // Remove single element from state
+          setElements(elements.filter(el => el.id !== selectedElementId));
+          setSelectedElementId(null);
+        }
+      }
 
-        // Clear selection
-        setSelectedElementId(null);
+      // Check for 'G' key to ungroup
+      if (e.key === 'g' || e.key === 'G') {
+        if (element.groupId) {
+          e.preventDefault();
+          ungroupComponent(element.groupId);
+        }
       }
     };
 
@@ -418,7 +559,7 @@ export function Canvas() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [selectedElementId, elements]);
+  }, [selectedElementId, elements, componentGroups]);
 
   // Frame management handlers
   const handleCreateFrame = (type: FrameType) => {
@@ -460,6 +601,138 @@ export function Canvas() {
     }
   };
 
+  // Component group operations
+  const generateGroupId = () => `grp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+  const createComponentGroup = (template: ComponentTemplate, insertX: number, insertY: number): ComponentGroup => {
+    const groupId = generateGroupId();
+    const elementIds: string[] = [];
+
+    // Create all elements with group reference
+    const newElements: CanvasElement[] = template.elements.map(tplEl => {
+      const elId = generateId();
+      elementIds.push(elId);
+
+      const baseProps = {
+        id: elId,
+        x: insertX + tplEl.offsetX,
+        y: insertY + tplEl.offsetY,
+        width: tplEl.width,
+        height: tplEl.height,
+        semanticTag: tplEl.semanticTag,
+        description: tplEl.description,
+        groupId,
+        componentType: template.type,
+      };
+
+      if (tplEl.type === 'text') {
+        return {
+          ...baseProps,
+          type: 'text',
+          content: tplEl.content || 'Text',
+        } as TextElement;
+      } else if (tplEl.type === 'rectangle') {
+        return {
+          ...baseProps,
+          type: 'rectangle',
+        } as RectangleElement;
+      } else if (tplEl.type === 'arrow') {
+        // Arrow support (if needed in future templates)
+        return {
+          ...baseProps,
+          type: 'arrow',
+          startX: insertX + tplEl.offsetX,
+          startY: insertY + tplEl.offsetY,
+          endX: insertX + tplEl.offsetX + tplEl.width,
+          endY: insertY + tplEl.offsetY + tplEl.height,
+        } as ArrowElement;
+      }
+      return null;
+    }).filter((el): el is CanvasElement => el !== null);
+
+    // Add elements to canvas
+    setElements([...elements, ...newElements]);
+
+    // Create group
+    const group: ComponentGroup = {
+      id: groupId,
+      componentType: template.type,
+      x: insertX,
+      y: insertY,
+      elementIds,
+      createdAt: new Date().toISOString(),
+    };
+
+    setComponentGroups([...componentGroups, group]);
+
+    return group;
+  };
+
+  const moveGroup = (groupId: string, dx: number, dy: number) => {
+    setElements(elements.map(el =>
+      el.groupId === groupId
+        ? el.type === 'arrow'
+          ? {
+              ...el,
+              x: el.x + dx,
+              y: el.y + dy,
+              startX: (el as ArrowElement).startX + dx,
+              startY: (el as ArrowElement).startY + dy,
+              endX: (el as ArrowElement).endX + dx,
+              endY: (el as ArrowElement).endY + dy,
+            } as ArrowElement
+          : { ...el, x: el.x + dx, y: el.y + dy }
+        : el
+    ));
+
+    setComponentGroups(componentGroups.map(grp =>
+      grp.id === groupId
+        ? { ...grp, x: grp.x + dx, y: grp.y + dy }
+        : grp
+    ));
+  };
+
+  const ungroupComponent = (groupId: string) => {
+    // Remove group reference from all elements
+    setElements(elements.map(el =>
+      el.groupId === groupId
+        ? { ...el, groupId: undefined, componentType: undefined }
+        : el
+    ));
+
+    // Remove group
+    setComponentGroups(componentGroups.filter(grp => grp.id !== groupId));
+
+    // Clear group selection
+    if (selectedGroupId === groupId) {
+      setSelectedGroupId(null);
+    }
+  };
+
+  const deleteGroup = (groupId: string) => {
+    setElements(elements.filter(el => el.groupId !== groupId));
+    setComponentGroups(componentGroups.filter(grp => grp.id !== groupId));
+
+    // Clear selections
+    setSelectedGroupId(null);
+    setSelectedElementId(null);
+  };
+
+  // Component insertion handler
+  const handleInsertComponent = (template: ComponentTemplate) => {
+    // Insert at canvas center
+    const insertX = 500;
+    const insertY = 400;
+
+    const group = createComponentGroup(template, insertX, insertY);
+
+    // Select the newly created group
+    setSelectedGroupId(group.id);
+
+    // Switch to select tool
+    setCurrentTool('select');
+  };
+
   return (
     <div className="flex h-screen bg-zinc-50">
       <FrameList
@@ -494,6 +767,8 @@ export function Canvas() {
         </div>
       </div>
 
+      <ComponentPanel onInsertComponent={handleInsertComponent} />
+
       {selectedElement && (
         <SidePanel
           element={selectedElement}
@@ -502,12 +777,24 @@ export function Canvas() {
               el.id === updatedElement.id ? updatedElement : el
             ));
           }}
-          onClose={() => setSelectedElementId(null)}
-          onDelete={() => {
-            // Remove element and clear selection
-            setElements(elements.filter(el => el.id !== selectedElementId));
+          onClose={() => {
             setSelectedElementId(null);
+            setSelectedGroupId(null);
           }}
+          onDelete={() => {
+            // Delete entire group if element is grouped, otherwise just delete element
+            if (selectedElement.groupId) {
+              const shouldDelete = window.confirm(`Delete entire ${selectedElement.componentType} component?`);
+              if (shouldDelete) {
+                deleteGroup(selectedElement.groupId);
+              }
+            } else {
+              setElements(elements.filter(el => el.id !== selectedElementId));
+              setSelectedElementId(null);
+            }
+          }}
+          onUngroupComponent={ungroupComponent}
+          groupElementCount={selectedElement.groupId ? getGroupElements(selectedElement.groupId).length : undefined}
         />
       )}
     </div>

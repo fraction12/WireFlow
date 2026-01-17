@@ -8,9 +8,11 @@ interface SidePanelProps {
   onUpdateElement: (element: CanvasElement) => void;
   onClose: () => void;
   onDelete: () => void;
+  onUngroupComponent?: (groupId: string) => void;
+  groupElementCount?: number;
 }
 
-export function SidePanel({ element, onUpdateElement, onClose, onDelete }: SidePanelProps) {
+export function SidePanel({ element, onUpdateElement, onClose, onDelete, onUngroupComponent, groupElementCount }: SidePanelProps) {
   const [localElement, setLocalElement] = useState(element);
 
   const handleTagChange = (tag: SemanticTag) => {
@@ -70,6 +72,27 @@ export function SidePanel({ element, onUpdateElement, onClose, onDelete }: SideP
             {element.type}
           </div>
         </div>
+
+        {localElement.groupId && onUngroupComponent && (
+          <div className="bg-purple-50 border border-purple-200 rounded p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-purple-900">
+                Part of {localElement.componentType} component
+              </span>
+              <button
+                onClick={() => onUngroupComponent(localElement.groupId!)}
+                className="text-xs text-purple-700 hover:text-purple-900 font-medium"
+              >
+                Ungroup
+              </button>
+            </div>
+            {groupElementCount && (
+              <div className="text-xs text-purple-700">
+                {groupElementCount} elements grouped
+              </div>
+            )}
+          </div>
+        )}
 
         {element.type === 'text' && (
           <div>
