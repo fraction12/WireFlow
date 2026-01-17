@@ -141,3 +141,11 @@ export interface ComponentGroup {
   elementIds: string[];
   createdAt: string;
 }
+
+// Workspace state for persistence
+export interface WorkspaceState {
+  version: number;
+  frames: Frame[];
+  componentGroups: ComponentGroup[];
+  activeFrameId: string;
+}
