@@ -1,5 +1,5 @@
 // Core element types for the canvas
-export type ElementType = 'rectangle' | 'text' | 'arrow' | 'line';
+export type ElementType = 'rectangle' | 'ellipse' | 'text' | 'arrow' | 'line';
 
 // Semantic tags for PM layer
 export type SemanticTag = 'button' | 'input' | 'section' | null;
@@ -35,6 +35,10 @@ export interface RectangleElement extends BaseElement {
   type: 'rectangle';
 }
 
+export interface EllipseElement extends BaseElement {
+  type: 'ellipse';
+}
+
 export interface TextElement extends BaseElement {
   type: 'text';
   content: string;
@@ -57,23 +61,16 @@ export interface LineElement extends BaseElement {
   endY: number;
 }
 
-export type CanvasElement = RectangleElement | TextElement | ArrowElement | LineElement;
+export type CanvasElement = RectangleElement | EllipseElement | TextElement | ArrowElement | LineElement;
 
-// Tool types
+// Tool types (Excalidraw-style)
 export type Tool =
   | 'select'
   | 'rectangle'
-  | 'text'
+  | 'ellipse'
   | 'arrow'
-  // Layout & Structure
-  | 'divider'
-  // UI Intent
-  | 'button'
-  | 'input'
-  | 'checkbox'
-  // Annotation
-  | 'callout'
-  | 'badge';
+  | 'line'
+  | 'text';
 
 // Frame types for classification
 export type FrameType = 'page' | 'modal' | 'flyout';
