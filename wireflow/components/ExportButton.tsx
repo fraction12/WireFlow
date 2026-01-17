@@ -25,6 +25,8 @@ export function ExportButton({ frames }: ExportButtonProps) {
             acceptanceNotes: el.acceptanceNotes,
           },
           ...(el.type === 'text' && { content: (el as TextElement).content }),
+          componentType: el.componentType,
+          groupId: el.groupId,
         }));
 
       return {
@@ -44,7 +46,7 @@ export function ExportButton({ frames }: ExportButtonProps) {
     }
 
     const exportData: ExportData = {
-      version: '2.0.0',  // Bump version for frame support
+      version: '3.0.0',  // Bump version for component support
       exportedAt: new Date().toISOString(),
       frames: exportableFrames,
     };

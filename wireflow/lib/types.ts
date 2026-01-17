@@ -4,6 +4,15 @@ export type ElementType = 'rectangle' | 'text' | 'arrow';
 // Semantic tags for PM layer
 export type SemanticTag = 'button' | 'input' | 'section' | null;
 
+// Component types for component library
+export type ComponentType =
+  | 'table'
+  | 'table-filters'
+  | 'empty-state'
+  | 'confirmation-modal'
+  | 'simple-form'
+  | 'action-footer';
+
 // Base properties for all canvas elements
 export interface BaseElement {
   id: string;
@@ -17,6 +26,9 @@ export interface BaseElement {
   description?: string;
   intendedBehavior?: string;
   acceptanceNotes?: string;
+  // Grouping support
+  groupId?: string;
+  componentType?: ComponentType;
 }
 
 export interface RectangleElement extends BaseElement {
@@ -67,6 +79,8 @@ export interface ExportedElement {
     acceptanceNotes?: string;
   };
   content?: string; // For text elements
+  componentType?: ComponentType;
+  groupId?: string;
 }
 
 // Export format - now includes frames
@@ -81,4 +95,35 @@ export interface ExportData {
   version: string;
   exportedAt: string;
   frames: FrameExport[];
+}
+
+// Component template system
+export interface ComponentElementTemplate {
+  type: ElementType;
+  offsetX: number;
+  offsetY: number;
+  width: number;
+  height: number;
+  semanticTag?: SemanticTag;
+  description?: string;
+  content?: string; // For text elements
+}
+
+export interface ComponentTemplate {
+  id: string;
+  type: ComponentType;
+  name: string;
+  description: string;
+  width: number;
+  height: number;
+  elements: ComponentElementTemplate[];
+}
+
+export interface ComponentGroup {
+  id: string;
+  componentType: ComponentType;
+  x: number;
+  y: number;
+  elementIds: string[];
+  createdAt: string;
 }
