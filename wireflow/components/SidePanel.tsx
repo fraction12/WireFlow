@@ -187,6 +187,6 @@ export function SidePanel({ element, onUpdateElement, onClose, onDelete, onUngro
           </div>
         )}
       </div>
-    </div>
+    </aside>
   );
 }

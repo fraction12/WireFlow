@@ -135,6 +135,6 @@ export function FrameList({
           );
         })}
       </div>
-    </div>
+    </nav>
   );
 }
