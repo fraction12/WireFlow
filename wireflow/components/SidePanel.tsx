@@ -1,0 +1,155 @@
+'use client';
+
+import { useState } from 'react';
+import type { CanvasElement, SemanticTag, TextElement } from '@/lib/types';
+
+interface SidePanelProps {
+  element: CanvasElement;
+  onUpdateElement: (element: CanvasElement) => void;
+  onClose: () => void;
+}
+
+export function SidePanel({ element, onUpdateElement, onClose }: SidePanelProps) {
+  const [localElement, setLocalElement] = useState(element);
+
+  const handleTagChange = (tag: SemanticTag) => {
+    const updated = { ...localElement, semanticTag: tag };
+    setLocalElement(updated);
+    onUpdateElement(updated);
+  };
+
+  const handleFieldChange = (field: 'description' | 'intendedBehavior' | 'acceptanceNotes', value: string) => {
+    const updated = { ...localElement, [field]: value };
+    setLocalElement(updated);
+    onUpdateElement(updated);
+  };
+
+  const handleTextContentChange = (value: string) => {
+    if (localElement.type === 'text') {
+      const updated = { ...localElement, content: value } as TextElement;
+      setLocalElement(updated);
+      onUpdateElement(updated);
+    }
+  };
+
+  const semanticTags: { value: SemanticTag; label: string }[] = [
+    { value: null, label: 'None' },
+    { value: 'button', label: 'Button' },
+    { value: 'input', label: 'Input' },
+    { value: 'section', label: 'Section' },
+  ];
+
+  return (
+    <div className="w-80 bg-white border-l border-zinc-200 flex flex-col h-full">
+      <div className="px-4 py-3 border-b border-zinc-200 flex justify-between items-center">
+        <h2 className="font-semibold text-zinc-900">Properties</h2>
+        <button
+          onClick={onClose}
+          className="text-zinc-400 hover:text-zinc-600 text-xl leading-none"
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        <div>
+          <label className="block text-xs font-medium text-zinc-700 mb-2">
+            Element Type
+          </label>
+          <div className="text-sm text-zinc-900 capitalize bg-zinc-50 px-3 py-2 rounded">
+            {element.type}
+          </div>
+        </div>
+
+        {element.type === 'text' && (
+          <div>
+            <label className="block text-xs font-medium text-zinc-700 mb-2">
+              Text Content
+            </label>
+            <input
+              type="text"
+              value={(localElement as TextElement).content || ''}
+              onChange={(e) => handleTextContentChange(e.target.value)}
+              className="w-full px-3 py-2 border border-zinc-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        )}
+
+        <div>
+          <label className="block text-xs font-medium text-zinc-700 mb-2">
+            Semantic Tag
+          </label>
+          <div className="grid grid-cols-2 gap-2">
+            {semanticTags.map((tag) => (
+              <button
+                key={tag.label}
+                onClick={() => handleTagChange(tag.value)}
+                className={`
+                  px-3 py-2 text-sm rounded border transition-colors
+                  ${localElement.semanticTag === tag.value
+                    ? 'bg-green-50 border-green-500 text-green-700'
+                    : 'bg-white border-zinc-300 text-zinc-700 hover:border-zinc-400'
+                  }
+                `}
+              >
+                {tag.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {localElement.semanticTag && (
+          <>
+            <div>
+              <label className="block text-xs font-medium text-zinc-700 mb-2">
+                Description
+              </label>
+              <textarea
+                value={localElement.description || ''}
+                onChange={(e) => handleFieldChange('description', e.target.value)}
+                placeholder="What is this element?"
+                className="w-full px-3 py-2 border border-zinc-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                rows={3}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-zinc-700 mb-2">
+                Intended Behavior
+              </label>
+              <textarea
+                value={localElement.intendedBehavior || ''}
+                onChange={(e) => handleFieldChange('intendedBehavior', e.target.value)}
+                placeholder="What should this do when interacted with?"
+                className="w-full px-3 py-2 border border-zinc-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                rows={4}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-zinc-700 mb-2">
+                Acceptance Notes
+              </label>
+              <textarea
+                value={localElement.acceptanceNotes || ''}
+                onChange={(e) => handleFieldChange('acceptanceNotes', e.target.value)}
+                placeholder="How will we verify this works correctly?"
+                className="w-full px-3 py-2 border border-zinc-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                rows={4}
+              />
+            </div>
+          </>
+        )}
+
+        {!localElement.semanticTag && (
+          <div className="bg-zinc-50 rounded p-3 text-sm text-zinc-600">
+            <p className="font-medium mb-1">No semantic tag</p>
+            <p className="text-xs">
+              This element is part of the visual sketch. Add a semantic tag to include it in the export.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
