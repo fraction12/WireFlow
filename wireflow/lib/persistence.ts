@@ -65,7 +65,7 @@ export function clearWorkspace(): void {
 
 /**
  * Validate that data has the expected workspace state structure.
- * Does not validate deep element structure to keep restore fast.
+ * Validates frames, elements, and component groups to ensure safe restore.
  */
 function isValidWorkspaceState(data: unknown): data is WorkspaceState {
   if (typeof data !== 'object' || data === null) {
@@ -74,8 +74,8 @@ function isValidWorkspaceState(data: unknown): data is WorkspaceState {
 
   const obj = data as Record<string, unknown>;
 
-  // Check required fields exist with correct types
-  if (typeof obj.version !== 'number') {
+  // Check version matches current schema to avoid loading incompatible data
+  if (typeof obj.version !== 'number' || obj.version !== CURRENT_VERSION) {
     return false;
   }
 
@@ -109,7 +109,7 @@ function isValidWorkspaceState(data: unknown): data is WorkspaceState {
 }
 
 /**
- * Validate frame structure
+ * Validate frame structure including its elements
  */
 function isValidFrame(frame: unknown): frame is Frame {
   if (typeof frame !== 'object' || frame === null) {
@@ -118,12 +118,43 @@ function isValidFrame(frame: unknown): frame is Frame {
 
   const obj = frame as Record<string, unknown>;
 
+  if (
+    typeof obj.id !== 'string' ||
+    typeof obj.name !== 'string' ||
+    typeof obj.type !== 'string' ||
+    !Array.isArray(obj.elements) ||
+    typeof obj.createdAt !== 'string'
+  ) {
+    return false;
+  }
+
+  // Validate each element has required base fields
+  for (const element of obj.elements) {
+    if (!isValidElement(element)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Validate element has required base fields (id, type, x, y, width, height)
+ */
+function isValidElement(element: unknown): boolean {
+  if (typeof element !== 'object' || element === null) {
+    return false;
+  }
+
+  const obj = element as Record<string, unknown>;
+
   return (
     typeof obj.id === 'string' &&
-    typeof obj.name === 'string' &&
     typeof obj.type === 'string' &&
-    Array.isArray(obj.elements) &&
-    typeof obj.createdAt === 'string'
+    typeof obj.x === 'number' &&
+    typeof obj.y === 'number' &&
+    typeof obj.width === 'number' &&
+    typeof obj.height === 'number'
   );
 }
 
