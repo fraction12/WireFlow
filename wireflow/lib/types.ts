@@ -26,9 +26,11 @@ export interface BaseElement {
   description?: string;
   intendedBehavior?: string;
   acceptanceNotes?: string;
-  // Grouping support
+  // Component grouping support (for component templates)
   groupId?: string;
   componentType?: ComponentType;
+  // User-created grouping support
+  elementGroupId?: string;
 }
 
 export interface RectangleElement extends BaseElement {
@@ -98,7 +100,8 @@ export interface ExportedElement {
   };
   content?: string; // For text elements
   componentType?: ComponentType;
-  groupId?: string;
+  groupId?: string; // Component group ID
+  elementGroupId?: string; // User-created group ID
 }
 
 // Export format - now includes frames
@@ -146,10 +149,19 @@ export interface ComponentGroup {
   createdAt: string;
 }
 
+// User-created element groups (lightweight association)
+export interface ElementGroup {
+  id: string;
+  elementIds: string[];
+  frameId: string; // Groups are scoped to a single frame
+  createdAt: string;
+}
+
 // Workspace state for persistence
 export interface WorkspaceState {
   version: number;
   frames: Frame[];
   componentGroups: ComponentGroup[];
+  elementGroups: ElementGroup[];
   activeFrameId: string;
 }

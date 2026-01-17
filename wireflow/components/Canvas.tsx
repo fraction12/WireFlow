@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import type { CanvasElement, Tool, RectangleElement, EllipseElement, TextElement, ArrowElement, LineElement, Frame, FrameType, ComponentGroup, ComponentTemplate } from '@/lib/types';
+import type { CanvasElement, Tool, RectangleElement, EllipseElement, TextElement, ArrowElement, LineElement, Frame, FrameType, ComponentGroup, ComponentTemplate, ElementGroup } from '@/lib/types';
 import { saveWorkspace, loadWorkspace } from '@/lib/persistence';
 import { Toolbar } from './Toolbar';
 import { ExportButton } from './ExportButton';
@@ -74,6 +74,12 @@ export function Canvas() {
   const [componentGroups, setComponentGroups] = useState<ComponentGroup[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
+  // User-created element groups state
+  const [elementGroups, setElementGroups] = useState<ElementGroup[]>([]);
+
+  // Multi-selection state: holds IDs of all currently selected elements
+  const [selectedElementIds, setSelectedElementIds] = useState<Set<string>>(new Set());
+
   // Text editing state: tracks inline editing of text elements
   // - editingElementId: which text element is currently being edited (null = not editing)
   // - editingText: current text value during editing
@@ -100,6 +106,7 @@ export function Canvas() {
     if (savedState && savedState.frames.length > 0) {
       setFrames(savedState.frames);
       setComponentGroups(savedState.componentGroups);
+      setElementGroups(savedState.elementGroups || []);
       // Restore active frame, or fall back to first frame if saved frame no longer exists
       const frameExists = savedState.frames.some(f => f.id === savedState.activeFrameId);
       setActiveFrameId(frameExists ? savedState.activeFrameId : savedState.frames[0].id);
@@ -116,17 +123,50 @@ export function Canvas() {
         version: 1,
         frames,
         componentGroups,
+        elementGroups,
         activeFrameId,
       });
     }, 500); // 500ms debounce
 
     return () => clearTimeout(timeoutId);
-  }, [frames, componentGroups, activeFrameId]);
+  }, [frames, componentGroups, elementGroups, activeFrameId]);
 
-  // Helper function to get group elements (defined before redraw)
+  // Helper function to get component group elements (defined before redraw)
   const getGroupElements = useCallback((groupId: string): CanvasElement[] => {
     return elements.filter(el => el.groupId === groupId);
   }, [elements]);
+
+  // Helper function to get user-created element group elements
+  const getElementGroupElements = useCallback((elementGroupId: string): CanvasElement[] => {
+    return elements.filter(el => el.elementGroupId === elementGroupId);
+  }, [elements]);
+
+  // Helper function to find element group by element ID
+  const findElementGroupByElementId = useCallback((elementId: string): ElementGroup | undefined => {
+    const element = elements.find(el => el.id === elementId);
+    if (!element?.elementGroupId) return undefined;
+    return elementGroups.find(g => g.id === element.elementGroupId);
+  }, [elements, elementGroups]);
+
+  // Helper function to get all element IDs in a group (for selection expansion)
+  const getGroupedElementIds = useCallback((elementId: string): string[] => {
+    const element = elements.find(el => el.id === elementId);
+    if (!element) return [elementId];
+
+    // Check user-created element group first
+    if (element.elementGroupId) {
+      const group = elementGroups.find(g => g.id === element.elementGroupId);
+      if (group) return group.elementIds;
+    }
+
+    // Check component group
+    if (element.groupId) {
+      const group = componentGroups.find(g => g.id === element.groupId);
+      if (group) return group.elementIds;
+    }
+
+    return [elementId];
+  }, [elements, elementGroups, componentGroups]);
 
   // Sketch-style rendering helpers
   const getRandomOffset = (base: number, seed: number, amplitude: number = SKETCH_AMPLITUDE): number => {
@@ -261,8 +301,9 @@ export function Canvas() {
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
 
-      // Highlight selected element with blue
-      if (element.id === selectedElementId) {
+      // Highlight selected elements with blue (single or multi-select)
+      const isSelected = element.id === selectedElementId || selectedElementIds.has(element.id);
+      if (isSelected) {
         ctx.strokeStyle = '#3b82f6';
         ctx.fillStyle = '#3b82f6';
       }
@@ -315,8 +356,10 @@ export function Canvas() {
         drawSketchLine(ctx, lineEl.startX, lineEl.startY, lineEl.endX, lineEl.endY, seed);
       }
 
-      // Draw resize handles for selected element (only if not grouped)
-      if (element.id === selectedElementId && !element.groupId) {
+      // Draw resize handles for selected element (only if not grouped and single selection)
+      const isInGroup = element.groupId || element.elementGroupId;
+      const isSingleSelection = selectedElementIds.size === 0 || (selectedElementIds.size === 1 && selectedElementIds.has(element.id));
+      if (element.id === selectedElementId && !isInGroup && isSingleSelection) {
         ctx.fillStyle = '#3b82f6';
         ctx.strokeStyle = '#3b82f6';
 
@@ -351,7 +394,7 @@ export function Canvas() {
       }
     });
 
-    // Draw group selection outlines
+    // Draw component group selection outlines
     componentGroups.forEach(group => {
       if (group.id === selectedGroupId) {
         const groupElements = getGroupElements(group.id);
@@ -369,7 +412,7 @@ export function Canvas() {
         });
 
         // Draw group selection box with sketch style
-        ctx.strokeStyle = '#8b5cf6';  // Purple for groups
+        ctx.strokeStyle = '#8b5cf6';  // Purple for component groups
         ctx.lineWidth = 2;
         ctx.setLineDash([8, 4]); // Dashed for group outline
         const groupSeed = parseInt(group.id.split('_')[1]) || 0;
@@ -383,7 +426,69 @@ export function Canvas() {
         ctx.fillText(label, minX, minY - 10);
       }
     });
-  }, [elements, selectedElementId, componentGroups, selectedGroupId, getGroupElements]);
+
+    // Draw user-created element group selection outlines
+    elementGroups.forEach(group => {
+      // Check if any element in this group is selected
+      const groupElements = getElementGroupElements(group.id);
+      const hasSelectedElement = groupElements.some(el =>
+        el.id === selectedElementId || selectedElementIds.has(el.id)
+      );
+
+      if (hasSelectedElement && groupElements.length > 0) {
+        // Calculate bounding box
+        let minX = Infinity, minY = Infinity;
+        let maxX = -Infinity, maxY = -Infinity;
+
+        groupElements.forEach(el => {
+          minX = Math.min(minX, el.x);
+          minY = Math.min(minY, el.y);
+          maxX = Math.max(maxX, el.x + el.width);
+          maxY = Math.max(maxY, el.y + el.height);
+        });
+
+        // Draw group selection box with sketch style
+        ctx.strokeStyle = '#3b82f6';  // Blue for user groups
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 4]); // Dashed for group outline
+        const groupSeed = parseInt(group.id.split('_')[1]) || 0;
+        drawSketchRect(ctx, minX - 5, minY - 5, maxX - minX + 10, maxY - minY + 10, groupSeed);
+        ctx.setLineDash([]);
+
+        // Draw group label
+        ctx.fillStyle = '#3b82f6';
+        ctx.font = '12px sans-serif';
+        ctx.fillText('Group', minX, minY - 10);
+      }
+    });
+
+    // Draw multi-selection bounding box (when multiple ungrouped elements are selected)
+    if (selectedElementIds.size > 1) {
+      const selectedElements = elements.filter(el => selectedElementIds.has(el.id));
+      // Only draw if we have multiple elements and they're not all in the same group
+      const allInSameGroup = selectedElements.every(el =>
+        el.elementGroupId && el.elementGroupId === selectedElements[0]?.elementGroupId
+      );
+
+      if (!allInSameGroup && selectedElements.length > 0) {
+        let minX = Infinity, minY = Infinity;
+        let maxX = -Infinity, maxY = -Infinity;
+
+        selectedElements.forEach(el => {
+          minX = Math.min(minX, el.x);
+          minY = Math.min(minY, el.y);
+          maxX = Math.max(maxX, el.x + el.width);
+          maxY = Math.max(maxY, el.y + el.height);
+        });
+
+        ctx.strokeStyle = '#3b82f6';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.strokeRect(minX - 3, minY - 3, maxX - minX + 6, maxY - minY + 6);
+        ctx.setLineDash([]);
+      }
+    }
+  }, [elements, selectedElementId, selectedElementIds, componentGroups, selectedGroupId, elementGroups, getGroupElements, getElementGroupElements]);
 
   useEffect(() => {
     redraw();
@@ -564,10 +669,47 @@ export function Canvas() {
       const { element: clickedElement, groupId } = findElementAtPoint(x, y);
 
       if (clickedElement) {
-        setSelectedElementId(clickedElement.id);
         setSelectedByClick(true); // Mark as selected by click (enables Backspace delete)
 
-        // If element is part of group, select the group
+        // Check if element is part of a user-created element group
+        const elementGroup = clickedElement.elementGroupId
+          ? elementGroups.find(g => g.id === clickedElement.elementGroupId)
+          : undefined;
+
+        // Handle Shift+click for multi-selection
+        if (e.shiftKey) {
+          // Get all element IDs to add (including group members if applicable)
+          const idsToToggle = elementGroup
+            ? elementGroup.elementIds
+            : [clickedElement.id];
+
+          setSelectedElementIds(prev => {
+            const newSet = new Set(prev);
+            // If the clicked element (or any in its group) is already selected, remove them
+            const alreadySelected = idsToToggle.some(id => newSet.has(id));
+            if (alreadySelected) {
+              idsToToggle.forEach(id => newSet.delete(id));
+            } else {
+              idsToToggle.forEach(id => newSet.add(id));
+            }
+            return newSet;
+          });
+          // Don't change primary selection or start dragging in multi-select mode
+          return;
+        }
+
+        // Single click (no Shift): select element and its group members
+        setSelectedElementId(clickedElement.id);
+
+        // If element is in a user-created group, select all group members
+        if (elementGroup) {
+          setSelectedElementIds(new Set(elementGroup.elementIds));
+        } else {
+          // Clear multi-selection for single element
+          setSelectedElementIds(new Set());
+        }
+
+        // If element is part of component group, select the component group
         if (groupId) {
           setSelectedGroupId(groupId);
         } else {
@@ -575,7 +717,8 @@ export function Canvas() {
         }
 
         // Check if click is on a resize handle (only for non-grouped elements)
-        const handle = !groupId ? getResizeHandle(x, y, clickedElement) : null;
+        const isInAnyGroup = groupId || clickedElement.elementGroupId;
+        const handle = !isInAnyGroup ? getResizeHandle(x, y, clickedElement) : null;
 
         if (handle) {
           // Enter resize mode: capture snapshot of initial bounds and pointer position.
@@ -608,7 +751,9 @@ export function Canvas() {
           setIsDrawing(true);
         }
       } else {
+        // Clicked on empty space - clear all selections
         setSelectedElementId(null);
+        setSelectedElementIds(new Set());
         setSelectedGroupId(null);
       }
     } else {
@@ -758,11 +903,18 @@ export function Canvas() {
         }
       } else if (dragOffset) {
         // Move - either group or individual element
+        const dx = x - dragOffset.x - element.x;
+        const dy = y - dragOffset.y - element.y;
+
         if (selectedGroupId) {
-          // Move entire group
-          const dx = x - dragOffset.x - element.x;
-          const dy = y - dragOffset.y - element.y;
+          // Move entire component group
           moveGroup(selectedGroupId, dx, dy);
+        } else if (element.elementGroupId) {
+          // Move entire user-created element group
+          moveElementGroup(element.elementGroupId, dx, dy);
+        } else if (selectedElementIds.size > 1) {
+          // Move multiple selected elements (not in a group)
+          moveSelectedElements(dx, dy);
         } else {
           // Move single element
           setElements(elements.map(el => {
@@ -770,8 +922,6 @@ export function Canvas() {
               if (el.type === 'arrow' || el.type === 'line') {
                 // Arrows and lines need endpoint updates when moved
                 const lineEl = el as ArrowElement | LineElement;
-                const dx = x - dragOffset.x - el.x;
-                const dy = y - dragOffset.y - el.y;
                 return {
                   ...lineEl,
                   x: x - dragOffset.x,
@@ -906,14 +1056,40 @@ export function Canvas() {
     setResizeSnapshot(null); // Clear resize snapshot on pointer up
   };
 
-  // Keyboard event handler for deletion and ungrouping
+  // Keyboard event handler for deletion, grouping, and ungrouping
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Disable canvas keyboard shortcuts during text editing
       // (text input handles its own keyboard events)
       if (editingElementId) return;
 
-      // Only handle if an element is selected
+      // Check for Ctrl/Cmd+G to create group (needs multiple elements selected)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'g' && !e.shiftKey) {
+        if (selectedElementIds.size >= 2) {
+          e.preventDefault();
+          createElementGroup();
+        }
+        return;
+      }
+
+      // Check for Ctrl/Cmd+Shift+G to ungroup
+      if ((e.ctrlKey || e.metaKey) && e.key === 'G' && e.shiftKey) {
+        e.preventDefault();
+        // Find if any selected element is in a user group
+        const selectedElement = selectedElementId
+          ? elements.find(el => el.id === selectedElementId)
+          : null;
+
+        if (selectedElement?.elementGroupId) {
+          ungroupElements(selectedElement.elementGroupId);
+        } else if (selectedElement?.groupId) {
+          // Also allow ungrouping component groups with this shortcut
+          ungroupComponent(selectedElement.groupId);
+        }
+        return;
+      }
+
+      // Only handle deletion if an element is selected
       if (!selectedElementId) return;
 
       const element = elements.find(el => el.id === selectedElementId);
@@ -925,26 +1101,43 @@ export function Canvas() {
         // Prevent default browser behavior (e.g., navigate back)
         e.preventDefault();
 
-        // If element is grouped, delete entire group with confirmation
-        if (element.groupId) {
+        // If element is in a user-created element group, delete entire group
+        if (element.elementGroupId) {
+          const shouldDelete = window.confirm('Delete entire group?');
+          if (shouldDelete) {
+            deleteElementGroup(element.elementGroupId);
+          }
+        }
+        // If element is in a component group, delete entire component group with confirmation
+        else if (element.groupId) {
           const componentName = element.componentType || 'grouped';
           const shouldDelete = window.confirm(`Delete entire ${componentName} component?`);
           if (shouldDelete) {
             deleteGroup(element.groupId);
           }
-        } else {
-          // Remove single element from state
+        }
+        // If multiple elements are selected (not in a group), delete all selected
+        else if (selectedElementIds.size > 1) {
+          setElements(elements.filter(el => !selectedElementIds.has(el.id)));
+          setSelectedElementIds(new Set());
+          setSelectedElementId(null);
+        }
+        // Remove single element from state
+        else {
           setElements(elements.filter(el => el.id !== selectedElementId));
           setSelectedElementId(null);
         }
         setSelectedByClick(false);
       }
 
-      // Check for 'G' key to ungroup
-      if (e.key === 'g' || e.key === 'G') {
+      // Check for 'G' key (without modifiers) to ungroup component groups (legacy behavior)
+      if (e.key === 'g' && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
         if (element.groupId) {
           e.preventDefault();
           ungroupComponent(element.groupId);
+        } else if (element.elementGroupId) {
+          e.preventDefault();
+          ungroupElements(element.elementGroupId);
         }
       }
     };
@@ -956,7 +1149,7 @@ export function Canvas() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [selectedElementId, elements, componentGroups, editingElementId, selectedByClick]);
+  }, [selectedElementId, selectedElementIds, elements, componentGroups, elementGroups, editingElementId, selectedByClick]);
 
   // Frame management handlers
   const handleCreateFrame = (type: FrameType) => {
@@ -975,7 +1168,10 @@ export function Canvas() {
   const handleSwitchFrame = (frameId: string) => {
     // Current frame state is already persisted in frames array
     setActiveFrameId(frameId);
-    setSelectedElementId(null);  // Clear selection when switching
+    // Clear all selections when switching frames
+    setSelectedElementId(null);
+    setSelectedElementIds(new Set());
+    setSelectedGroupId(null);
   };
 
   const handleRenameFrame = (frameId: string, newName: string) => {
@@ -1106,6 +1302,117 @@ export function Canvas() {
         ? { ...grp, x: grp.x + dx, y: grp.y + dy }
         : grp
     ));
+  };
+
+  // Move all elements in a user-created element group
+  const moveElementGroup = (elementGroupId: string, dx: number, dy: number) => {
+    setElements(elements.map(el => {
+      if (el.elementGroupId !== elementGroupId) return el;
+
+      if (el.type === 'arrow' || el.type === 'line') {
+        const lineEl = el as ArrowElement | LineElement;
+        return {
+          ...lineEl,
+          x: el.x + dx,
+          y: el.y + dy,
+          startX: lineEl.startX + dx,
+          startY: lineEl.startY + dy,
+          endX: lineEl.endX + dx,
+          endY: lineEl.endY + dy,
+        } as ArrowElement | LineElement;
+      }
+      return { ...el, x: el.x + dx, y: el.y + dy };
+    }));
+  };
+
+  // Move all currently selected elements (for multi-selection without grouping)
+  const moveSelectedElements = (dx: number, dy: number) => {
+    setElements(elements.map(el => {
+      if (!selectedElementIds.has(el.id)) return el;
+
+      if (el.type === 'arrow' || el.type === 'line') {
+        const lineEl = el as ArrowElement | LineElement;
+        return {
+          ...lineEl,
+          x: el.x + dx,
+          y: el.y + dy,
+          startX: lineEl.startX + dx,
+          startY: lineEl.startY + dy,
+          endX: lineEl.endX + dx,
+          endY: lineEl.endY + dy,
+        } as ArrowElement | LineElement;
+      }
+      return { ...el, x: el.x + dx, y: el.y + dy };
+    }));
+  };
+
+  // Generate unique element group ID
+  const generateElementGroupId = () => `egrp_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+
+  // Create a new user element group from selected elements
+  const createElementGroup = () => {
+    // Need at least 2 elements selected to create a group
+    if (selectedElementIds.size < 2) return;
+
+    const selectedElements = elements.filter(el => selectedElementIds.has(el.id));
+
+    // Prevent grouping if any element is already in a group (no nested groups)
+    const hasGroupedElements = selectedElements.some(el => el.elementGroupId || el.groupId);
+    if (hasGroupedElements) {
+      return; // Silently fail - could show a message in the future
+    }
+
+    // Prevent grouping elements from different frames (currently all elements are from active frame)
+    // This is automatically enforced since we only work with elements from activeFrame
+
+    const groupId = generateElementGroupId();
+    const elementIds = Array.from(selectedElementIds);
+
+    // Update elements with group reference
+    setElements(elements.map(el =>
+      selectedElementIds.has(el.id)
+        ? { ...el, elementGroupId: groupId }
+        : el
+    ));
+
+    // Create the group record
+    const newGroup: ElementGroup = {
+      id: groupId,
+      elementIds,
+      frameId: activeFrameId,
+      createdAt: new Date().toISOString(),
+    };
+
+    setElementGroups([...elementGroups, newGroup]);
+
+    // Keep the elements selected (now as a group)
+    // selectedElementIds already contains all elements
+  };
+
+  // Ungroup a user-created element group
+  const ungroupElements = (elementGroupId: string) => {
+    // Remove group reference from all elements
+    setElements(elements.map(el =>
+      el.elementGroupId === elementGroupId
+        ? { ...el, elementGroupId: undefined }
+        : el
+    ));
+
+    // Remove the group record
+    setElementGroups(elementGroups.filter(grp => grp.id !== elementGroupId));
+
+    // Keep elements selected individually
+    // selectedElementIds remains unchanged
+  };
+
+  // Delete all elements in a user-created element group
+  const deleteElementGroup = (elementGroupId: string) => {
+    setElements(elements.filter(el => el.elementGroupId !== elementGroupId));
+    setElementGroups(elementGroups.filter(grp => grp.id !== elementGroupId));
+
+    // Clear selections
+    setSelectedElementIds(new Set());
+    setSelectedElementId(null);
   };
 
   const ungroupComponent = (groupId: string) => {
