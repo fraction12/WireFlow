@@ -74,6 +74,15 @@ export function Canvas() {
   const [componentGroups, setComponentGroups] = useState<ComponentGroup[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
 
+  // Text editing state: tracks inline editing of text elements
+  // - editingElementId: which text element is currently being edited (null = not editing)
+  // - editingText: current text value during editing
+  // - originalText: text value before editing started (for cancel/escape)
+  const [editingElementId, setEditingElementId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState('');
+  const [originalText, setOriginalText] = useState('');
+  const textInputRef = useRef<HTMLTextAreaElement>(null);
+
   // Persistence: track if initial load has completed
   const hasLoadedRef = useRef(false);
 
@@ -191,6 +200,41 @@ export function Canvas() {
     ctx.stroke();
   };
 
+  // Wrap text to fit within a given width, returning an array of lines
+  // Handles both explicit newlines and word-wrapping
+  const wrapText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] => {
+    const paragraphs = text.split('\n');
+    const lines: string[] = [];
+
+    for (const paragraph of paragraphs) {
+      if (paragraph === '') {
+        lines.push('');
+        continue;
+      }
+
+      const words = paragraph.split(' ');
+      let currentLine = '';
+
+      for (const word of words) {
+        const testLine = currentLine ? `${currentLine} ${word}` : word;
+        const metrics = ctx.measureText(testLine);
+
+        if (metrics.width > maxWidth && currentLine) {
+          lines.push(currentLine);
+          currentLine = word;
+        } else {
+          currentLine = testLine;
+        }
+      }
+
+      if (currentLine) {
+        lines.push(currentLine);
+      }
+    }
+
+    return lines.length > 0 ? lines : [''];
+  };
+
   // Draw all elements on canvas
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -233,7 +277,16 @@ export function Canvas() {
         drawSketchEllipse(ctx, element.x, element.y, element.width, element.height, seed);
       } else if (element.type === 'text') {
         const textEl = element as TextElement;
-        ctx.fillText(textEl.content || 'Text', element.x + 4, element.y + 16);
+        const padding = 4;
+        const lineHeight = 20;
+        const maxWidth = element.width - padding * 2;
+        const lines = wrapText(ctx, textEl.content || 'Text', maxWidth);
+
+        // Render each line of wrapped text
+        lines.forEach((line, index) => {
+          ctx.fillText(line, element.x + padding, element.y + 16 + index * lineHeight);
+        });
+
         // Draw sketch-style bounding box
         drawSketchRect(ctx, element.x, element.y, element.width, element.height, seed);
       } else if (element.type === 'arrow') {
@@ -420,7 +473,80 @@ export function Canvas() {
     return null;
   };
 
+  // Text editing helpers
+  const enterEditMode = (element: TextElement) => {
+    setEditingElementId(element.id);
+    setEditingText(element.content || '');
+    setOriginalText(element.content || '');
+    // Focus input after React renders it
+    setTimeout(() => textInputRef.current?.focus(), 0);
+  };
+
+  const commitTextEdit = () => {
+    if (!editingElementId) return;
+    const editingElement = elements.find(el => el.id === editingElementId);
+    if (!editingElement || editingElement.type !== 'text') {
+      exitEditMode();
+      return;
+    }
+
+    // Update element with new text (or 'Text' if empty to maintain placeholder)
+    const finalText = editingText.trim() || 'Text';
+
+    // Calculate required height based on line count
+    const lineHeight = 20;
+    const lineCount = finalText.split('\n').length;
+    const requiredHeight = Math.max(editingElement.height, lineCount * lineHeight + 8);
+
+    setElements(elements.map(el =>
+      el.id === editingElementId && el.type === 'text'
+        ? { ...el, content: finalText, height: requiredHeight } as TextElement
+        : el
+    ));
+    exitEditMode();
+  };
+
+  const cancelTextEdit = () => {
+    // Restore original text
+    if (editingElementId) {
+      setElements(elements.map(el =>
+        el.id === editingElementId && el.type === 'text'
+          ? { ...el, content: originalText } as TextElement
+          : el
+      ));
+    }
+    exitEditMode();
+  };
+
+  const exitEditMode = () => {
+    setEditingElementId(null);
+    setEditingText('');
+    setOriginalText('');
+  };
+
+  // Double-click handler for entering text edit mode
+  const handleDoubleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const { element: clickedElement } = findElementAtPoint(x, y);
+
+    // Only text elements are editable via double-click
+    if (clickedElement && clickedElement.type === 'text') {
+      enterEditMode(clickedElement as TextElement);
+    }
+  };
+
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    // If in edit mode, clicking outside the text input commits the edit
+    if (editingElementId) {
+      commitTextEdit();
+      return;
+    }
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -504,6 +630,8 @@ export function Canvas() {
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    // Disable canvas interactions during text editing
+    if (editingElementId) return;
     if (!isDrawing) return;
 
     const canvas = canvasRef.current;
@@ -686,6 +814,8 @@ export function Canvas() {
   };
 
   const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    // Disable canvas interactions during text editing
+    if (editingElementId) return;
     if (!isDrawing) return;
 
     const canvas = canvasRef.current;
@@ -772,6 +902,10 @@ export function Canvas() {
   // Keyboard event handler for deletion and ungrouping
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Disable canvas keyboard shortcuts during text editing
+      // (text input handles its own keyboard events)
+      if (editingElementId) return;
+
       // Only handle if an element is selected
       if (!selectedElementId) return;
 
@@ -813,7 +947,7 @@ export function Canvas() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [selectedElementId, elements, componentGroups]);
+  }, [selectedElementId, elements, componentGroups, editingElementId]);
 
   // Frame management handlers
   const handleCreateFrame = (type: FrameType) => {
@@ -1036,7 +1170,47 @@ export function Canvas() {
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
+            onDoubleClick={handleDoubleClick}
           />
+          {/* Inline text editing overlay */}
+          {editingElementId && (() => {
+            const editingElement = elements.find(el => el.id === editingElementId);
+            if (!editingElement || editingElement.type !== 'text') return null;
+
+            // Calculate height based on line count (for auto-grow)
+            const lineHeight = 20;
+            const lineCount = editingText.split('\n').length;
+            const minHeight = Math.max(editingElement.height, lineHeight);
+            const calculatedHeight = Math.max(minHeight, lineCount * lineHeight + 8);
+
+            return (
+              <textarea
+                ref={textInputRef}
+                value={editingText}
+                onChange={(e) => setEditingText(e.target.value)}
+                onKeyDown={(e) => {
+                  // Shift+Enter for newline, Enter alone commits
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    commitTextEdit();
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    cancelTextEdit();
+                  }
+                }}
+                onBlur={commitTextEdit}
+                className="absolute bg-white border-2 border-blue-500 px-1 text-sm focus:outline-none resize-none overflow-hidden"
+                style={{
+                  left: editingElement.x,
+                  top: editingElement.y,
+                  width: Math.max(editingElement.width, 100),
+                  height: calculatedHeight,
+                  fontFamily: 'inherit',
+                  lineHeight: `${lineHeight}px`,
+                }}
+              />
+            );
+          })()}
         </div>
       </div>
 
