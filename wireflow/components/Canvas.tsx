@@ -94,6 +94,14 @@ export function Canvas() {
   // not after exiting text edit mode or other interactions
   const [selectedByClick, setSelectedByClick] = useState(false);
 
+  // Marquee (area) selection state
+  // - isMarqueeSelecting: true when user is dragging to create selection box
+  // - marqueeStart: starting corner of the selection rectangle
+  // - marqueeEnd: current corner of the selection rectangle (during drag)
+  const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
+  const [marqueeStart, setMarqueeStart] = useState<{ x: number; y: number } | null>(null);
+  const [marqueeEnd, setMarqueeEnd] = useState<{ x: number; y: number } | null>(null);
+
   // Persistence: track if initial load has completed
   const hasLoadedRef = useRef(false);
 
@@ -167,6 +175,75 @@ export function Canvas() {
 
     return [elementId];
   }, [elements, elementGroups, componentGroups]);
+
+  // Helper function to get normalized marquee bounds (handles any drag direction)
+  const getMarqueeBounds = useCallback(() => {
+    if (!marqueeStart || !marqueeEnd) return null;
+    return {
+      x: Math.min(marqueeStart.x, marqueeEnd.x),
+      y: Math.min(marqueeStart.y, marqueeEnd.y),
+      width: Math.abs(marqueeEnd.x - marqueeStart.x),
+      height: Math.abs(marqueeEnd.y - marqueeStart.y),
+    };
+  }, [marqueeStart, marqueeEnd]);
+
+  // Helper function to check if an element intersects with a rectangle (marquee)
+  // Uses bounding box intersection - element is selected if any part overlaps
+  const elementIntersectsRect = useCallback((element: CanvasElement, rect: { x: number; y: number; width: number; height: number }): boolean => {
+    // For arrows and lines, use their bounding box
+    const elLeft = element.x;
+    const elRight = element.x + element.width;
+    const elTop = element.y;
+    const elBottom = element.y + element.height;
+
+    const rectLeft = rect.x;
+    const rectRight = rect.x + rect.width;
+    const rectTop = rect.y;
+    const rectBottom = rect.y + rect.height;
+
+    // Check for intersection (not fully contained, just overlap)
+    return !(elRight < rectLeft || elLeft > rectRight || elBottom < rectTop || elTop > rectBottom);
+  }, []);
+
+  // Get all elements that intersect with the current marquee
+  const getElementsInMarquee = useCallback((): string[] => {
+    const bounds = getMarqueeBounds();
+    if (!bounds || bounds.width < 5 || bounds.height < 5) return [];
+
+    const intersectingIds: string[] = [];
+
+    elements.forEach(el => {
+      if (elementIntersectsRect(el, bounds)) {
+        // If element is in a group, add all group members
+        if (el.elementGroupId) {
+          const group = elementGroups.find(g => g.id === el.elementGroupId);
+          if (group) {
+            group.elementIds.forEach(id => {
+              if (!intersectingIds.includes(id)) {
+                intersectingIds.push(id);
+              }
+            });
+          }
+        } else if (el.groupId) {
+          // Component group
+          const group = componentGroups.find(g => g.id === el.groupId);
+          if (group) {
+            group.elementIds.forEach(id => {
+              if (!intersectingIds.includes(id)) {
+                intersectingIds.push(id);
+              }
+            });
+          }
+        } else {
+          if (!intersectingIds.includes(el.id)) {
+            intersectingIds.push(el.id);
+          }
+        }
+      }
+    });
+
+    return intersectingIds;
+  }, [elements, elementGroups, componentGroups, getMarqueeBounds, elementIntersectsRect]);
 
   // Sketch-style rendering helpers
   const getRandomOffset = (base: number, seed: number, amplitude: number = SKETCH_AMPLITUDE): number => {
@@ -488,7 +565,28 @@ export function Canvas() {
         ctx.setLineDash([]);
       }
     }
-  }, [elements, selectedElementId, selectedElementIds, componentGroups, selectedGroupId, elementGroups, getGroupElements, getElementGroupElements]);
+
+    // Draw marquee selection rectangle
+    if (isMarqueeSelecting && marqueeStart && marqueeEnd) {
+      const bounds = {
+        x: Math.min(marqueeStart.x, marqueeEnd.x),
+        y: Math.min(marqueeStart.y, marqueeEnd.y),
+        width: Math.abs(marqueeEnd.x - marqueeStart.x),
+        height: Math.abs(marqueeEnd.y - marqueeStart.y),
+      };
+
+      // Semi-transparent fill
+      ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
+      ctx.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
+
+      // Dashed border
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
+      ctx.setLineDash([]);
+    }
+  }, [elements, selectedElementId, selectedElementIds, componentGroups, selectedGroupId, elementGroups, getGroupElements, getElementGroupElements, isMarqueeSelecting, marqueeStart, marqueeEnd]);
 
   useEffect(() => {
     redraw();
@@ -751,10 +849,18 @@ export function Canvas() {
           setIsDrawing(true);
         }
       } else {
-        // Clicked on empty space - clear all selections
-        setSelectedElementId(null);
-        setSelectedElementIds(new Set());
-        setSelectedGroupId(null);
+        // Clicked on empty space - start marquee selection
+        // Clear previous selections unless Shift is held (to add to selection)
+        if (!e.shiftKey) {
+          setSelectedElementId(null);
+          setSelectedElementIds(new Set());
+          setSelectedGroupId(null);
+        }
+
+        // Start marquee selection
+        setIsMarqueeSelecting(true);
+        setMarqueeStart({ x, y });
+        setMarqueeEnd({ x, y });
       }
     } else {
       setIsDrawing(true);
@@ -784,7 +890,6 @@ export function Canvas() {
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     // Disable canvas interactions during text editing
     if (editingElementId) return;
-    if (!isDrawing) return;
 
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -792,6 +897,15 @@ export function Canvas() {
     const rect = canvas.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
+
+    // Handle marquee selection drag
+    if (isMarqueeSelecting) {
+      setMarqueeEnd({ x, y });
+      return;
+    }
+
+    // Return early if not in an active interaction
+    if (!isDrawing) return;
 
     if (currentTool === 'select' && selectedElementId) {
       const element = elements.find(el => el.id === selectedElementId);
@@ -973,6 +1087,36 @@ export function Canvas() {
   const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
     // Disable canvas interactions during text editing
     if (editingElementId) return;
+
+    // Handle end of marquee selection
+    if (isMarqueeSelecting) {
+      const selectedIds = getElementsInMarquee();
+
+      if (selectedIds.length > 0) {
+        // If Shift was held when starting, add to existing selection
+        if (e.shiftKey) {
+          setSelectedElementIds(prev => {
+            const newSet = new Set(prev);
+            selectedIds.forEach(id => newSet.add(id));
+            return newSet;
+          });
+        } else {
+          // Replace selection with new marquee selection
+          setSelectedElementIds(new Set(selectedIds));
+        }
+
+        // Set the first selected element as the primary selection
+        setSelectedElementId(selectedIds[0]);
+        setSelectedByClick(true);
+      }
+
+      // Clear marquee state
+      setIsMarqueeSelecting(false);
+      setMarqueeStart(null);
+      setMarqueeEnd(null);
+      return;
+    }
+
     if (!isDrawing) return;
 
     const canvas = canvasRef.current;
@@ -1482,7 +1626,7 @@ export function Canvas() {
             ref={canvasRef}
             width={2000}
             height={2000}
-            className="absolute inset-0 cursor-crosshair"
+            className={`absolute inset-0 ${currentTool === 'select' ? 'cursor-default' : 'cursor-crosshair'}`}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
