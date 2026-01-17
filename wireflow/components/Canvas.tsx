@@ -4,7 +4,6 @@ import { useRef, useState, useEffect, useCallback } from 'react';
 import type { CanvasElement, Tool, RectangleElement, EllipseElement, TextElement, ArrowElement, LineElement, Frame, FrameType, ComponentGroup, ComponentTemplate } from '@/lib/types';
 import { saveWorkspace, loadWorkspace } from '@/lib/persistence';
 import { Toolbar } from './Toolbar';
-import { SidePanel } from './SidePanel';
 import { ExportButton } from './ExportButton';
 import { FrameList } from './FrameList';
 import { ComponentPanel } from './ComponentPanel';
@@ -770,8 +769,6 @@ export function Canvas() {
     setResizeSnapshot(null); // Clear resize snapshot on pointer up
   };
 
-  const selectedElement = elements.find(el => el.id === selectedElementId);
-
   // Keyboard event handler for deletion and ungrouping
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1044,35 +1041,6 @@ export function Canvas() {
       </div>
 
       <ComponentPanel onInsertComponent={handleInsertComponent} />
-
-      {selectedElement && (
-        <SidePanel
-          element={selectedElement}
-          onUpdateElement={(updatedElement) => {
-            setElements(elements.map(el =>
-              el.id === updatedElement.id ? updatedElement : el
-            ));
-          }}
-          onClose={() => {
-            setSelectedElementId(null);
-            setSelectedGroupId(null);
-          }}
-          onDelete={() => {
-            // Delete entire group if element is grouped, otherwise just delete element
-            if (selectedElement.groupId) {
-              const shouldDelete = window.confirm(`Delete entire ${selectedElement.componentType} component?`);
-              if (shouldDelete) {
-                deleteGroup(selectedElement.groupId);
-              }
-            } else {
-              setElements(elements.filter(el => el.id !== selectedElementId));
-              setSelectedElementId(null);
-            }
-          }}
-          onUngroupComponent={ungroupComponent}
-          groupElementCount={selectedElement.groupId ? getGroupElements(selectedElement.groupId).length : undefined}
-        />
-      )}
     </div>
   );
 }
