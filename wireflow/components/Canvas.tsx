@@ -1199,7 +1199,7 @@ export function Canvas() {
                   }
                 }}
                 onBlur={commitTextEdit}
-                className="absolute bg-white border-2 border-blue-500 px-1 text-sm focus:outline-none resize-none overflow-hidden"
+                className="absolute bg-white border-2 border-blue-500 px-1 text-sm text-zinc-900 focus:outline-none resize-none overflow-hidden"
                 style={{
                   left: editingElement.x,
                   top: editingElement.y,
