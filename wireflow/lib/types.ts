@@ -1,5 +1,5 @@
 // Core element types for the canvas
-export type ElementType = 'rectangle' | 'text' | 'arrow';
+export type ElementType = 'rectangle' | 'text' | 'arrow' | 'line';
 
 // Semantic tags for PM layer
 export type SemanticTag = 'button' | 'input' | 'section' | null;
@@ -49,7 +49,15 @@ export interface ArrowElement extends BaseElement {
   endY: number;
 }
 
-export type CanvasElement = RectangleElement | TextElement | ArrowElement;
+export interface LineElement extends BaseElement {
+  type: 'line';
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+}
+
+export type CanvasElement = RectangleElement | TextElement | ArrowElement | LineElement;
 
 // Tool types
 export type Tool =
