@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, useEffect, useCallback } from 'react';
-import type { CanvasElement, Tool, RectangleElement, TextElement, ArrowElement, LineElement, Frame, FrameType, ComponentGroup, ComponentTemplate } from '@/lib/types';
+import type { CanvasElement, Tool, RectangleElement, EllipseElement, TextElement, ArrowElement, LineElement, Frame, FrameType, ComponentGroup, ComponentTemplate } from '@/lib/types';
 import { saveWorkspace, loadWorkspace } from '@/lib/persistence';
 import { Toolbar } from './Toolbar';
 import { SidePanel } from './SidePanel';
@@ -163,6 +163,35 @@ export function Canvas() {
     drawSketchLine(ctx, x, y + height, x, y, seed + 3);      // Left
   };
 
+  const drawSketchEllipse = (ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, seed: number = 0) => {
+    // Draw ellipse with sketch-style wobble
+    const centerX = x + width / 2;
+    const centerY = y + height / 2;
+    const radiusX = width / 2;
+    const radiusY = height / 2;
+    const segments = Math.max(24, Math.floor((radiusX + radiusY) / 4));
+
+    ctx.beginPath();
+    for (let i = 0; i <= segments; i++) {
+      const angle = (i / segments) * Math.PI * 2;
+      const baseX = centerX + radiusX * Math.cos(angle);
+      const baseY = centerY + radiusY * Math.sin(angle);
+
+      // Add wobble perpendicular to the ellipse curve
+      const wobble = getRandomOffset(i, seed + i * 7);
+      const wobbledX = baseX + wobble * Math.cos(angle);
+      const wobbledY = baseY + wobble * Math.sin(angle);
+
+      if (i === 0) {
+        ctx.moveTo(wobbledX, wobbledY);
+      } else {
+        ctx.lineTo(wobbledX, wobbledY);
+      }
+    }
+    ctx.closePath();
+    ctx.stroke();
+  };
+
   // Draw all elements on canvas
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -201,6 +230,8 @@ export function Canvas() {
 
       if (element.type === 'rectangle') {
         drawSketchRect(ctx, element.x, element.y, element.width, element.height, seed);
+      } else if (element.type === 'ellipse') {
+        drawSketchEllipse(ctx, element.x, element.y, element.width, element.height, seed);
       } else if (element.type === 'text') {
         const textEl = element as TextElement;
         ctx.fillText(textEl.content || 'Text', element.x + 4, element.y + 16);
@@ -246,7 +277,7 @@ export function Canvas() {
             ctx.fill();
           });
         } else {
-          // Corner handles for rectangles and text
+          // Corner handles for rectangles, ellipses, and text
           const handles = [
             { x: element.x - HANDLE_SIZE / 2, y: element.y - HANDLE_SIZE / 2 }, // NW
             { x: element.x + element.width - HANDLE_SIZE / 2, y: element.y - HANDLE_SIZE / 2 }, // NE
@@ -452,8 +483,7 @@ export function Canvas() {
       setIsDrawing(true);
       setStartPoint({ x, y });
 
-      // Immediate creation tools (click-to-place)
-      // All click-to-place tools auto-switch to select after creation.
+      // Text tool: click-to-place
       if (currentTool === 'text') {
         const newElement: TextElement = {
           id: generateId(),
@@ -469,249 +499,8 @@ export function Canvas() {
         setCurrentTool('select');
         setIsDrawing(false);
         setStartPoint(null);
-      } else if (currentTool === 'button') {
-        // Button: grouped rectangle + centered text with semantic tag
-        const groupId = generateGroupId();
-        const buttonWidth = 120;
-        const buttonHeight = 40;
-
-        const buttonRect: RectangleElement = {
-          id: generateId(),
-          type: 'rectangle',
-          x,
-          y,
-          width: buttonWidth,
-          height: buttonHeight,
-          semanticTag: 'button',
-          groupId,
-        };
-
-        const buttonText: TextElement = {
-          id: generateId(),
-          type: 'text',
-          x: x + 10,
-          y: y + 10,
-          width: buttonWidth - 20,
-          height: 20,
-          content: 'Button',
-          groupId,
-        };
-
-        setElements([...elements, buttonRect, buttonText]);
-        const group: ComponentGroup = {
-          id: groupId,
-          componentType: 'simple-form', // Reuse existing type for UI elements
-          x,
-          y,
-          elementIds: [buttonRect.id, buttonText.id],
-          createdAt: new Date().toISOString(),
-        };
-        setComponentGroups([...componentGroups, group]);
-        setSelectedGroupId(groupId);
-        setCurrentTool('select');
-        setIsDrawing(false);
-        setStartPoint(null);
-      } else if (currentTool === 'input') {
-        // Input field: rectangle + placeholder text
-        const groupId = generateGroupId();
-        const inputWidth = 200;
-        const inputHeight = 36;
-
-        const inputRect: RectangleElement = {
-          id: generateId(),
-          type: 'rectangle',
-          x,
-          y,
-          width: inputWidth,
-          height: inputHeight,
-          semanticTag: 'input',
-          groupId,
-        };
-
-        const placeholderText: TextElement = {
-          id: generateId(),
-          type: 'text',
-          x: x + 8,
-          y: y + 8,
-          width: inputWidth - 16,
-          height: 20,
-          content: 'Placeholder text...',
-          groupId,
-        };
-
-        setElements([...elements, inputRect, placeholderText]);
-        const group: ComponentGroup = {
-          id: groupId,
-          componentType: 'simple-form',
-          x,
-          y,
-          elementIds: [inputRect.id, placeholderText.id],
-          createdAt: new Date().toISOString(),
-        };
-        setComponentGroups([...componentGroups, group]);
-        setSelectedGroupId(groupId);
-        setCurrentTool('select');
-        setIsDrawing(false);
-        setStartPoint(null);
-      } else if (currentTool === 'checkbox') {
-        // Checkbox: small square + label text
-        const groupId = generateGroupId();
-        const checkboxSize = 20;
-
-        const checkboxRect: RectangleElement = {
-          id: generateId(),
-          type: 'rectangle',
-          x,
-          y,
-          width: checkboxSize,
-          height: checkboxSize,
-          semanticTag: 'input',
-          groupId,
-        };
-
-        const checkboxLabel: TextElement = {
-          id: generateId(),
-          type: 'text',
-          x: x + checkboxSize + 8,
-          y: y,
-          width: 100,
-          height: 20,
-          content: 'Checkbox label',
-          groupId,
-        };
-
-        setElements([...elements, checkboxRect, checkboxLabel]);
-        const group: ComponentGroup = {
-          id: groupId,
-          componentType: 'simple-form',
-          x,
-          y,
-          elementIds: [checkboxRect.id, checkboxLabel.id],
-          createdAt: new Date().toISOString(),
-        };
-        setComponentGroups([...componentGroups, group]);
-        setSelectedGroupId(groupId);
-        setCurrentTool('select');
-        setIsDrawing(false);
-        setStartPoint(null);
-      } else if (currentTool === 'divider') {
-        // Divider: horizontal line with endpoint handles
-        const lineLength = 300;
-        const newElement: LineElement = {
-          id: generateId(),
-          type: 'line',
-          x,
-          y,
-          width: lineLength,
-          height: 1,
-          startX: x,
-          startY: y,
-          endX: x + lineLength,
-          endY: y,
-        };
-        setElements([...elements, newElement]);
-        setSelectedElementId(newElement.id);
-        setCurrentTool('select');
-        setIsDrawing(false);
-        setStartPoint(null);
-      } else if (currentTool === 'callout') {
-        // Callout: text box + arrow pointer
-        const groupId = generateGroupId();
-        const noteWidth = 150;
-        const noteHeight = 60;
-
-        const noteRect: RectangleElement = {
-          id: generateId(),
-          type: 'rectangle',
-          x,
-          y,
-          width: noteWidth,
-          height: noteHeight,
-          groupId,
-        };
-
-        const noteText: TextElement = {
-          id: generateId(),
-          type: 'text',
-          x: x + 8,
-          y: y + 8,
-          width: noteWidth - 16,
-          height: 20,
-          content: 'Note text',
-          groupId,
-        };
-
-        // Pointer arrow pointing down-left
-        const pointer: ArrowElement = {
-          id: generateId(),
-          type: 'arrow',
-          x: x,
-          y: y + noteHeight,
-          width: 40,
-          height: 40,
-          startX: x + noteWidth / 2,
-          startY: y + noteHeight,
-          endX: x + noteWidth / 2 + 40,
-          endY: y + noteHeight + 40,
-          groupId,
-        };
-
-        setElements([...elements, noteRect, noteText, pointer]);
-        const group: ComponentGroup = {
-          id: groupId,
-          componentType: 'simple-form',
-          x,
-          y,
-          elementIds: [noteRect.id, noteText.id, pointer.id],
-          createdAt: new Date().toISOString(),
-        };
-        setComponentGroups([...componentGroups, group]);
-        setSelectedGroupId(groupId);
-        setCurrentTool('select');
-        setIsDrawing(false);
-        setStartPoint(null);
-      } else if (currentTool === 'badge') {
-        // State badge: small rounded rectangle + state text
-        const groupId = generateGroupId();
-        const badgeWidth = 80;
-        const badgeHeight = 24;
-
-        const badgeRect: RectangleElement = {
-          id: generateId(),
-          type: 'rectangle',
-          x,
-          y,
-          width: badgeWidth,
-          height: badgeHeight,
-          groupId,
-        };
-
-        const badgeText: TextElement = {
-          id: generateId(),
-          type: 'text',
-          x: x + 8,
-          y: y + 2,
-          width: badgeWidth - 16,
-          height: 20,
-          content: 'Empty',
-          groupId,
-        };
-
-        setElements([...elements, badgeRect, badgeText]);
-        const group: ComponentGroup = {
-          id: groupId,
-          componentType: 'empty-state',
-          x,
-          y,
-          elementIds: [badgeRect.id, badgeText.id],
-          createdAt: new Date().toISOString(),
-        };
-        setComponentGroups([...componentGroups, group]);
-        setSelectedGroupId(groupId);
-        setCurrentTool('select');
-        setIsDrawing(false);
-        setStartPoint(null);
       }
+      // Other tools (rectangle, ellipse, arrow, line) are drag-to-draw in handleMouseUp
     }
   };
 
@@ -865,8 +654,8 @@ export function Canvas() {
           }));
         }
       }
-    } else if (startPoint && (currentTool === 'rectangle' || currentTool === 'arrow')) {
-      // Preview while drawing
+    } else if (startPoint && (currentTool === 'rectangle' || currentTool === 'ellipse' || currentTool === 'arrow' || currentTool === 'line')) {
+      // Preview while drawing (drag-to-draw tools)
       redraw();
 
       const canvas = canvasRef.current;
@@ -879,14 +668,17 @@ export function Canvas() {
       ctx.lineJoin = 'round';
       ctx.setLineDash([8, 4]);
 
+      const previewSeed = Date.now() % 1000;
+
       if (currentTool === 'rectangle') {
         const width = x - startPoint.x;
         const height = y - startPoint.y;
-        // Use simple sketch rect for preview
-        const previewSeed = Date.now() % 1000;
         drawSketchRect(ctx, startPoint.x, startPoint.y, width, height, previewSeed);
-      } else if (currentTool === 'arrow') {
-        const previewSeed = Date.now() % 1000;
+      } else if (currentTool === 'ellipse') {
+        const width = x - startPoint.x;
+        const height = y - startPoint.y;
+        drawSketchEllipse(ctx, startPoint.x, startPoint.y, width, height, previewSeed);
+      } else if (currentTool === 'arrow' || currentTool === 'line') {
         drawSketchLine(ctx, startPoint.x, startPoint.y, x, y, previewSeed);
       }
 
@@ -904,11 +696,11 @@ export function Canvas() {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    if (startPoint && currentTool !== 'select') {
-      if (currentTool === 'rectangle') {
-        const width = x - startPoint.x;
-        const height = y - startPoint.y;
+    if (startPoint && currentTool !== 'select' && currentTool !== 'text') {
+      const width = x - startPoint.x;
+      const height = y - startPoint.y;
 
+      if (currentTool === 'rectangle') {
         if (Math.abs(width) > 5 && Math.abs(height) > 5) {
           const newElement: RectangleElement = {
             id: generateId(),
@@ -919,7 +711,20 @@ export function Canvas() {
             height: Math.abs(height),
           };
           setElements([...elements, newElement]);
-          // Auto-switch to select tool and select the new element
+          setSelectedElementId(newElement.id);
+          setCurrentTool('select');
+        }
+      } else if (currentTool === 'ellipse') {
+        if (Math.abs(width) > 5 && Math.abs(height) > 5) {
+          const newElement: EllipseElement = {
+            id: generateId(),
+            type: 'ellipse',
+            x: width > 0 ? startPoint.x : x,
+            y: height > 0 ? startPoint.y : y,
+            width: Math.abs(width),
+            height: Math.abs(height),
+          };
+          setElements([...elements, newElement]);
           setSelectedElementId(newElement.id);
           setCurrentTool('select');
         }
@@ -929,15 +734,30 @@ export function Canvas() {
           type: 'arrow',
           x: Math.min(startPoint.x, x),
           y: Math.min(startPoint.y, y),
-          width: Math.abs(x - startPoint.x),
-          height: Math.abs(y - startPoint.y),
+          width: Math.abs(x - startPoint.x) || 1,
+          height: Math.abs(y - startPoint.y) || 1,
           startX: startPoint.x,
           startY: startPoint.y,
           endX: x,
           endY: y,
         };
         setElements([...elements, newElement]);
-        // Auto-switch to select tool and select the new element
+        setSelectedElementId(newElement.id);
+        setCurrentTool('select');
+      } else if (currentTool === 'line') {
+        const newElement: LineElement = {
+          id: generateId(),
+          type: 'line',
+          x: Math.min(startPoint.x, x),
+          y: Math.min(startPoint.y, y),
+          width: Math.abs(x - startPoint.x) || 1,
+          height: Math.abs(y - startPoint.y) || 1,
+          startX: startPoint.x,
+          startY: startPoint.y,
+          endX: x,
+          endY: y,
+        };
+        setElements([...elements, newElement]);
         setSelectedElementId(newElement.id);
         setCurrentTool('select');
       }
@@ -1097,9 +917,14 @@ export function Canvas() {
           endX: insertX + tplEl.offsetX + tplEl.width,
           endY: insertY + tplEl.offsetY,
         } as LineElement;
+      } else if (tplEl.type === 'ellipse') {
+        return {
+          ...baseProps,
+          type: 'ellipse',
+        } as EllipseElement;
       }
       return null;
-    }).filter((el): el is RectangleElement | TextElement | ArrowElement | LineElement => el !== null);
+    }).filter((el): el is RectangleElement | EllipseElement | TextElement | ArrowElement | LineElement => el !== null);
 
     // Add elements to canvas
     setElements([...elements, ...newElements]);
