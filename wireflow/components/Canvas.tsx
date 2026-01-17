@@ -64,9 +64,11 @@ export function Canvas() {
 
   // Resize snapshot: captures initial element bounds and pointer origin at resize start.
   // This prevents cumulative drift by computing new bounds from a fixed reference point.
+  // For arrows, also captures initial endpoints for length/direction control.
   const [resizeSnapshot, setResizeSnapshot] = useState<{
     initialBounds: { x: number; y: number; width: number; height: number };
     pointerOrigin: { x: number; y: number };
+    arrowEndpoints?: { startX: number; startY: number; endX: number; endY: number };
   } | null>(null);
 
   // Component grouping state
@@ -222,23 +224,38 @@ export function Canvas() {
       }
 
       // Draw resize handles for selected element (only if not grouped)
-      if (element.id === selectedElementId && element.type !== 'arrow' && !element.groupId) {
+      if (element.id === selectedElementId && !element.groupId) {
         ctx.fillStyle = '#3b82f6';
         ctx.strokeStyle = '#3b82f6';
 
-        // Corner handles for resizing
-        const handles = [
-          { x: element.x - HANDLE_SIZE / 2, y: element.y - HANDLE_SIZE / 2 }, // NW
-          { x: element.x + element.width - HANDLE_SIZE / 2, y: element.y - HANDLE_SIZE / 2 }, // NE
-          { x: element.x - HANDLE_SIZE / 2, y: element.y + element.height - HANDLE_SIZE / 2 }, // SW
-          { x: element.x + element.width - HANDLE_SIZE / 2, y: element.y + element.height - HANDLE_SIZE / 2 }, // SE
-        ];
+        if (element.type === 'arrow') {
+          // Arrow endpoint handles: start and end points for length control
+          const arrowEl = element as ArrowElement;
+          const arrowHandles = [
+            { x: arrowEl.startX, y: arrowEl.startY }, // Start point
+            { x: arrowEl.endX, y: arrowEl.endY },     // End point
+          ];
 
-        handles.forEach((handle) => {
-          ctx.beginPath();
-          ctx.arc(handle.x + HANDLE_SIZE / 2, handle.y + HANDLE_SIZE / 2, HANDLE_SIZE / 2, 0, Math.PI * 2);
-          ctx.fill();
-        });
+          arrowHandles.forEach((handle) => {
+            ctx.beginPath();
+            ctx.arc(handle.x, handle.y, HANDLE_SIZE / 2, 0, Math.PI * 2);
+            ctx.fill();
+          });
+        } else {
+          // Corner handles for rectangles and text
+          const handles = [
+            { x: element.x - HANDLE_SIZE / 2, y: element.y - HANDLE_SIZE / 2 }, // NW
+            { x: element.x + element.width - HANDLE_SIZE / 2, y: element.y - HANDLE_SIZE / 2 }, // NE
+            { x: element.x - HANDLE_SIZE / 2, y: element.y + element.height - HANDLE_SIZE / 2 }, // SW
+            { x: element.x + element.width - HANDLE_SIZE / 2, y: element.y + element.height - HANDLE_SIZE / 2 }, // SE
+          ];
+
+          handles.forEach((handle) => {
+            ctx.beginPath();
+            ctx.arc(handle.x + HANDLE_SIZE / 2, handle.y + HANDLE_SIZE / 2, HANDLE_SIZE / 2, 0, Math.PI * 2);
+            ctx.fill();
+          });
+        }
       }
     });
 
@@ -332,11 +349,27 @@ export function Canvas() {
     return Math.sqrt(dx * dx + dy * dy);
   };
 
-  // Check if point is on resize handle
-  // Check if click is on a resize handle
+  // Check if click is on a resize handle.
+  // Returns handle ID: 'nw'|'ne'|'sw'|'se' for rectangles/text, 'start'|'end' for arrows.
   const getResizeHandle = (x: number, y: number, element: CanvasElement): string | null => {
-    if (element.type === 'arrow') return null;
+    if (element.type === 'arrow') {
+      // Arrow endpoint handles for length control
+      const arrowEl = element as ArrowElement;
+      const arrowHandles = {
+        'start': { x: arrowEl.startX, y: arrowEl.startY },
+        'end': { x: arrowEl.endX, y: arrowEl.endY },
+      };
 
+      for (const [key, pos] of Object.entries(arrowHandles)) {
+        if (Math.abs(x - pos.x) <= HANDLE_SIZE + HANDLE_TOLERANCE &&
+            Math.abs(y - pos.y) <= HANDLE_SIZE + HANDLE_TOLERANCE) {
+          return key;
+        }
+      }
+      return null;
+    }
+
+    // Corner handles for rectangles and text
     const handles = {
       'nw': { x: element.x, y: element.y },
       'ne': { x: element.x + element.width, y: element.y },
@@ -345,7 +378,8 @@ export function Canvas() {
     };
 
     for (const [key, pos] of Object.entries(handles)) {
-      if (Math.abs(x - pos.x) <= HANDLE_SIZE + HANDLE_TOLERANCE && Math.abs(y - pos.y) <= HANDLE_SIZE + HANDLE_TOLERANCE) {
+      if (Math.abs(x - pos.x) <= HANDLE_SIZE + HANDLE_TOLERANCE &&
+          Math.abs(y - pos.y) <= HANDLE_SIZE + HANDLE_TOLERANCE) {
         return key;
       }
     }
@@ -380,7 +414,7 @@ export function Canvas() {
           // Enter resize mode: capture snapshot of initial bounds and pointer position.
           // This snapshot is the single source of truth for resize calculations.
           setResizeHandle(handle);
-          setResizeSnapshot({
+          const snapshot: typeof resizeSnapshot = {
             initialBounds: {
               x: clickedElement.x,
               y: clickedElement.y,
@@ -388,7 +422,18 @@ export function Canvas() {
               height: clickedElement.height,
             },
             pointerOrigin: { x, y },
-          });
+          };
+          // For arrows, also capture initial endpoints
+          if (clickedElement.type === 'arrow') {
+            const arrowEl = clickedElement as ArrowElement;
+            snapshot.arrowEndpoints = {
+              startX: arrowEl.startX,
+              startY: arrowEl.startY,
+              endX: arrowEl.endX,
+              endY: arrowEl.endY,
+            };
+          }
+          setResizeSnapshot(snapshot);
           setIsDrawing(true);
         } else {
           // Start dragging
@@ -404,6 +449,7 @@ export function Canvas() {
       setStartPoint({ x, y });
 
       // Immediate creation tools (click-to-place)
+      // All click-to-place tools auto-switch to select after creation.
       if (currentTool === 'text') {
         const newElement: TextElement = {
           id: generateId(),
@@ -416,6 +462,7 @@ export function Canvas() {
         };
         setElements([...elements, newElement]);
         setSelectedElementId(newElement.id);
+        setCurrentTool('select');
         setIsDrawing(false);
         setStartPoint(null);
       } else if (currentTool === 'button') {
@@ -457,6 +504,7 @@ export function Canvas() {
         };
         setComponentGroups([...componentGroups, group]);
         setSelectedGroupId(groupId);
+        setCurrentTool('select');
         setIsDrawing(false);
         setStartPoint(null);
       } else if (currentTool === 'input') {
@@ -498,6 +546,7 @@ export function Canvas() {
         };
         setComponentGroups([...componentGroups, group]);
         setSelectedGroupId(groupId);
+        setCurrentTool('select');
         setIsDrawing(false);
         setStartPoint(null);
       } else if (currentTool === 'checkbox') {
@@ -538,6 +587,7 @@ export function Canvas() {
         };
         setComponentGroups([...componentGroups, group]);
         setSelectedGroupId(groupId);
+        setCurrentTool('select');
         setIsDrawing(false);
         setStartPoint(null);
       } else if (currentTool === 'divider') {
@@ -552,6 +602,7 @@ export function Canvas() {
         };
         setElements([...elements, newElement]);
         setSelectedElementId(newElement.id);
+        setCurrentTool('select');
         setIsDrawing(false);
         setStartPoint(null);
       } else if (currentTool === 'callout') {
@@ -607,6 +658,7 @@ export function Canvas() {
         };
         setComponentGroups([...componentGroups, group]);
         setSelectedGroupId(groupId);
+        setCurrentTool('select');
         setIsDrawing(false);
         setStartPoint(null);
       } else if (currentTool === 'badge') {
@@ -647,6 +699,7 @@ export function Canvas() {
         };
         setComponentGroups([...componentGroups, group]);
         setSelectedGroupId(groupId);
+        setCurrentTool('select');
         setIsDrawing(false);
         setStartPoint(null);
       }
@@ -668,73 +721,109 @@ export function Canvas() {
       if (!element) return;
 
       if (resizeHandle && resizeSnapshot) {
-        // RESIZE MODE: Compute new bounds from the snapshot (no cumulative drift).
-        //
-        // Handle-to-Anchor Mapping:
-        //   Handle   |  Fixed Anchor Corner
-        //   ---------+----------------------
-        //   'nw'     |  SE corner (x + width, y + height)
-        //   'ne'     |  SW corner (x, y + height)
-        //   'sw'     |  NE corner (x + width, y)
-        //   'se'     |  NW corner (x, y)
-        //
-        // Math: We compute pointer delta from origin, apply it to the initial bounds,
-        // then derive new x/y/width/height while keeping the anchor corner fixed.
-
-        const { initialBounds, pointerOrigin } = resizeSnapshot;
+        const { initialBounds, pointerOrigin, arrowEndpoints } = resizeSnapshot;
         const dx = x - pointerOrigin.x; // Pointer delta X
         const dy = y - pointerOrigin.y; // Pointer delta Y
 
-        // Compute the anchor corner (opposite corner that must stay fixed)
-        const anchorX = resizeHandle.includes('w')
-          ? initialBounds.x + initialBounds.width  // Anchor is on the right (E side)
-          : initialBounds.x;                        // Anchor is on the left (W side)
-        const anchorY = resizeHandle.includes('n')
-          ? initialBounds.y + initialBounds.height // Anchor is on the bottom (S side)
-          : initialBounds.y;                        // Anchor is on the top (N side)
+        if (element.type === 'arrow' && arrowEndpoints) {
+          // ARROW RESIZE MODE: Move the start or end point to change length/direction.
+          // The opposite endpoint stays fixed as the anchor.
+          //
+          // Handle Mapping:
+          //   'start' → move startX/startY, endX/endY stays fixed
+          //   'end'   → move endX/endY, startX/startY stays fixed
 
-        // Compute new moving corner position (the corner being dragged)
-        // Start from initial corner position, add pointer delta
-        const movingCornerInitialX = resizeHandle.includes('w')
-          ? initialBounds.x
-          : initialBounds.x + initialBounds.width;
-        const movingCornerInitialY = resizeHandle.includes('n')
-          ? initialBounds.y
-          : initialBounds.y + initialBounds.height;
+          let newStartX = arrowEndpoints.startX;
+          let newStartY = arrowEndpoints.startY;
+          let newEndX = arrowEndpoints.endX;
+          let newEndY = arrowEndpoints.endY;
 
-        let newMovingX = movingCornerInitialX + dx;
-        let newMovingY = movingCornerInitialY + dy;
-
-        // Clamp moving corner to enforce minimum size and prevent inversion.
-        // The moving corner can't cross past the anchor beyond MIN_ELEMENT_SIZE.
-        if (resizeHandle.includes('w')) {
-          // Moving corner is on the left; can't go past (anchorX - MIN_ELEMENT_SIZE)
-          newMovingX = Math.min(newMovingX, anchorX - MIN_ELEMENT_SIZE);
-        } else {
-          // Moving corner is on the right; can't go below (anchorX + MIN_ELEMENT_SIZE)
-          newMovingX = Math.max(newMovingX, anchorX + MIN_ELEMENT_SIZE);
-        }
-
-        if (resizeHandle.includes('n')) {
-          // Moving corner is on the top; can't go past (anchorY - MIN_ELEMENT_SIZE)
-          newMovingY = Math.min(newMovingY, anchorY - MIN_ELEMENT_SIZE);
-        } else {
-          // Moving corner is on the bottom; can't go below (anchorY + MIN_ELEMENT_SIZE)
-          newMovingY = Math.max(newMovingY, anchorY + MIN_ELEMENT_SIZE);
-        }
-
-        // Derive final x, y, width, height from anchor and clamped moving corner
-        const newX = Math.min(anchorX, newMovingX);
-        const newY = Math.min(anchorY, newMovingY);
-        const newWidth = Math.abs(newMovingX - anchorX);
-        const newHeight = Math.abs(newMovingY - anchorY);
-
-        setElements(elements.map(el => {
-          if (el.id === selectedElementId && el.type !== 'arrow') {
-            return { ...el, x: newX, y: newY, width: newWidth, height: newHeight };
+          if (resizeHandle === 'start') {
+            newStartX = arrowEndpoints.startX + dx;
+            newStartY = arrowEndpoints.startY + dy;
+          } else if (resizeHandle === 'end') {
+            newEndX = arrowEndpoints.endX + dx;
+            newEndY = arrowEndpoints.endY + dy;
           }
-          return el;
-        }));
+
+          // Update bounding box to contain both endpoints
+          const newX = Math.min(newStartX, newEndX);
+          const newY = Math.min(newStartY, newEndY);
+          const newWidth = Math.abs(newEndX - newStartX) || 1;
+          const newHeight = Math.abs(newEndY - newStartY) || 1;
+
+          setElements(elements.map(el => {
+            if (el.id === selectedElementId && el.type === 'arrow') {
+              return {
+                ...el,
+                x: newX,
+                y: newY,
+                width: newWidth,
+                height: newHeight,
+                startX: newStartX,
+                startY: newStartY,
+                endX: newEndX,
+                endY: newEndY,
+              } as ArrowElement;
+            }
+            return el;
+          }));
+        } else if (element.type !== 'arrow') {
+          // RECTANGLE/TEXT RESIZE MODE: Compute new bounds from the snapshot.
+          //
+          // Handle-to-Anchor Mapping:
+          //   Handle   |  Fixed Anchor Corner
+          //   ---------+----------------------
+          //   'nw'     |  SE corner (x + width, y + height)
+          //   'ne'     |  SW corner (x, y + height)
+          //   'sw'     |  NE corner (x + width, y)
+          //   'se'     |  NW corner (x, y)
+
+          // Compute the anchor corner (opposite corner that must stay fixed)
+          const anchorX = resizeHandle.includes('w')
+            ? initialBounds.x + initialBounds.width  // Anchor is on the right (E side)
+            : initialBounds.x;                        // Anchor is on the left (W side)
+          const anchorY = resizeHandle.includes('n')
+            ? initialBounds.y + initialBounds.height // Anchor is on the bottom (S side)
+            : initialBounds.y;                        // Anchor is on the top (N side)
+
+          // Compute new moving corner position (the corner being dragged)
+          const movingCornerInitialX = resizeHandle.includes('w')
+            ? initialBounds.x
+            : initialBounds.x + initialBounds.width;
+          const movingCornerInitialY = resizeHandle.includes('n')
+            ? initialBounds.y
+            : initialBounds.y + initialBounds.height;
+
+          let newMovingX = movingCornerInitialX + dx;
+          let newMovingY = movingCornerInitialY + dy;
+
+          // Clamp moving corner to enforce minimum size and prevent inversion.
+          if (resizeHandle.includes('w')) {
+            newMovingX = Math.min(newMovingX, anchorX - MIN_ELEMENT_SIZE);
+          } else {
+            newMovingX = Math.max(newMovingX, anchorX + MIN_ELEMENT_SIZE);
+          }
+
+          if (resizeHandle.includes('n')) {
+            newMovingY = Math.min(newMovingY, anchorY - MIN_ELEMENT_SIZE);
+          } else {
+            newMovingY = Math.max(newMovingY, anchorY + MIN_ELEMENT_SIZE);
+          }
+
+          // Derive final x, y, width, height from anchor and clamped moving corner
+          const newX = Math.min(anchorX, newMovingX);
+          const newY = Math.min(anchorY, newMovingY);
+          const newWidth = Math.abs(newMovingX - anchorX);
+          const newHeight = Math.abs(newMovingY - anchorY);
+
+          setElements(elements.map(el => {
+            if (el.id === selectedElementId) {
+              return { ...el, x: newX, y: newY, width: newWidth, height: newHeight };
+            }
+            return el;
+          }));
+        }
       } else if (dragOffset) {
         // Move - either group or individual element
         if (selectedGroupId) {
@@ -820,6 +909,9 @@ export function Canvas() {
             height: Math.abs(height),
           };
           setElements([...elements, newElement]);
+          // Auto-switch to select tool and select the new element
+          setSelectedElementId(newElement.id);
+          setCurrentTool('select');
         }
       } else if (currentTool === 'arrow') {
         const newElement: ArrowElement = {
@@ -835,6 +927,9 @@ export function Canvas() {
           endY: y,
         };
         setElements([...elements, newElement]);
+        // Auto-switch to select tool and select the new element
+        setSelectedElementId(newElement.id);
+        setCurrentTool('select');
       }
     }
 
