@@ -27,6 +27,7 @@ export function ExportButton({ frames }: ExportButtonProps) {
           ...(el.type === 'text' && { content: (el as TextElement).content }),
           componentType: el.componentType,
           groupId: el.groupId,
+          elementGroupId: el.elementGroupId,
         }));
 
       return {

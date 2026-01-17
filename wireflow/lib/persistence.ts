@@ -1,4 +1,4 @@
-import type { WorkspaceState, Frame, ComponentGroup } from './types';
+import type { WorkspaceState, Frame, ComponentGroup, ElementGroup } from './types';
 
 const STORAGE_KEY = 'wireflow-workspace';
 const CURRENT_VERSION = 1;
@@ -13,6 +13,7 @@ export function saveWorkspace(state: WorkspaceState): boolean {
       version: CURRENT_VERSION,
       frames: state.frames,
       componentGroups: state.componentGroups,
+      elementGroups: state.elementGroups || [],
       activeFrameId: state.activeFrameId,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -44,7 +45,11 @@ export function loadWorkspace(): WorkspaceState | null {
       return null;
     }
 
-    return data;
+    // Ensure elementGroups exists (backward compatibility)
+    return {
+      ...data,
+      elementGroups: data.elementGroups || [],
+    };
   } catch (error) {
     // JSON parse error or other issues
     console.warn('Failed to load workspace:', error);
@@ -87,6 +92,11 @@ function isValidWorkspaceState(data: unknown): data is WorkspaceState {
     return false;
   }
 
+  // elementGroups is optional for backward compatibility (defaults to [])
+  if (obj.elementGroups !== undefined && !Array.isArray(obj.elementGroups)) {
+    return false;
+  }
+
   if (typeof obj.activeFrameId !== 'string') {
     return false;
   }
@@ -102,6 +112,15 @@ function isValidWorkspaceState(data: unknown): data is WorkspaceState {
   for (const group of obj.componentGroups) {
     if (!isValidComponentGroup(group)) {
       return false;
+    }
+  }
+
+  // Validate element groups have required structure (if present)
+  if (Array.isArray(obj.elementGroups)) {
+    for (const group of obj.elementGroups) {
+      if (!isValidElementGroup(group)) {
+        return false;
+      }
     }
   }
 
@@ -174,6 +193,24 @@ function isValidComponentGroup(group: unknown): group is ComponentGroup {
     typeof obj.x === 'number' &&
     typeof obj.y === 'number' &&
     Array.isArray(obj.elementIds) &&
+    typeof obj.createdAt === 'string'
+  );
+}
+
+/**
+ * Validate user-created element group structure
+ */
+function isValidElementGroup(group: unknown): group is ElementGroup {
+  if (typeof group !== 'object' || group === null) {
+    return false;
+  }
+
+  const obj = group as Record<string, unknown>;
+
+  return (
+    typeof obj.id === 'string' &&
+    Array.isArray(obj.elementIds) &&
+    typeof obj.frameId === 'string' &&
     typeof obj.createdAt === 'string'
   );
 }
