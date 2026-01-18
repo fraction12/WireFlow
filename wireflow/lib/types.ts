@@ -53,6 +53,13 @@ export type TextAlign = 'left' | 'center' | 'right';
 export type FontWeight = 'normal' | 'bold';
 export type FontStyle = 'normal' | 'italic';
 export type TextPreset = 'heading1' | 'heading2' | 'heading3' | 'body' | 'label' | 'caption';
+export type VerticalAlign = 'top' | 'middle' | 'bottom';
+
+// Bound element reference (for shapes with text inside)
+export interface BoundElement {
+  id: string;
+  type: 'text';
+}
 
 // Component types for component library
 export type ComponentType =
@@ -95,6 +102,8 @@ export interface BaseElement {
   componentType?: ComponentType;
   // User-created grouping support
   elementGroupId?: string;
+  // Bound elements (e.g., text inside shapes) - Excalidraw-style
+  boundElements?: BoundElement[];
 }
 
 export interface RectangleElement extends BaseElement {
@@ -119,6 +128,9 @@ export interface TextElement extends BaseElement {
   lineHeight?: number;
   preset?: TextPreset;
   autoWidth?: boolean; // When true, element width auto-expands with content
+  // Container binding (Excalidraw-style bound text)
+  containerId?: string; // ID of the shape containing this text
+  verticalAlign?: VerticalAlign; // Vertical alignment within container
 }
 
 export interface ArrowElement extends BaseElement {

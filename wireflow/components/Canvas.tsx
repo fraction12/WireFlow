@@ -23,6 +23,7 @@ import type {
   FrameDocumentation,
   ElementAnnotation,
   ElementStyle,
+  BoundElement,
 } from "@/lib/types";
 import { saveWorkspace, loadWorkspace, type SaveResult } from "@/lib/persistence";
 import {
@@ -214,6 +215,148 @@ export function Canvas() {
     `el_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
   const generateFrameId = () =>
     `frame_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+
+  // ============================================================================
+  // Bound Text Helpers (Excalidraw-style text inside shapes)
+  // ============================================================================
+
+  // Container types that can have bound text
+  type ContainerElement = RectangleElement | EllipseElement | DiamondElement;
+
+  // Check if an element is a container that can hold bound text
+  const isContainerElement = (element: CanvasElement): element is ContainerElement => {
+    return element.type === 'rectangle' || element.type === 'ellipse' || element.type === 'diamond';
+  };
+
+  // Get the bound text element for a container
+  const getBoundTextElement = (container: CanvasElement, allElements: CanvasElement[]): TextElement | null => {
+    if (!container.boundElements || container.boundElements.length === 0) {
+      return null;
+    }
+    const boundTextRef = container.boundElements.find(be => be.type === 'text');
+    if (!boundTextRef) return null;
+
+    const textElement = allElements.find(el => el.id === boundTextRef.id);
+    return textElement?.type === 'text' ? textElement as TextElement : null;
+  };
+
+  // Calculate the text bounds for centering text inside a container
+  const calculateTextBoundsForContainer = (
+    container: CanvasElement,
+    textContent: string,
+    ctx: CanvasRenderingContext2D | null,
+    fontSize: number = 16
+  ): { x: number; y: number; width: number; height: number } => {
+    // Container padding for text
+    const containerPadding = 8;
+
+    // Calculate available width inside container
+    const availableWidth = container.width - containerPadding * 2;
+
+    // Estimate text height based on number of lines
+    let textHeight = fontSize * 1.5; // Default single line height
+    if (ctx && textContent) {
+      ctx.font = `${fontSize}px sans-serif`;
+      const words = textContent.split(' ');
+      let lines = 1;
+      let currentLine = '';
+
+      for (const word of words) {
+        const testLine = currentLine ? `${currentLine} ${word}` : word;
+        const metrics = ctx.measureText(testLine);
+        if (metrics.width > availableWidth && currentLine) {
+          lines++;
+          currentLine = word;
+        } else {
+          currentLine = testLine;
+        }
+      }
+      textHeight = lines * fontSize * 1.5;
+    }
+
+    // Center text within container
+    const textWidth = Math.max(availableWidth, MIN_TEXT_WIDTH);
+    const textX = container.x + containerPadding;
+    const textY = container.y + (container.height - textHeight) / 2;
+
+    return {
+      x: textX,
+      y: textY,
+      width: textWidth,
+      height: textHeight
+    };
+  };
+
+  // Sync bound text position when container moves or resizes
+  const syncBoundTextPosition = (
+    containerId: string,
+    allElements: CanvasElement[]
+  ): CanvasElement[] => {
+    const container = allElements.find(el => el.id === containerId);
+    if (!container || !isContainerElement(container)) {
+      return allElements;
+    }
+
+    const boundText = getBoundTextElement(container, allElements);
+    if (!boundText) {
+      return allElements;
+    }
+
+    // Calculate new position for bound text
+    const containerPadding = 8;
+    const textWidth = container.width - containerPadding * 2;
+    const textX = container.x + containerPadding;
+
+    // Center vertically based on text height
+    const fontSize = boundText.fontSize || 16;
+    const lineHeight = boundText.lineHeight || Math.round(fontSize * 1.5);
+    const lines = (boundText.content || '').split('\n').length;
+    const textHeight = lines * lineHeight;
+    const textY = container.y + (container.height - textHeight) / 2;
+
+    return allElements.map(el => {
+      if (el.id === boundText.id) {
+        return {
+          ...el,
+          x: textX,
+          y: Math.max(container.y + containerPadding, textY),
+          width: Math.max(textWidth, MIN_TEXT_WIDTH)
+        };
+      }
+      return el;
+    });
+  };
+
+  // Create a new bound text element for a container
+  const createBoundTextElement = (
+    container: CanvasElement,
+    initialContent: string = ''
+  ): TextElement => {
+    const containerPadding = 8;
+    const fontSize = 16;
+    const lineHeight = Math.round(fontSize * 1.5);
+
+    const textWidth = container.width - containerPadding * 2;
+    const textHeight = lineHeight;
+    const textX = container.x + containerPadding;
+    const textY = container.y + (container.height - textHeight) / 2;
+
+    return {
+      id: generateId(),
+      type: 'text',
+      x: textX,
+      y: textY,
+      width: Math.max(textWidth, MIN_TEXT_WIDTH),
+      height: textHeight,
+      content: initialContent,
+      fontSize,
+      lineHeight,
+      textAlign: 'center',
+      autoWidth: false, // Bound text should not auto-expand
+      containerId: container.id,
+      verticalAlign: 'middle'
+    };
+  };
 
   // Initialize with default frame
   const defaultFrame: Frame = {
@@ -1277,6 +1420,7 @@ export function Canvas() {
       } else if (element.type === "text") {
         const textEl = element as TextElement;
         const padding = TEXT_PADDING;
+        const isBoundText = !!textEl.containerId;
 
         const isBeingEdited = element.id === editingElementId;
 
@@ -1302,8 +1446,8 @@ export function Canvas() {
         // Use empty string display for empty content (will show nothing)
         const lines = wrapText(ctx, textEl.content || "", maxWidth);
 
-        // Draw subtle background for selected text elements
-        if (isSelected) {
+        // Draw subtle background for selected text elements (not bound text)
+        if (isSelected && !isBoundText) {
           ctx.fillStyle = canvasTheme.selectedBg;
           ctx.fillRect(element.x, element.y, element.width, element.height);
         }
@@ -1324,16 +1468,27 @@ export function Canvas() {
             textX = element.x + padding;
         }
 
+        // For bound text with vertical centering, calculate Y offset
+        let textY = element.y + fontSize;
+        if (isBoundText && textEl.verticalAlign === 'middle') {
+          // Get the container to calculate vertical centering
+          const container = elements.find(el => el.id === textEl.containerId);
+          if (container) {
+            const totalTextHeight = lines.length * lineHeight;
+            textY = container.y + (container.height - totalTextHeight) / 2 + fontSize;
+          }
+        }
+
         // Render each line of wrapped text
         lines.forEach((line, index) => {
-          ctx.fillText(line, textX, element.y + fontSize + index * lineHeight);
+          ctx.fillText(line, textX, textY + index * lineHeight);
         });
 
         // Reset text align for other elements
         ctx.textAlign = "left";
 
-        // Visual state handling for text border
-        if (isSelected) {
+        // Visual state handling for text border (only for non-bound text)
+        if (isSelected && !isBoundText) {
           // Selected: use selected color with slightly thicker line for prominence
           ctx.strokeStyle = canvasTheme.selected;
           ctx.lineWidth = 2;
@@ -2314,7 +2469,28 @@ export function Canvas() {
     // If empty, delete the element (no placeholder)
     if (!trimmedText) {
       recordSnapshot(); // Record for undo
-      setElements(elements.filter((el) => el.id !== editingElementId));
+
+      // If this is bound text, also remove the reference from the container
+      const textEl = editingElement as TextElement;
+      if (textEl.containerId) {
+        const container = elements.find(el => el.id === textEl.containerId);
+        if (container && container.boundElements) {
+          const updatedContainer = {
+            ...container,
+            boundElements: container.boundElements.filter(be => be.id !== editingElementId)
+          };
+          setElements(
+            elements
+              .filter((el) => el.id !== editingElementId)
+              .map(el => el.id === textEl.containerId ? updatedContainer : el)
+          );
+        } else {
+          setElements(elements.filter((el) => el.id !== editingElementId));
+        }
+      } else {
+        setElements(elements.filter((el) => el.id !== editingElementId));
+      }
+
       setSelectedElementId(null);
       exitEditMode();
       return;
@@ -2397,8 +2573,44 @@ export function Canvas() {
     const { element: clickedElement } = findElementAtPoint(x, y);
 
     if (clickedElement && clickedElement.type === "text") {
-      // Edit existing text element
+      // Edit existing text element (including bound text)
       enterEditMode(clickedElement as TextElement);
+    } else if (clickedElement && isContainerElement(clickedElement)) {
+      // Double-click on container shape (rectangle, ellipse, diamond)
+      // Create new bound text or edit existing bound text
+      const existingBoundText = getBoundTextElement(clickedElement, elements);
+
+      if (existingBoundText) {
+        // Edit existing bound text
+        enterEditMode(existingBoundText);
+      } else {
+        // Create new bound text element
+        recordSnapshot(); // Record for undo
+        const newTextElement = createBoundTextElement(clickedElement);
+
+        // Add bound element reference to container
+        const boundElementRef: BoundElement = { id: newTextElement.id, type: 'text' };
+        const updatedContainer = {
+          ...clickedElement,
+          boundElements: [...(clickedElement.boundElements || []), boundElementRef]
+        };
+
+        // Update elements: replace container with updated one and add new text element
+        const updatedElements = elements.map(el =>
+          el.id === clickedElement.id ? updatedContainer : el
+        );
+        setElements([...updatedElements, newTextElement]);
+        setSelectedElementId(newTextElement.id);
+        setIsNewTextElement(true);
+
+        // Enter edit mode immediately
+        setEditingElementId(newTextElement.id);
+        setEditingText("");
+
+        setTimeout(() => {
+          textInputRef.current?.focus();
+        }, 0);
+      }
     } else if (!clickedElement) {
       // Double-click on empty canvas: create new text element (Excalidraw behavior)
       recordSnapshot(); // Record for undo
@@ -2912,20 +3124,26 @@ export function Canvas() {
           const newWidth = Math.abs(newMovingX - anchorX);
           const newHeight = Math.abs(newMovingY - anchorY);
 
-          setElements(
-            elements.map((el) => {
-              if (el.id === selectedElementId) {
-                return {
-                  ...el,
-                  x: newX,
-                  y: newY,
-                  width: newWidth,
-                  height: newHeight,
-                };
-              }
-              return el;
-            }),
-          );
+          // Update element bounds
+          let updatedElements = elements.map((el) => {
+            if (el.id === selectedElementId) {
+              return {
+                ...el,
+                x: newX,
+                y: newY,
+                width: newWidth,
+                height: newHeight,
+              };
+            }
+            return el;
+          });
+
+          // Sync bound text position if this is a container element
+          if (isContainerElement(element)) {
+            updatedElements = syncBoundTextPosition(selectedElementId, updatedElements);
+          }
+
+          setElements(updatedElements);
         }
       } else if (dragOffset) {
         // Move - either group or individual element
@@ -2962,40 +3180,46 @@ export function Canvas() {
           const snapDx = finalX - element.x;
           const snapDy = finalY - element.y;
 
-          setElements(
-            elements.map((el) => {
-              if (el.id === selectedElementId) {
-                if (el.type === "arrow" || el.type === "line") {
-                  // Arrows and lines need endpoint updates when moved
-                  const lineEl = el as ArrowElement | LineElement;
-                  return {
-                    ...lineEl,
-                    x: finalX,
-                    y: finalY,
-                    startX: lineEl.startX + snapDx,
-                    startY: lineEl.startY + snapDy,
-                    endX: lineEl.endX + snapDx,
-                    endY: lineEl.endY + snapDy,
-                  };
-                }
-                if (el.type === "freedraw") {
-                  // Freedraw elements need all points updated when moved
-                  const freedrawEl = el as FreedrawElement;
-                  return {
-                    ...freedrawEl,
-                    x: finalX,
-                    y: finalY,
-                    points: freedrawEl.points.map((p) => ({
-                      x: p.x + snapDx,
-                      y: p.y + snapDy,
-                    })),
-                  };
-                }
-                return { ...el, x: finalX, y: finalY };
+          // Update element position
+          let updatedElements = elements.map((el) => {
+            if (el.id === selectedElementId) {
+              if (el.type === "arrow" || el.type === "line") {
+                // Arrows and lines need endpoint updates when moved
+                const lineEl = el as ArrowElement | LineElement;
+                return {
+                  ...lineEl,
+                  x: finalX,
+                  y: finalY,
+                  startX: lineEl.startX + snapDx,
+                  startY: lineEl.startY + snapDy,
+                  endX: lineEl.endX + snapDx,
+                  endY: lineEl.endY + snapDy,
+                };
               }
-              return el;
-            }),
-          );
+              if (el.type === "freedraw") {
+                // Freedraw elements need all points updated when moved
+                const freedrawEl = el as FreedrawElement;
+                return {
+                  ...freedrawEl,
+                  x: finalX,
+                  y: finalY,
+                  points: freedrawEl.points.map((p) => ({
+                    x: p.x + snapDx,
+                    y: p.y + snapDy,
+                  })),
+                };
+              }
+              return { ...el, x: finalX, y: finalY };
+            }
+            return el;
+          });
+
+          // Sync bound text position if this is a container element
+          if (isContainerElement(element)) {
+            updatedElements = syncBoundTextPosition(selectedElementId, updatedElements);
+          }
+
+          setElements(updatedElements);
         }
       }
     } else if (
@@ -4094,7 +4318,40 @@ export function Canvas() {
         else {
           recordSnapshot(); // Record for undo
           const elementType = element.type;
-          setElements(elements.filter((el) => el.id !== selectedElementId));
+
+          // Collect IDs to delete (element + any bound text if container)
+          const idsToDelete = new Set<string>([selectedElementId]);
+
+          // If this is a container with bound text, also delete the bound text
+          if (isContainerElement(element) && element.boundElements) {
+            element.boundElements.forEach(be => {
+              idsToDelete.add(be.id);
+            });
+          }
+
+          // If this is a bound text element, remove reference from container
+          const textEl = element as TextElement;
+          if (textEl.containerId) {
+            // Update the container to remove the bound element reference
+            const container = elements.find(el => el.id === textEl.containerId);
+            if (container && container.boundElements) {
+              const updatedContainer = {
+                ...container,
+                boundElements: container.boundElements.filter(be => be.id !== selectedElementId)
+              };
+              setElements(
+                elements
+                  .filter((el) => !idsToDelete.has(el.id))
+                  .map(el => el.id === textEl.containerId ? updatedContainer : el)
+              );
+              setSelectedElementId(null);
+              setSelectedByClick(false);
+              announce(`Deleted ${elementType}`);
+              return;
+            }
+          }
+
+          setElements(elements.filter((el) => !idsToDelete.has(el.id)));
           setSelectedElementId(null);
           setSelectedByClick(false);
           announce(`Deleted ${elementType}`);
@@ -5475,6 +5732,8 @@ export function Canvas() {
                 return null;
 
               const textEl = editingElement as TextElement;
+              const isBoundText = !!textEl.containerId;
+
               // Get typography properties with defaults
               const fontSize = textEl.fontSize || 16;
               const fontWeight = textEl.fontWeight || "normal";
@@ -5500,10 +5759,29 @@ export function Canvas() {
                 lineCount * lineHeight + TEXT_PADDING,
               );
 
+              // For bound text, position within the container
+              let textareaX = editingElement.x;
+              let textareaY = editingElement.y + verticalOffset;
+              let textareaWidth = editingElement.width;
+
+              if (isBoundText && textEl.containerId) {
+                const container = elements.find(el => el.id === textEl.containerId);
+                if (container) {
+                  // Position textarea centered within container
+                  const containerPadding = 8;
+                  textareaWidth = container.width - containerPadding * 2;
+                  textareaX = container.x + containerPadding;
+
+                  // Calculate vertical centering for bound text
+                  const totalTextHeight = lineCount * lineHeight;
+                  textareaY = container.y + (container.height - totalTextHeight) / 2 + verticalOffset;
+                }
+              }
+
               // IMPORTANT: Use the stored element width to prevent position jump on edit entry
               // The onChange handler updates element.width during typing for auto-width behavior
               // This ensures the textarea matches the canvas-rendered position exactly
-              const currentWidth = editingElement.width;
+              const currentWidth = isBoundText ? textareaWidth : editingElement.width;
 
               return (
                 <textarea
@@ -5511,8 +5789,8 @@ export function Canvas() {
                   value={editingText}
                   onChange={(e) => {
                     setEditingText(e.target.value);
-                    // Update element width in real-time for auto-width
-                    if (textEl.autoWidth !== false) {
+                    // Update element width in real-time for auto-width (not for bound text)
+                    if (textEl.autoWidth !== false && !isBoundText) {
                       const newWidth = calculateAutoWidth(e.target.value || " ", {
                         fontSize,
                         fontWeight,
@@ -5552,9 +5830,9 @@ export function Canvas() {
                   data-gramm="false"
                   className="absolute resize-none overflow-hidden focus:outline-2 focus:outline-offset-1 focus:outline-blue-400/30"
                   style={{
-                    left: editingElement.x * zoom + pan.x,
+                    left: textareaX * zoom + pan.x,
                     // Offset top to match canvas baseline rendering
-                    top: (editingElement.y + verticalOffset) * zoom + pan.y,
+                    top: textareaY * zoom + pan.y,
                     width: currentWidth * zoom,
                     minWidth: MIN_TEXT_WIDTH * zoom,
                     height: (calculatedHeight - verticalOffset) * zoom,

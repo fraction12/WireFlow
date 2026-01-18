@@ -22,7 +22,9 @@
       "Bash(dir:*)",
       "Skill(ralph-loop:help)",
       "Skill(ralph-loop:help:*)",
-      "Bash(pnpm lint:*)"
+      "Bash(pnpm lint:*)",
+      "Bash(pnpm dev:*)",
+      "Bash(grep:*)"
     ]
   }
 }
