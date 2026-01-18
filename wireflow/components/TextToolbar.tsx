@@ -62,20 +62,22 @@ export function TextToolbar({ element, canvasRect, onUpdate }: TextToolbarProps)
     let calculatedPosition: ToolbarPosition = 'above';
     let pointerOffset = '50%'; // Centered by default
 
-    // Calculate horizontal position (centered on element)
-    const elementCenterX = element.x + element.width / 2;
-    left = elementCenterX - toolbarWidth / 2;
+    // Calculate horizontal position - center on the text cursor/click position
+    // For text elements, we center on element.x (where the user clicked to create text)
+    // This keeps the toolbar stable as the user types and the element width expands
+    const centerX = element.x;
+    left = centerX - toolbarWidth / 2;
 
     // Clamp to stay within canvas bounds
     if (left < padding) {
       left = padding;
       // Calculate pointer offset when toolbar is clamped to left
-      const offset = elementCenterX - left;
+      const offset = centerX - left;
       pointerOffset = `${Math.max(20, Math.min(offset, toolbarWidth - 20))}px`;
     } else if (left + toolbarWidth > canvasRect.width - padding) {
       left = canvasRect.width - toolbarWidth - padding;
       // Calculate pointer offset when toolbar is clamped to right
-      const offset = elementCenterX - left;
+      const offset = centerX - left;
       pointerOffset = `${Math.max(20, Math.min(offset, toolbarWidth - 20))}px`;
     }
 
@@ -103,7 +105,7 @@ export function TextToolbar({ element, canvasRect, onUpdate }: TextToolbarProps)
           if (left < padding) {
             // Last resort: position above or below, overlapping if necessary
             top = aboveY >= 0 ? aboveY : element.y + element.height + gap;
-            left = Math.max(padding, Math.min(elementCenterX - toolbarWidth / 2, canvasRect.width - toolbarWidth - padding));
+            left = Math.max(padding, Math.min(centerX - toolbarWidth / 2, canvasRect.width - toolbarWidth - padding));
             calculatedPosition = aboveY >= 0 ? 'above' : 'below';
           }
         }

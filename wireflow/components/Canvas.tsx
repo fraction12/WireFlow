@@ -1006,20 +1006,8 @@ export function Canvas() {
             element.height,
             seed,
           );
-        } else {
-          // Default: standard sketch-style border with lighter opacity for subtlety
-          ctx.save();
-          ctx.globalAlpha = 0.7; // Make not-selected text borders more subtle
-          drawSketchRect(
-            ctx,
-            element.x,
-            element.y,
-            element.width,
-            element.height,
-            seed,
-          );
-          ctx.restore();
         }
+        // No border for unselected/unhovered text elements
       } else if (element.type === "arrow") {
         const arrowEl = element as ArrowElement;
         // Draw sketch-style arrow line
