@@ -38,11 +38,10 @@ import { ComponentPanel } from "./ComponentPanel";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
 import { useToast } from "./ui/Toast";
 import { ThemeToggle } from "./ThemeToggle";
-import { TextToolbar } from "./TextToolbar";
 import { ImageExport } from "./ImageExport";
 import { DocumentationPanel } from "./DocumentationPanel";
 import { RightPanelStrip } from "./RightPanelStrip";
-import { StylingToolbar } from "./StylingToolbar";
+import { UnifiedStyleBar } from "./UnifiedStyleBar";
 import { DEFAULT_STROKE_COLOR, DEFAULT_FILL_COLOR } from "@/lib/colors";
 
 // Snapshot type for undo/redo history
@@ -387,6 +386,12 @@ export function Canvas() {
   const [currentFillColor, setCurrentFillColor] = useState(DEFAULT_FILL_COLOR);
   const [strokePickerOpen, setStrokePickerOpen] = useState(false);
   const [fillPickerOpen, setFillPickerOpen] = useState(false);
+
+  // Close color pickers when selection changes
+  useEffect(() => {
+    setStrokePickerOpen(false);
+    setFillPickerOpen(false);
+  }, [selectedElementId]);
 
   // Zoom constraints
   const MIN_ZOOM = 0.1;
@@ -4526,37 +4531,6 @@ export function Canvas() {
     );
   };
 
-  // Text toolbar update handler
-  const handleTextToolbarUpdate = (updates: Partial<TextElement>) => {
-    if (!selectedElementId) return;
-    setElements(
-      elements.map((el) =>
-        el.id === selectedElementId && el.type === "text"
-          ? { ...el, ...updates }
-          : el,
-      ),
-    );
-  };
-
-  // Get selected text element for toolbar (either selected or being edited)
-  const textElementForToolbar = (() => {
-    // First check if we're editing a text element
-    if (editingElementId) {
-      const editingElement = elements.find(
-        (el) => el.id === editingElementId && el.type === "text"
-      );
-      if (editingElement) return editingElement as TextElement;
-    }
-    // Otherwise check if a text element is selected
-    if (selectedElementId) {
-      const selectedElement = elements.find(
-        (el) => el.id === selectedElementId && el.type === "text"
-      );
-      if (selectedElement) return selectedElement as TextElement;
-    }
-    return undefined;
-  })();
-
   // ============================================================================
   // Documentation Panel Handlers (Phase 1)
   // ============================================================================
@@ -4604,14 +4578,10 @@ export function Canvas() {
     ? activeFrame?.documentation?.elementAnnotations?.[selectedElementId]
     : undefined;
 
-  // Check if styling toolbar should be visible
-  const shouldShowStylingToolbar =
-    currentTool === 'rectangle' ||
-    currentTool === 'ellipse' ||
-    currentTool === 'diamond' ||
-    currentTool === 'arrow' ||
-    currentTool === 'line' ||
-    (selectedElementId && elements.find(el => el.id === selectedElementId)?.type !== 'text');
+  // Get selected text element for unified style bar (null if non-text or nothing selected)
+  const selectedTextElement = selectedElementId
+    ? (elements.find(el => el.id === selectedElementId && el.type === 'text') as TextElement | undefined) || null
+    : null;
 
   // Handler for updating selected element's stroke color
   const handleStrokeColorChange = (color: string) => {
@@ -4646,6 +4616,7 @@ export function Canvas() {
           return {
             ...el,
             style: {
+              ...el.style,
               strokeColor: el.style?.strokeColor || DEFAULT_STROKE_COLOR,
               fillColor: color,
             },
@@ -4654,6 +4625,19 @@ export function Canvas() {
         return el;
       }));
     }
+  };
+
+  // Handler for updating selected text element from UnifiedStyleBar
+  const handleStyleBarTextUpdate = (updates: Partial<TextElement>) => {
+    if (!selectedElementId) return;
+    recordSnapshot();
+    setElements(
+      elements.map((el) =>
+        el.id === selectedElementId && el.type === "text"
+          ? { ...el, ...updates }
+          : el,
+      ),
+    );
   };
 
   // Component insertion handler
@@ -4755,24 +4739,27 @@ export function Canvas() {
           </div>
         </div>
 
-        {/* Styling Toolbar - shown when shape tool active or element selected */}
-        {shouldShowStylingToolbar && (
-          <div className="px-4 py-2 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50">
-            <StylingToolbar
-              strokeColor={selectedElementId
-                ? (elements.find(el => el.id === selectedElementId)?.style?.strokeColor || currentStrokeColor)
-                : currentStrokeColor
-              }
-              fillColor={selectedElementId
-                ? (elements.find(el => el.id === selectedElementId)?.style?.fillColor || currentFillColor)
-                : currentFillColor
-              }
-              onStrokeColorChange={handleStrokeColorChange}
-              onFillColorChange={handleFillColorChange}
-              isVisible={true}
-            />
-          </div>
-        )}
+        {/* Unified Style Bar - always visible, consolidates color and text formatting */}
+        <div className="px-4 py-2 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50">
+          <UnifiedStyleBar
+            strokeColor={selectedElementId
+              ? (elements.find(el => el.id === selectedElementId)?.style?.strokeColor || currentStrokeColor)
+              : currentStrokeColor
+            }
+            fillColor={selectedElementId
+              ? (elements.find(el => el.id === selectedElementId)?.style?.fillColor || currentFillColor)
+              : currentFillColor
+            }
+            onStrokeColorChange={handleStrokeColorChange}
+            onFillColorChange={handleFillColorChange}
+            selectedTextElement={selectedTextElement}
+            onTextUpdate={handleStyleBarTextUpdate}
+            strokePickerOpen={strokePickerOpen}
+            fillPickerOpen={fillPickerOpen}
+            onStrokePickerOpenChange={setStrokePickerOpen}
+            onFillPickerOpenChange={setFillPickerOpen}
+          />
+        </div>
 
         <div
           ref={canvasContainerRef}
@@ -4938,16 +4925,6 @@ export function Canvas() {
                 />
               );
             })()}
-          {/* Text formatting toolbar */}
-          {textElementForToolbar && (
-            <TextToolbar
-              element={textElementForToolbar}
-              canvasRect={canvasRect}
-              onUpdate={handleTextToolbarUpdate}
-              zoom={zoom}
-              pan={pan}
-            />
-          )}
         </div>
       </div>
 
