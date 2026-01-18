@@ -182,11 +182,75 @@ export interface ElementGroup {
   createdAt: string;
 }
 
+// User-defined component (promoted from element group)
+export interface UserComponent {
+  id: string;
+  name: string;
+  description?: string;
+  category?: string; // For organization in library
+  thumbnail?: string; // Base64 preview image
+  masterElements: ComponentElementDef[]; // Template definition
+  width: number;
+  height: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Element definition within a user component (relative positioning)
+export interface ComponentElementDef {
+  id: string; // Stable ID within component
+  type: ElementType;
+  offsetX: number; // Relative to component origin
+  offsetY: number;
+  width: number;
+  height: number;
+  rotation?: number;
+  // Type-specific properties
+  content?: string; // For text
+  fontSize?: number;
+  fontWeight?: FontWeight;
+  fontStyle?: FontStyle;
+  textAlign?: TextAlign;
+  lineHeight?: number;
+  preset?: TextPreset;
+  autoWidth?: boolean;
+  semanticTag?: SemanticTag;
+  description?: string;
+  // Arrow/line specific
+  startX?: number;
+  startY?: number;
+  endX?: number;
+  endY?: number;
+  // Freedraw specific
+  points?: { x: number; y: number }[];
+}
+
+// Instance of a user component placed on canvas
+export interface ComponentInstance {
+  id: string;
+  componentId: string; // Reference to UserComponent
+  frameId: string; // Which frame it's placed in
+  x: number;
+  y: number;
+  scale?: number; // Future: scale support
+  overrides?: ComponentOverride[]; // Instance-level customizations
+  createdAt: string;
+}
+
+// Override for a specific property on an element within an instance
+export interface ComponentOverride {
+  elementId: string; // Which element in the component
+  property: string; // Which property to override (e.g., 'content' for text)
+  value: string | number | boolean; // Override value
+}
+
 // Workspace state for persistence
 export interface WorkspaceState {
   version: number;
   frames: Frame[];
   componentGroups: ComponentGroup[];
   elementGroups: ElementGroup[];
+  userComponents: UserComponent[]; // User-created component library
+  componentInstances: ComponentInstance[]; // All placed instances
   activeFrameId: string;
 }

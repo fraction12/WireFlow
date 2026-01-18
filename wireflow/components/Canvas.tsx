@@ -16,6 +16,10 @@ import type {
   ComponentGroup,
   ComponentTemplate,
   ElementGroup,
+  UserComponent,
+  ComponentInstance,
+  ComponentElementDef,
+  ComponentOverride,
 } from "@/lib/types";
 import { saveWorkspace, loadWorkspace } from "@/lib/persistence";
 import {
@@ -39,6 +43,8 @@ interface HistorySnapshot {
   frames: Frame[];
   componentGroups: ComponentGroup[];
   elementGroups: ElementGroup[];
+  userComponents: UserComponent[];
+  componentInstances: ComponentInstance[];
 }
 
 // Canvas color theme interface
@@ -226,6 +232,15 @@ export function Canvas() {
   // User-created element groups state
   const [elementGroups, setElementGroups] = useState<ElementGroup[]>([]);
 
+  // User-defined components state (component library)
+  const [userComponents, setUserComponents] = useState<UserComponent[]>([]);
+
+  // Component instances state (placed instances across all frames)
+  const [componentInstances, setComponentInstances] = useState<ComponentInstance[]>([]);
+
+  // Selected instance state
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
+
   // Undo/Redo history manager
   const historyManager = useHistoryManager<HistorySnapshot>(100);
 
@@ -235,8 +250,10 @@ export function Canvas() {
       frames: JSON.parse(JSON.stringify(frames)),
       componentGroups: JSON.parse(JSON.stringify(componentGroups)),
       elementGroups: JSON.parse(JSON.stringify(elementGroups)),
+      userComponents: JSON.parse(JSON.stringify(userComponents)),
+      componentInstances: JSON.parse(JSON.stringify(componentInstances)),
     });
-  }, [frames, componentGroups, elementGroups, historyManager]);
+  }, [frames, componentGroups, elementGroups, userComponents, componentInstances, historyManager]);
 
   // Perform undo
   const performUndo = useCallback(() => {
@@ -244,18 +261,23 @@ export function Canvas() {
       frames: JSON.parse(JSON.stringify(frames)),
       componentGroups: JSON.parse(JSON.stringify(componentGroups)),
       elementGroups: JSON.parse(JSON.stringify(elementGroups)),
+      userComponents: JSON.parse(JSON.stringify(userComponents)),
+      componentInstances: JSON.parse(JSON.stringify(componentInstances)),
     };
     const previousState = historyManager.undo(currentState);
     if (previousState) {
       setFrames(previousState.frames);
       setComponentGroups(previousState.componentGroups);
       setElementGroups(previousState.elementGroups);
+      setUserComponents(previousState.userComponents || []);
+      setComponentInstances(previousState.componentInstances || []);
       // Clear selections after undo for safety
       setSelectedElementId(null);
       setSelectedElementIds(new Set());
       setSelectedGroupId(null);
+      setSelectedInstanceId(null);
     }
-  }, [frames, componentGroups, elementGroups, historyManager]);
+  }, [frames, componentGroups, elementGroups, userComponents, componentInstances, historyManager]);
 
   // Perform redo
   const performRedo = useCallback(() => {
@@ -263,18 +285,23 @@ export function Canvas() {
       frames: JSON.parse(JSON.stringify(frames)),
       componentGroups: JSON.parse(JSON.stringify(componentGroups)),
       elementGroups: JSON.parse(JSON.stringify(elementGroups)),
+      userComponents: JSON.parse(JSON.stringify(userComponents)),
+      componentInstances: JSON.parse(JSON.stringify(componentInstances)),
     };
     const nextState = historyManager.redo(currentState);
     if (nextState) {
       setFrames(nextState.frames);
       setComponentGroups(nextState.componentGroups);
       setElementGroups(nextState.elementGroups);
+      setUserComponents(nextState.userComponents || []);
+      setComponentInstances(nextState.componentInstances || []);
       // Clear selections after redo for safety
       setSelectedElementId(null);
       setSelectedElementIds(new Set());
       setSelectedGroupId(null);
+      setSelectedInstanceId(null);
     }
-  }, [frames, componentGroups, elementGroups, historyManager]);
+  }, [frames, componentGroups, elementGroups, userComponents, componentInstances, historyManager]);
 
   // Multi-selection state: holds IDs of all currently selected elements
   const [selectedElementIds, setSelectedElementIds] = useState<Set<string>>(
@@ -450,6 +477,8 @@ export function Canvas() {
       setFrames(savedState.frames);
       setComponentGroups(savedState.componentGroups);
       setElementGroups(savedState.elementGroups || []);
+      setUserComponents(savedState.userComponents || []);
+      setComponentInstances(savedState.componentInstances || []);
       // Restore active frame, or fall back to first frame if saved frame no longer exists
       const frameExists = savedState.frames.some(
         (f) => f.id === savedState.activeFrameId,
@@ -471,12 +500,14 @@ export function Canvas() {
         frames,
         componentGroups,
         elementGroups,
+        userComponents,
+        componentInstances,
         activeFrameId,
       });
     }, 500); // 500ms debounce
 
     return () => clearTimeout(timeoutId);
-  }, [frames, componentGroups, elementGroups, activeFrameId]);
+  }, [frames, componentGroups, elementGroups, userComponents, componentInstances, activeFrameId]);
 
   // Helper function to get component group elements (defined before redraw)
   const getGroupElements = useCallback(
@@ -1237,6 +1268,161 @@ export function Canvas() {
       }
     });
 
+    // Draw component instances for the current frame
+    const frameInstances = componentInstances.filter(i => i.frameId === activeFrameId);
+    frameInstances.forEach((instance) => {
+      const component = userComponents.find(c => c.id === instance.componentId);
+      if (!component) return;
+
+      const isSelected = instance.id === selectedInstanceId;
+
+      // Draw each element from the master definition
+      component.masterElements.forEach((def) => {
+        const x = instance.x + def.offsetX;
+        const y = instance.y + def.offsetY;
+        const seed = parseInt(def.id.split("_")[1]) || 0;
+
+        // Set colors
+        ctx.strokeStyle = isSelected ? canvasTheme.selected : canvasTheme.sketch;
+        ctx.fillStyle = isSelected ? canvasTheme.selected : canvasTheme.sketch;
+        ctx.lineWidth = 1.5;
+
+        // Apply rotation if present
+        const rotation = def.rotation || 0;
+        const hasRotation = rotation !== 0 && def.type !== "arrow" && def.type !== "line" && def.type !== "freedraw" && def.type !== "text";
+
+        if (hasRotation) {
+          const centerX = x + def.width / 2;
+          const centerY = y + def.height / 2;
+          ctx.save();
+          ctx.translate(centerX, centerY);
+          ctx.rotate(rotation);
+          ctx.translate(-centerX, -centerY);
+        }
+
+        // Draw based on element type
+        if (def.type === "rectangle") {
+          drawSketchRect(ctx, x, y, def.width, def.height, seed);
+        } else if (def.type === "ellipse") {
+          drawSketchEllipse(ctx, x, y, def.width, def.height, seed);
+        } else if (def.type === "diamond") {
+          drawSketchDiamond(ctx, x, y, def.width, def.height, seed);
+        } else if (def.type === "text") {
+          // Get override for text content if any
+          const override = instance.overrides?.find(o => o.elementId === def.id && o.property === 'content');
+          const content = override ? String(override.value) : (def.content || '');
+
+          const fontSize = def.fontSize || 16;
+          const fontWeight = def.fontWeight || "normal";
+          const fontStyle = def.fontStyle || "normal";
+          const textAlign = def.textAlign || "left";
+          const lineHeight = def.lineHeight || Math.round(fontSize * 1.5);
+
+          const fontString = `${fontStyle === "italic" ? "italic " : ""}${fontWeight === "bold" ? "bold " : ""}${fontSize}px sans-serif`;
+          ctx.font = fontString;
+          ctx.textAlign = textAlign;
+
+          const padding = TEXT_PADDING;
+          const maxWidth = def.width - padding * 2;
+          const lines = wrapText(ctx, content, maxWidth);
+
+          // Calculate x position based on alignment
+          let textX: number;
+          switch (textAlign) {
+            case "center":
+              textX = x + def.width / 2;
+              break;
+            case "right":
+              textX = x + def.width - padding;
+              break;
+            default: // 'left'
+              textX = x + padding;
+          }
+
+          lines.forEach((line, index) => {
+            ctx.fillText(line, textX, y + fontSize + index * lineHeight);
+          });
+
+          ctx.textAlign = "left";
+        } else if (def.type === "arrow") {
+          const startX = instance.x + (def.startX || 0);
+          const startY = instance.y + (def.startY || 0);
+          const endX = instance.x + (def.endX || 0);
+          const endY = instance.y + (def.endY || 0);
+          // Draw sketch-style arrow line
+          drawSketchLine(ctx, startX, startY, endX, endY, seed);
+          // Draw sketch-style arrowhead
+          const angle = Math.atan2(endY - startY, endX - startX);
+          const head1X = endX - ARROW_HEAD_LENGTH * Math.cos(angle - Math.PI / 6);
+          const head1Y = endY - ARROW_HEAD_LENGTH * Math.sin(angle - Math.PI / 6);
+          const head2X = endX - ARROW_HEAD_LENGTH * Math.cos(angle + Math.PI / 6);
+          const head2Y = endY - ARROW_HEAD_LENGTH * Math.sin(angle + Math.PI / 6);
+          drawSketchLine(ctx, endX, endY, head1X, head1Y, seed + 10);
+          drawSketchLine(ctx, endX, endY, head2X, head2Y, seed + 11);
+        } else if (def.type === "line") {
+          const startX = instance.x + (def.startX || 0);
+          const startY = instance.y + (def.startY || 0);
+          const endX = instance.x + (def.endX || 0);
+          const endY = instance.y + (def.endY || 0);
+          drawSketchLine(ctx, startX, startY, endX, endY, seed);
+        } else if (def.type === "freedraw" && def.points) {
+          const translatedPoints = def.points.map(p => ({
+            x: instance.x + p.x,
+            y: instance.y + p.y,
+          }));
+          if (translatedPoints.length > 0) {
+            ctx.beginPath();
+            ctx.moveTo(translatedPoints[0].x, translatedPoints[0].y);
+            for (let i = 1; i < translatedPoints.length; i++) {
+              ctx.lineTo(translatedPoints[i].x, translatedPoints[i].y);
+            }
+            ctx.stroke();
+          }
+        }
+
+        if (hasRotation) {
+          ctx.restore();
+        }
+      });
+
+      // Draw instance bounding box
+      ctx.strokeStyle = isSelected ? canvasTheme.selected : canvasTheme.group;
+      ctx.lineWidth = isSelected ? 2 : 1;
+      ctx.setLineDash([6, 3]);
+      const instanceSeed = parseInt(instance.id.split("_")[1]) || 0;
+      drawSketchRect(
+        ctx,
+        instance.x - 3,
+        instance.y - 3,
+        component.width + 6,
+        component.height + 6,
+        instanceSeed
+      );
+      ctx.setLineDash([]);
+
+      // Draw component name label
+      ctx.fillStyle = isSelected ? canvasTheme.selected : canvasTheme.group;
+      ctx.font = "11px sans-serif";
+      ctx.fillText(component.name, instance.x, instance.y - 8);
+
+      // Draw resize handles for selected instance
+      if (isSelected) {
+        ctx.fillStyle = canvasTheme.handle;
+        const corners = [
+          { x: instance.x - 3, y: instance.y - 3 },
+          { x: instance.x + component.width + 3, y: instance.y - 3 },
+          { x: instance.x - 3, y: instance.y + component.height + 3 },
+          { x: instance.x + component.width + 3, y: instance.y + component.height + 3 },
+        ];
+
+        corners.forEach((corner) => {
+          ctx.beginPath();
+          ctx.arc(corner.x, corner.y, HANDLE_SIZE / 2, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      }
+    });
+
     // Draw multi-selection bounding box (when multiple ungrouped elements are selected)
     if (selectedElementIds.size > 1) {
       const selectedElements = elements.filter((el) =>
@@ -1331,6 +1517,10 @@ export function Canvas() {
     elementGroups,
     getGroupElements,
     getElementGroupElements,
+    userComponents,
+    componentInstances,
+    selectedInstanceId,
+    activeFrameId,
     isMarqueeSelecting,
     marqueeStart,
     marqueeEnd,
@@ -1384,6 +1574,33 @@ export function Canvas() {
       }
     }
     return { element: null };
+  };
+
+  // Find component instance at point
+  const findInstanceAtPoint = (
+    x: number,
+    y: number,
+  ): ComponentInstance | null => {
+    // Get instances for the current frame
+    const frameInstances = componentInstances.filter(i => i.frameId === activeFrameId);
+
+    // Search in reverse order (most recently placed first, which appears on top)
+    for (let i = frameInstances.length - 1; i >= 0; i--) {
+      const instance = frameInstances[i];
+      const component = userComponents.find(c => c.id === instance.componentId);
+      if (!component) continue;
+
+      // Check if point is within instance bounding box
+      if (
+        x >= instance.x &&
+        x <= instance.x + component.width &&
+        y >= instance.y &&
+        y <= instance.y + component.height
+      ) {
+        return instance;
+      }
+    }
+    return null;
   };
 
   // Helper function for arrow hit detection
@@ -1797,10 +2014,31 @@ export function Canvas() {
     const y = canvasCoords.y;
 
     if (currentTool === "select") {
+      // First, check if clicking on a component instance (they render on top)
+      const clickedInstance = findInstanceAtPoint(x, y);
+
+      if (clickedInstance) {
+        setSelectedByClick(true);
+        // Clear element selections when selecting an instance
+        setSelectedElementId(null);
+        setSelectedElementIds(new Set());
+        setSelectedGroupId(null);
+        setSelectedInstanceId(clickedInstance.id);
+
+        // Start dragging the instance
+        recordSnapshot();
+        setDragOffset({ x: x - clickedInstance.x, y: y - clickedInstance.y });
+        setIsDrawing(true);
+        return;
+      }
+
+      // Then check for elements
       const { element: clickedElement, groupId } = findElementAtPoint(x, y);
 
       if (clickedElement) {
         setSelectedByClick(true); // Mark as selected by click (enables Backspace delete)
+        // Clear instance selection when selecting an element
+        setSelectedInstanceId(null);
 
         // Check if element is part of a user-created element group
         const elementGroup = clickedElement.elementGroupId
@@ -1925,6 +2163,7 @@ export function Canvas() {
           setSelectedElementId(null);
           setSelectedElementIds(new Set());
           setSelectedGroupId(null);
+          setSelectedInstanceId(null);
         }
 
         // Start marquee selection
@@ -2017,6 +2256,28 @@ export function Canvas() {
 
     // Return early if not in an active interaction
     if (!isDrawing) return;
+
+    // Handle instance dragging
+    if (currentTool === "select" && selectedInstanceId && dragOffset && isDrawing) {
+      const instance = componentInstances.find(i => i.id === selectedInstanceId);
+      if (instance) {
+        const rawX = x - dragOffset.x;
+        const rawY = y - dragOffset.y;
+
+        // Apply grid snap if enabled
+        const finalX = snapToGrid ? snapToGridCoord(rawX) : rawX;
+        const finalY = snapToGrid ? snapToGridCoord(rawY) : rawY;
+
+        setComponentInstances(
+          componentInstances.map(i =>
+            i.id === selectedInstanceId
+              ? { ...i, x: finalX, y: finalY }
+              : i
+          )
+        );
+        return;
+      }
+    }
 
     if (currentTool === "select" && selectedElementId) {
       const element = elements.find((el) => el.id === selectedElementId);
@@ -2285,11 +2546,16 @@ export function Canvas() {
       const ctx = canvas?.getContext("2d");
       if (!ctx) return;
 
+      // Apply zoom/pan transform for preview (redraw() restores context after drawing)
+      ctx.save();
+      ctx.translate(pan.x, pan.y);
+      ctx.scale(zoom, zoom);
+
       ctx.strokeStyle = canvasTheme.sketch;
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1.5 / zoom; // Adjust line width for zoom
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
-      ctx.setLineDash([8, 4]);
+      ctx.setLineDash([8 / zoom, 4 / zoom]); // Adjust dash pattern for zoom
 
       const previewSeed = Date.now() % 1000;
 
@@ -2384,6 +2650,7 @@ export function Canvas() {
       }
 
       ctx.setLineDash([]);
+      ctx.restore();
     } else if (currentTool === "freedraw" && isDrawing && freedrawPoints.length > 0) {
       // Freedraw: add point and preview
       setFreedrawPoints((prev) => [...prev, { x, y }]);
@@ -3084,6 +3351,20 @@ export function Canvas() {
         return;
       }
 
+      // Check for Ctrl/Cmd+Shift+C to promote group to component
+      if ((e.ctrlKey || e.metaKey) && e.key === "C" && e.shiftKey) {
+        // Find if any selected element is in a user group
+        const selectedElement = selectedElementId
+          ? elements.find((el) => el.id === selectedElementId)
+          : null;
+
+        if (selectedElement?.elementGroupId) {
+          e.preventDefault();
+          startPromoteGroupToComponent(selectedElement.elementGroupId);
+        }
+        return;
+      }
+
       // Text formatting shortcuts (when text element is selected)
       if (selectedElementId) {
         const selectedElement = elements.find(
@@ -3236,6 +3517,16 @@ export function Canvas() {
             return;
           }
         }
+      }
+
+      // Handle instance deletion
+      if (selectedInstanceId) {
+        if (e.key === "Delete" || (e.key === "Backspace" && selectedByClick)) {
+          e.preventDefault();
+          deleteComponentInstance(selectedInstanceId);
+          setSelectedByClick(false);
+        }
+        return;
       }
 
       // Only handle deletion if an element is selected
@@ -3724,6 +4015,413 @@ export function Canvas() {
     setSelectedElementId(null);
   };
 
+  // Generate unique user component ID
+  const generateUserComponentId = () =>
+    `ucomp_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+
+  // Generate unique component instance ID
+  const generateComponentInstanceId = () =>
+    `cinst_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+
+  // Generate unique element ID within a component
+  const generateComponentElementId = () =>
+    `cel_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+
+  // Convert a canvas element to a component element definition (relative positioning)
+  const elementToComponentDef = (
+    element: CanvasElement,
+    originX: number,
+    originY: number
+  ): ComponentElementDef => {
+    const baseDef: ComponentElementDef = {
+      id: generateComponentElementId(),
+      type: element.type,
+      offsetX: element.x - originX,
+      offsetY: element.y - originY,
+      width: element.width,
+      height: element.height,
+      rotation: element.rotation,
+      semanticTag: element.semanticTag,
+      description: element.description,
+    };
+
+    // Add type-specific properties
+    if (element.type === 'text') {
+      const textEl = element as TextElement;
+      baseDef.content = textEl.content;
+      baseDef.fontSize = textEl.fontSize;
+      baseDef.fontWeight = textEl.fontWeight;
+      baseDef.fontStyle = textEl.fontStyle;
+      baseDef.textAlign = textEl.textAlign;
+      baseDef.lineHeight = textEl.lineHeight;
+      baseDef.preset = textEl.preset;
+      baseDef.autoWidth = textEl.autoWidth;
+    } else if (element.type === 'arrow' || element.type === 'line') {
+      const lineEl = element as ArrowElement | LineElement;
+      baseDef.startX = lineEl.startX - originX;
+      baseDef.startY = lineEl.startY - originY;
+      baseDef.endX = lineEl.endX - originX;
+      baseDef.endY = lineEl.endY - originY;
+    } else if (element.type === 'freedraw') {
+      const freedrawEl = element as FreedrawElement;
+      // Translate points relative to origin
+      baseDef.points = freedrawEl.points.map(p => ({
+        x: p.x - originX,
+        y: p.y - originY,
+      }));
+    }
+
+    return baseDef;
+  };
+
+  // State for component name dialog
+  const [isPromoteDialogOpen, setIsPromoteDialogOpen] = useState(false);
+  const [pendingPromoteGroupId, setPendingPromoteGroupId] = useState<string | null>(null);
+  const [newComponentName, setNewComponentName] = useState('');
+
+  // Promote an element group to a user component
+  const promoteGroupToComponent = (elementGroupId: string, componentName: string) => {
+    const group = elementGroups.find(g => g.id === elementGroupId);
+    if (!group) return;
+
+    const groupElements = elements.filter(el => el.elementGroupId === elementGroupId);
+    if (groupElements.length === 0) return;
+
+    // Prevent promoting if any element is already a component instance
+    // (no nested components in v1)
+    // Note: We check for component groups too
+    const hasComponentGroupElements = groupElements.some(el => el.groupId);
+    if (hasComponentGroupElements) {
+      addToast({
+        type: 'error',
+        title: 'Cannot create component',
+        message: 'Groups containing component elements cannot be promoted.',
+      });
+      return;
+    }
+
+    recordSnapshot(); // Record for undo
+
+    // Calculate bounding box
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const el of groupElements) {
+      minX = Math.min(minX, el.x);
+      minY = Math.min(minY, el.y);
+      maxX = Math.max(maxX, el.x + el.width);
+      maxY = Math.max(maxY, el.y + el.height);
+    }
+
+    const width = maxX - minX;
+    const height = maxY - minY;
+
+    // Convert elements to component definitions (relative to top-left)
+    const masterElements: ComponentElementDef[] = groupElements.map(el =>
+      elementToComponentDef(el, minX, minY)
+    );
+
+    // Create the user component
+    const now = new Date().toISOString();
+    const newComponent: UserComponent = {
+      id: generateUserComponentId(),
+      name: componentName || 'Untitled Component',
+      masterElements,
+      width,
+      height,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    // Create an instance to replace the original group
+    const newInstance: ComponentInstance = {
+      id: generateComponentInstanceId(),
+      componentId: newComponent.id,
+      frameId: activeFrameId,
+      x: minX,
+      y: minY,
+      createdAt: now,
+    };
+
+    // Remove the original elements from the canvas
+    setElements(elements.filter(el => el.elementGroupId !== elementGroupId));
+
+    // Remove the element group record
+    setElementGroups(elementGroups.filter(g => g.id !== elementGroupId));
+
+    // Add the new component to the library
+    setUserComponents([...userComponents, newComponent]);
+
+    // Add the instance
+    setComponentInstances([...componentInstances, newInstance]);
+
+    // Select the new instance
+    setSelectedElementId(null);
+    setSelectedElementIds(new Set());
+    setSelectedInstanceId(newInstance.id);
+
+    addToast({
+      type: 'success',
+      title: 'Component created',
+      message: `"${componentName}" is now available in your component library.`,
+    });
+  };
+
+  // Start the promote flow by opening the name dialog
+  const startPromoteGroupToComponent = (elementGroupId: string) => {
+    setPendingPromoteGroupId(elementGroupId);
+    setNewComponentName('');
+    setIsPromoteDialogOpen(true);
+  };
+
+  // Handle the promote dialog confirmation
+  const handlePromoteDialogConfirm = () => {
+    if (pendingPromoteGroupId && newComponentName.trim()) {
+      promoteGroupToComponent(pendingPromoteGroupId, newComponentName.trim());
+    }
+    setIsPromoteDialogOpen(false);
+    setPendingPromoteGroupId(null);
+    setNewComponentName('');
+  };
+
+  // Cancel the promote dialog
+  const handlePromoteDialogCancel = () => {
+    setIsPromoteDialogOpen(false);
+    setPendingPromoteGroupId(null);
+    setNewComponentName('');
+  };
+
+  // Instantiate a user component at a position
+  const instantiateComponent = (componentId: string, x: number, y: number, frameId: string) => {
+    const component = userComponents.find(c => c.id === componentId);
+    if (!component) return null;
+
+    recordSnapshot(); // Record for undo
+
+    const newInstance: ComponentInstance = {
+      id: generateComponentInstanceId(),
+      componentId,
+      frameId,
+      x,
+      y,
+      createdAt: new Date().toISOString(),
+    };
+
+    setComponentInstances([...componentInstances, newInstance]);
+    return newInstance;
+  };
+
+  // Delete a component instance
+  const deleteComponentInstance = (instanceId: string) => {
+    recordSnapshot(); // Record for undo
+    setComponentInstances(componentInstances.filter(i => i.id !== instanceId));
+    if (selectedInstanceId === instanceId) {
+      setSelectedInstanceId(null);
+    }
+  };
+
+  // Get instances for the current frame
+  const getFrameInstances = useCallback(
+    (frameId: string): ComponentInstance[] => {
+      return componentInstances.filter(i => i.frameId === frameId);
+    },
+    [componentInstances]
+  );
+
+  // Get instances of a specific component
+  const getComponentInstances = useCallback(
+    (componentId: string): ComponentInstance[] => {
+      return componentInstances.filter(i => i.componentId === componentId);
+    },
+    [componentInstances]
+  );
+
+  // Count instances of a component across all frames
+  const countComponentInstances = useCallback(
+    (componentId: string): number => {
+      return componentInstances.filter(i => i.componentId === componentId).length;
+    },
+    [componentInstances]
+  );
+
+  // Delete a user component (with warning if instances exist)
+  const deleteUserComponent = (componentId: string, flattenInstances: boolean = false) => {
+    const instanceCount = countComponentInstances(componentId);
+    const component = userComponents.find(c => c.id === componentId);
+    if (!component) return;
+
+    recordSnapshot(); // Record for undo
+
+    if (flattenInstances && instanceCount > 0) {
+      // Flatten instances to regular element groups
+      const instancesToFlatten = componentInstances.filter(i => i.componentId === componentId);
+
+      for (const instance of instancesToFlatten) {
+        // Create new elements from master definition
+        const newGroupId = generateElementGroupId();
+        const newElements: CanvasElement[] = component.masterElements.map(def => {
+          const baseElement = {
+            id: generateId(),
+            x: instance.x + def.offsetX,
+            y: instance.y + def.offsetY,
+            width: def.width,
+            height: def.height,
+            rotation: def.rotation,
+            semanticTag: def.semanticTag,
+            description: def.description,
+            elementGroupId: newGroupId,
+          };
+
+          // Apply overrides if any
+          const override = instance.overrides?.find(o => o.elementId === def.id);
+
+          if (def.type === 'text') {
+            return {
+              ...baseElement,
+              type: 'text' as const,
+              content: override?.property === 'content' ? String(override.value) : (def.content || ''),
+              fontSize: def.fontSize,
+              fontWeight: def.fontWeight,
+              fontStyle: def.fontStyle,
+              textAlign: def.textAlign,
+              lineHeight: def.lineHeight,
+              preset: def.preset,
+              autoWidth: def.autoWidth,
+            };
+          } else if (def.type === 'arrow') {
+            return {
+              ...baseElement,
+              type: 'arrow' as const,
+              startX: instance.x + (def.startX || 0),
+              startY: instance.y + (def.startY || 0),
+              endX: instance.x + (def.endX || 0),
+              endY: instance.y + (def.endY || 0),
+            };
+          } else if (def.type === 'line') {
+            return {
+              ...baseElement,
+              type: 'line' as const,
+              startX: instance.x + (def.startX || 0),
+              startY: instance.y + (def.startY || 0),
+              endX: instance.x + (def.endX || 0),
+              endY: instance.y + (def.endY || 0),
+            };
+          } else if (def.type === 'freedraw') {
+            return {
+              ...baseElement,
+              type: 'freedraw' as const,
+              points: (def.points || []).map(p => ({
+                x: instance.x + p.x,
+                y: instance.y + p.y,
+              })),
+            };
+          } else {
+            return {
+              ...baseElement,
+              type: def.type,
+            } as CanvasElement;
+          }
+        });
+
+        // Add elements to the frame
+        setFrames(prevFrames =>
+          prevFrames.map(frame =>
+            frame.id === instance.frameId
+              ? { ...frame, elements: [...frame.elements, ...newElements] }
+              : frame
+          )
+        );
+
+        // Create element group for the flattened elements
+        const newElementGroup: ElementGroup = {
+          id: newGroupId,
+          elementIds: newElements.map(el => el.id),
+          frameId: instance.frameId,
+          createdAt: new Date().toISOString(),
+        };
+        setElementGroups(prev => [...prev, newElementGroup]);
+      }
+    }
+
+    // Remove all instances of this component
+    setComponentInstances(componentInstances.filter(i => i.componentId !== componentId));
+
+    // Remove the component
+    setUserComponents(userComponents.filter(c => c.id !== componentId));
+
+    // Clear selection if the deleted component's instance was selected
+    if (selectedInstanceId) {
+      const selectedInstance = componentInstances.find(i => i.id === selectedInstanceId);
+      if (selectedInstance?.componentId === componentId) {
+        setSelectedInstanceId(null);
+      }
+    }
+  };
+
+  // Update a user component's master definition
+  const updateUserComponent = (componentId: string, updates: Partial<UserComponent>) => {
+    recordSnapshot(); // Record for undo
+    setUserComponents(
+      userComponents.map(c =>
+        c.id === componentId
+          ? { ...c, ...updates, updatedAt: new Date().toISOString() }
+          : c
+      )
+    );
+  };
+
+  // Rename a user component
+  const renameUserComponent = (componentId: string, newName: string) => {
+    updateUserComponent(componentId, { name: newName });
+  };
+
+  // Apply an override to an instance
+  const applyInstanceOverride = (
+    instanceId: string,
+    elementId: string,
+    property: string,
+    value: string | number | boolean
+  ) => {
+    recordSnapshot(); // Record for undo
+    setComponentInstances(
+      componentInstances.map(instance => {
+        if (instance.id !== instanceId) return instance;
+
+        const existingOverrides = instance.overrides || [];
+        const existingIndex = existingOverrides.findIndex(
+          o => o.elementId === elementId && o.property === property
+        );
+
+        let newOverrides: ComponentOverride[];
+        if (existingIndex >= 0) {
+          // Update existing override
+          newOverrides = existingOverrides.map((o, i) =>
+            i === existingIndex ? { ...o, value } : o
+          );
+        } else {
+          // Add new override
+          newOverrides = [...existingOverrides, { elementId, property, value }];
+        }
+
+        return { ...instance, overrides: newOverrides };
+      })
+    );
+  };
+
+  // Reset an override on an instance
+  const resetInstanceOverride = (instanceId: string, elementId: string, property: string) => {
+    recordSnapshot(); // Record for undo
+    setComponentInstances(
+      componentInstances.map(instance => {
+        if (instance.id !== instanceId) return instance;
+
+        const newOverrides = (instance.overrides || []).filter(
+          o => !(o.elementId === elementId && o.property === property)
+        );
+
+        return { ...instance, overrides: newOverrides.length > 0 ? newOverrides : undefined };
+      })
+    );
+  };
+
   // Text toolbar update handler
   const handleTextToolbarUpdate = (updates: Partial<TextElement>) => {
     if (!selectedElementId) return;
@@ -3857,6 +4555,32 @@ export function Canvas() {
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
+            onDragOver={(e) => {
+              // Allow drop for user components
+              if (e.dataTransfer.types.includes('application/x-user-component')) {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'copy';
+              }
+            }}
+            onDrop={(e) => {
+              const componentId = e.dataTransfer.getData('application/x-user-component');
+              if (componentId) {
+                e.preventDefault();
+                const rect = canvasRef.current?.getBoundingClientRect();
+                if (rect) {
+                  const screenX = e.clientX - rect.left;
+                  const screenY = e.clientY - rect.top;
+                  const canvasCoords = screenToCanvas(screenX, screenY);
+                  const instance = instantiateComponent(componentId, canvasCoords.x, canvasCoords.y, activeFrameId);
+                  if (instance) {
+                    setSelectedInstanceId(instance.id);
+                    setSelectedElementId(null);
+                    setSelectedElementIds(new Set());
+                    setCurrentTool('select');
+                  }
+                }
+              }
+            }}
             onMouseLeave={() => {
               setHoveredElementId(null);
               if (isPanning) {
@@ -3982,7 +4706,34 @@ export function Canvas() {
         </div>
       </div>
 
-      <ComponentPanel onInsertComponent={handleInsertComponent} />
+      <ComponentPanel
+        onInsertComponent={handleInsertComponent}
+        userComponents={userComponents}
+        onInsertUserComponent={(componentId, x, y) => {
+          const instance = instantiateComponent(componentId, x, y, activeFrameId);
+          if (instance) {
+            setSelectedInstanceId(instance.id);
+            setSelectedElementId(null);
+            setSelectedElementIds(new Set());
+            setCurrentTool('select');
+          }
+        }}
+        onDeleteUserComponent={(componentId) => {
+          const instanceCount = countComponentInstances(componentId);
+          if (instanceCount > 0) {
+            showConfirmDialog(
+              'Delete component?',
+              `This component is used in ${instanceCount} place${instanceCount > 1 ? 's' : ''}. Do you want to flatten instances to groups before deleting?`,
+              () => deleteUserComponent(componentId, true),
+              'warning'
+            );
+          } else {
+            deleteUserComponent(componentId, false);
+          }
+        }}
+        onRenameUserComponent={renameUserComponent}
+        getInstanceCount={countComponentInstances}
+      />
 
       {/* Confirm Dialog */}
       <ConfirmDialog
@@ -3997,6 +4748,50 @@ export function Canvas() {
         }}
         onCancel={closeConfirmDialog}
       />
+
+      {/* Promote to Component Dialog */}
+      {isPromoteDialogOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-xl p-6 w-96 max-w-[90vw]">
+            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
+              Create Component
+            </h2>
+            <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-4">
+              Enter a name for your new component. It will be added to your component library.
+            </p>
+            <input
+              type="text"
+              value={newComponentName}
+              onChange={(e) => setNewComponentName(e.target.value)}
+              placeholder="Component name"
+              className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newComponentName.trim()) {
+                  handlePromoteDialogConfirm();
+                } else if (e.key === 'Escape') {
+                  handlePromoteDialogCancel();
+                }
+              }}
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={handlePromoteDialogCancel}
+                className="px-4 py-2 text-sm text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePromoteDialogConfirm}
+                disabled={!newComponentName.trim()}
+                className="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Create Component
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

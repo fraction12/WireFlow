@@ -1,4 +1,4 @@
-import type { WorkspaceState, Frame, ComponentGroup, ElementGroup } from './types';
+import type { WorkspaceState, Frame, ComponentGroup, ElementGroup, UserComponent, ComponentInstance } from './types';
 
 const STORAGE_KEY = 'wireflow-workspace';
 const CURRENT_VERSION = 1;
@@ -14,6 +14,8 @@ export function saveWorkspace(state: WorkspaceState): boolean {
       frames: state.frames,
       componentGroups: state.componentGroups,
       elementGroups: state.elementGroups || [],
+      userComponents: state.userComponents || [],
+      componentInstances: state.componentInstances || [],
       activeFrameId: state.activeFrameId,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -45,10 +47,12 @@ export function loadWorkspace(): WorkspaceState | null {
       return null;
     }
 
-    // Ensure elementGroups exists (backward compatibility)
+    // Ensure all arrays exist (backward compatibility)
     return {
       ...data,
       elementGroups: data.elementGroups || [],
+      userComponents: data.userComponents || [],
+      componentInstances: data.componentInstances || [],
     };
   } catch (error) {
     // JSON parse error or other issues
@@ -97,6 +101,16 @@ function isValidWorkspaceState(data: unknown): data is WorkspaceState {
     return false;
   }
 
+  // userComponents is optional for backward compatibility (defaults to [])
+  if (obj.userComponents !== undefined && !Array.isArray(obj.userComponents)) {
+    return false;
+  }
+
+  // componentInstances is optional for backward compatibility (defaults to [])
+  if (obj.componentInstances !== undefined && !Array.isArray(obj.componentInstances)) {
+    return false;
+  }
+
   if (typeof obj.activeFrameId !== 'string') {
     return false;
   }
@@ -119,6 +133,24 @@ function isValidWorkspaceState(data: unknown): data is WorkspaceState {
   if (Array.isArray(obj.elementGroups)) {
     for (const group of obj.elementGroups) {
       if (!isValidElementGroup(group)) {
+        return false;
+      }
+    }
+  }
+
+  // Validate user components have required structure (if present)
+  if (Array.isArray(obj.userComponents)) {
+    for (const component of obj.userComponents) {
+      if (!isValidUserComponent(component)) {
+        return false;
+      }
+    }
+  }
+
+  // Validate component instances have required structure (if present)
+  if (Array.isArray(obj.componentInstances)) {
+    for (const instance of obj.componentInstances) {
+      if (!isValidComponentInstance(instance)) {
         return false;
       }
     }
@@ -211,6 +243,47 @@ function isValidElementGroup(group: unknown): group is ElementGroup {
     typeof obj.id === 'string' &&
     Array.isArray(obj.elementIds) &&
     typeof obj.frameId === 'string' &&
+    typeof obj.createdAt === 'string'
+  );
+}
+
+/**
+ * Validate user component structure
+ */
+function isValidUserComponent(component: unknown): component is UserComponent {
+  if (typeof component !== 'object' || component === null) {
+    return false;
+  }
+
+  const obj = component as Record<string, unknown>;
+
+  return (
+    typeof obj.id === 'string' &&
+    typeof obj.name === 'string' &&
+    Array.isArray(obj.masterElements) &&
+    typeof obj.width === 'number' &&
+    typeof obj.height === 'number' &&
+    typeof obj.createdAt === 'string' &&
+    typeof obj.updatedAt === 'string'
+  );
+}
+
+/**
+ * Validate component instance structure
+ */
+function isValidComponentInstance(instance: unknown): instance is ComponentInstance {
+  if (typeof instance !== 'object' || instance === null) {
+    return false;
+  }
+
+  const obj = instance as Record<string, unknown>;
+
+  return (
+    typeof obj.id === 'string' &&
+    typeof obj.componentId === 'string' &&
+    typeof obj.frameId === 'string' &&
+    typeof obj.x === 'number' &&
+    typeof obj.y === 'number' &&
     typeof obj.createdAt === 'string'
   );
 }
