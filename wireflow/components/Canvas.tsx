@@ -172,6 +172,15 @@ export function Canvas() {
   const MIN_ELEMENT_SIZE = 20;
   const ROTATION_HANDLE_OFFSET = 25; // Distance above element for rotation handle
 
+  // Selection visual constants
+  const SELECTION_PADDING = 4;
+  const GROUP_SELECTION_PADDING = 6;
+  const SELECTION_DASH_PATTERN: [number, number] = [4, 4];
+  const GROUP_DASH_PATTERN: [number, number] = [6, 4];
+  const SELECTION_LINE_WIDTH = 2;
+  const GROUP_LINE_WIDTH = 1.5;
+  const MULTI_SELECT_LINE_WIDTH = 1;
+
   // Generate unique IDs (using substring instead of deprecated substr)
   const generateId = () =>
     `el_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
@@ -943,6 +952,9 @@ export function Canvas() {
       }
     }
 
+    // Track groups that have selected elements inside (to suppress group border)
+    const groupsWithSelectedElements = new Set<string>();
+
     // Draw all elements
     elements.forEach((element) => {
       // Use element's custom colors or fall back to theme sketch color
@@ -959,6 +971,16 @@ export function Canvas() {
       // Determine if element is selected (single or multi-select)
       const isSelected =
         element.id === selectedElementId || selectedElementIds.has(element.id);
+
+      // Track if this selected element belongs to a group (to suppress group border)
+      if (isSelected) {
+        if (element.groupId) {
+          groupsWithSelectedElements.add(element.groupId);
+        }
+        if (element.elementGroupId) {
+          groupsWithSelectedElements.add(element.elementGroupId);
+        }
+      }
 
       // For selected elements, we keep the actual colors visible so style changes
       // are reflected in real-time. Selection is indicated via a separate outline.
@@ -1007,14 +1029,13 @@ export function Canvas() {
         if (isSelected) {
           ctx.save();
           ctx.strokeStyle = canvasTheme.selected;
-          ctx.lineWidth = 2;
-          ctx.setLineDash([4, 4]);
-          const padding = 4;
+          ctx.lineWidth = SELECTION_LINE_WIDTH;
+          ctx.setLineDash(SELECTION_DASH_PATTERN);
           ctx.strokeRect(
-            element.x - padding,
-            element.y - padding,
-            element.width + padding * 2,
-            element.height + padding * 2
+            element.x - SELECTION_PADDING,
+            element.y - SELECTION_PADDING,
+            element.width + SELECTION_PADDING * 2,
+            element.height + SELECTION_PADDING * 2
           );
           ctx.setLineDash([]);
           ctx.restore();
@@ -1046,15 +1067,14 @@ export function Canvas() {
         if (isSelected) {
           ctx.save();
           ctx.strokeStyle = canvasTheme.selected;
-          ctx.lineWidth = 2;
-          ctx.setLineDash([4, 4]);
-          const padding = 4;
+          ctx.lineWidth = SELECTION_LINE_WIDTH;
+          ctx.setLineDash(SELECTION_DASH_PATTERN);
           ctx.beginPath();
           ctx.ellipse(
             element.x + element.width / 2,
             element.y + element.height / 2,
-            element.width / 2 + padding,
-            element.height / 2 + padding,
+            element.width / 2 + SELECTION_PADDING,
+            element.height / 2 + SELECTION_PADDING,
             0, 0, Math.PI * 2
           );
           ctx.stroke();
@@ -1088,16 +1108,15 @@ export function Canvas() {
         if (isSelected) {
           ctx.save();
           ctx.strokeStyle = canvasTheme.selected;
-          ctx.lineWidth = 2;
-          ctx.setLineDash([4, 4]);
-          const padding = 4;
+          ctx.lineWidth = SELECTION_LINE_WIDTH;
+          ctx.setLineDash(SELECTION_DASH_PATTERN);
           const cx = element.x + element.width / 2;
           const cy = element.y + element.height / 2;
           ctx.beginPath();
-          ctx.moveTo(cx, element.y - padding);
-          ctx.lineTo(element.x + element.width + padding, cy);
-          ctx.lineTo(cx, element.y + element.height + padding);
-          ctx.lineTo(element.x - padding, cy);
+          ctx.moveTo(cx, element.y - SELECTION_PADDING);
+          ctx.lineTo(element.x + element.width + SELECTION_PADDING, cy);
+          ctx.lineTo(cx, element.y + element.height + SELECTION_PADDING);
+          ctx.lineTo(element.x - SELECTION_PADDING, cy);
           ctx.closePath();
           ctx.stroke();
           ctx.setLineDash([]);
@@ -1240,7 +1259,7 @@ export function Canvas() {
           ctx.save();
           ctx.strokeStyle = canvasTheme.selected;
           ctx.lineWidth = 3;
-          ctx.setLineDash([4, 4]);
+          ctx.setLineDash(SELECTION_DASH_PATTERN);
           ctx.beginPath();
           ctx.moveTo(arrowEl.startX, arrowEl.startY);
           ctx.lineTo(arrowEl.endX, arrowEl.endY);
@@ -1264,7 +1283,7 @@ export function Canvas() {
           ctx.save();
           ctx.strokeStyle = canvasTheme.selected;
           ctx.lineWidth = 3;
-          ctx.setLineDash([4, 4]);
+          ctx.setLineDash(SELECTION_DASH_PATTERN);
           ctx.beginPath();
           ctx.moveTo(lineEl.startX, lineEl.startY);
           ctx.lineTo(lineEl.endX, lineEl.endY);
@@ -1280,14 +1299,13 @@ export function Canvas() {
         if (isSelected) {
           ctx.save();
           ctx.strokeStyle = canvasTheme.selected;
-          ctx.lineWidth = 2;
-          ctx.setLineDash([4, 4]);
-          const padding = 4;
+          ctx.lineWidth = SELECTION_LINE_WIDTH;
+          ctx.setLineDash(SELECTION_DASH_PATTERN);
           ctx.strokeRect(
-            element.x - padding,
-            element.y - padding,
-            element.width + padding * 2,
-            element.height + padding * 2
+            element.x - SELECTION_PADDING,
+            element.y - SELECTION_PADDING,
+            element.width + SELECTION_PADDING * 2,
+            element.height + SELECTION_PADDING * 2
           );
           ctx.setLineDash([]);
           ctx.restore();
@@ -1379,7 +1397,8 @@ export function Canvas() {
 
     // Draw component group selection outlines
     componentGroups.forEach((group) => {
-      if (group.id === selectedGroupId) {
+      // Only show group outline if NO individual element inside is selected
+      if (group.id === selectedGroupId && !groupsWithSelectedElements.has(group.id)) {
         const groupElements = getGroupElements(group.id);
         if (groupElements.length === 0) return;
 
@@ -1398,15 +1417,15 @@ export function Canvas() {
 
         // Draw group selection box with sketch style
         ctx.strokeStyle = canvasTheme.group; // Purple for component groups
-        ctx.lineWidth = 2;
-        ctx.setLineDash([8, 4]); // Dashed for group outline
+        ctx.lineWidth = GROUP_LINE_WIDTH;
+        ctx.setLineDash(GROUP_DASH_PATTERN); // Dashed for group outline
         const groupSeed = parseInt(group.id.split("_")[1]) || 0;
         drawSketchRect(
           ctx,
-          minX - 5,
-          minY - 5,
-          maxX - minX + 10,
-          maxY - minY + 10,
+          minX - GROUP_SELECTION_PADDING,
+          minY - GROUP_SELECTION_PADDING,
+          maxX - minX + GROUP_SELECTION_PADDING * 2,
+          maxY - minY + GROUP_SELECTION_PADDING * 2,
           groupSeed,
         );
         ctx.setLineDash([]);
@@ -1421,13 +1440,13 @@ export function Canvas() {
 
     // Draw user-created element group selection outlines
     elementGroups.forEach((group) => {
-      // Check if any element in this group is selected
+      // Only show group outline when the entire group is selected as a whole,
+      // not when individual elements inside are selected
       const groupElements = getElementGroupElements(group.id);
-      const hasSelectedElement = groupElements.some(
-        (el) => el.id === selectedElementId || selectedElementIds.has(el.id),
-      );
+      const allGroupElementsSelected = groupElements.length > 0 &&
+        groupElements.every((el) => el.id === selectedElementId || selectedElementIds.has(el.id));
 
-      if (hasSelectedElement && groupElements.length > 0) {
+      if (allGroupElementsSelected && !groupsWithSelectedElements.has(group.id) && groupElements.length > 0) {
         // Calculate bounding box
         let minX = Infinity,
           minY = Infinity;
@@ -1443,15 +1462,15 @@ export function Canvas() {
 
         // Draw group selection box with sketch style
         ctx.strokeStyle = canvasTheme.selected; // Blue for user groups
-        ctx.lineWidth = 2;
-        ctx.setLineDash([8, 4]); // Dashed for group outline
+        ctx.lineWidth = GROUP_LINE_WIDTH;
+        ctx.setLineDash(GROUP_DASH_PATTERN); // Dashed for group outline
         const groupSeed = parseInt(group.id.split("_")[1]) || 0;
         drawSketchRect(
           ctx,
-          minX - 5,
-          minY - 5,
-          maxX - minX + 10,
-          maxY - minY + 10,
+          minX - GROUP_SELECTION_PADDING,
+          minY - GROUP_SELECTION_PADDING,
+          maxX - minX + GROUP_SELECTION_PADDING * 2,
+          maxY - minY + GROUP_SELECTION_PADDING * 2,
           groupSeed,
         );
         ctx.setLineDash([]);
@@ -1644,8 +1663,8 @@ export function Canvas() {
         });
 
         ctx.strokeStyle = canvasTheme.selected;
-        ctx.lineWidth = 1;
-        ctx.setLineDash([4, 4]);
+        ctx.lineWidth = MULTI_SELECT_LINE_WIDTH;
+        ctx.setLineDash(SELECTION_DASH_PATTERN);
         ctx.strokeRect(minX - 3, minY - 3, maxX - minX + 6, maxY - minY + 6);
         ctx.setLineDash([]);
       }
