@@ -7,6 +7,29 @@ export const AUTO_WIDTH_BUFFER = 8;
 
 let measureCanvas: HTMLCanvasElement | null = null;
 
+// Cache for text measurements keyed by content+font
+// Uses LRU-style eviction when cache gets too large
+const measurementCache = new Map<string, number>();
+const MAX_CACHE_SIZE = 500;
+
+/**
+ * Creates a cache key from text content and font options
+ */
+function createCacheKey(text: string, options: MeasureTextOptions): string {
+  return `${text}|${options.fontSize}|${options.fontWeight}|${options.fontStyle}`;
+}
+
+/**
+ * Clears oldest entries when cache exceeds max size
+ */
+function trimCache(): void {
+  if (measurementCache.size > MAX_CACHE_SIZE) {
+    // Delete first 100 entries (oldest)
+    const keysToDelete = Array.from(measurementCache.keys()).slice(0, 100);
+    keysToDelete.forEach(key => measurementCache.delete(key));
+  }
+}
+
 export interface MeasureTextOptions {
   fontSize: number;
   fontWeight: string;
@@ -16,11 +39,19 @@ export interface MeasureTextOptions {
 /**
  * Measures the width of text using canvas measureText API
  * This ensures accurate measurement matching the canvas rendering
+ * Results are cached by content+font for performance
  */
 export function measureTextWidth(
   text: string,
   options: MeasureTextOptions
 ): number {
+  // Check cache first
+  const cacheKey = createCacheKey(text, options);
+  const cached = measurementCache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
+  }
+
   if (!measureCanvas) {
     measureCanvas = document.createElement('canvas');
   }
@@ -39,6 +70,10 @@ export function measureTextWidth(
       maxWidth = width;
     }
   }
+
+  // Cache the result
+  measurementCache.set(cacheKey, maxWidth);
+  trimCache();
 
   return maxWidth;
 }

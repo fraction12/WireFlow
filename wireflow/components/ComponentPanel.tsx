@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import type { ComponentTemplate, ComponentType, UserComponent } from '@/lib/types';
 import { COMPONENT_TEMPLATES } from '@/lib/componentTemplates';
 import {
@@ -327,7 +327,7 @@ interface UserComponentCardProps {
   onMenuToggle: (open: boolean) => void;
 }
 
-function UserComponentCard({
+const UserComponentCard = memo(function UserComponentCard({
   component,
   isEditing,
   editingName,
@@ -504,14 +504,14 @@ function UserComponentCard({
       )}
     </div>
   );
-}
+});
 
 interface ComponentPreviewProps {
   template: ComponentTemplate;
   onInsert: (template: ComponentTemplate) => void;
 }
 
-function ComponentPreview({ template, onInsert }: ComponentPreviewProps) {
+const ComponentPreview = memo(function ComponentPreview({ template, onInsert }: ComponentPreviewProps) {
   const Icon = getComponentIcon(template.type);
 
   return (
@@ -544,7 +544,7 @@ function ComponentPreview({ template, onInsert }: ComponentPreviewProps) {
       </div>
     </button>
   );
-}
+});
 
 function getComponentIcon(type: ComponentType): LucideIcon {
   const icons: Record<ComponentType, LucideIcon> = {

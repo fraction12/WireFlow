@@ -307,22 +307,22 @@ export function Canvas() {
   // Record a snapshot for undo (call before making changes)
   const recordSnapshot = useCallback(() => {
     historyManager.recordSnapshot({
-      frames: JSON.parse(JSON.stringify(frames)),
-      componentGroups: JSON.parse(JSON.stringify(componentGroups)),
-      elementGroups: JSON.parse(JSON.stringify(elementGroups)),
-      userComponents: JSON.parse(JSON.stringify(userComponents)),
-      componentInstances: JSON.parse(JSON.stringify(componentInstances)),
+      frames: structuredClone(frames),
+      componentGroups: structuredClone(componentGroups),
+      elementGroups: structuredClone(elementGroups),
+      userComponents: structuredClone(userComponents),
+      componentInstances: structuredClone(componentInstances),
     });
   }, [frames, componentGroups, elementGroups, userComponents, componentInstances, historyManager]);
 
   // Perform undo
   const performUndo = useCallback(() => {
     const currentState: HistorySnapshot = {
-      frames: JSON.parse(JSON.stringify(frames)),
-      componentGroups: JSON.parse(JSON.stringify(componentGroups)),
-      elementGroups: JSON.parse(JSON.stringify(elementGroups)),
-      userComponents: JSON.parse(JSON.stringify(userComponents)),
-      componentInstances: JSON.parse(JSON.stringify(componentInstances)),
+      frames: structuredClone(frames),
+      componentGroups: structuredClone(componentGroups),
+      elementGroups: structuredClone(elementGroups),
+      userComponents: structuredClone(userComponents),
+      componentInstances: structuredClone(componentInstances),
     };
     const previousState = historyManager.undo(currentState);
     if (previousState) {
@@ -352,11 +352,11 @@ export function Canvas() {
   // Perform redo
   const performRedo = useCallback(() => {
     const currentState: HistorySnapshot = {
-      frames: JSON.parse(JSON.stringify(frames)),
-      componentGroups: JSON.parse(JSON.stringify(componentGroups)),
-      elementGroups: JSON.parse(JSON.stringify(elementGroups)),
-      userComponents: JSON.parse(JSON.stringify(userComponents)),
-      componentInstances: JSON.parse(JSON.stringify(componentInstances)),
+      frames: structuredClone(frames),
+      componentGroups: structuredClone(componentGroups),
+      elementGroups: structuredClone(elementGroups),
+      userComponents: structuredClone(userComponents),
+      componentInstances: structuredClone(componentInstances),
     };
     const nextState = historyManager.redo(currentState);
     if (nextState) {
@@ -613,8 +613,25 @@ export function Canvas() {
       setFrames(savedState.frames);
       setComponentGroups(savedState.componentGroups);
       setElementGroups(savedState.elementGroups || []);
-      setUserComponents(savedState.userComponents || []);
-      setComponentInstances(savedState.componentInstances || []);
+
+      const loadedComponents = savedState.userComponents || [];
+      setUserComponents(loadedComponents);
+
+      // Clean up orphaned component instances (instances referencing deleted components)
+      const validComponentIds = new Set(loadedComponents.map(c => c.id));
+      const loadedInstances = savedState.componentInstances || [];
+      const validInstances = loadedInstances.filter(
+        instance => validComponentIds.has(instance.componentId)
+      );
+      setComponentInstances(validInstances);
+
+      // Log cleanup if any orphans were found (for debugging)
+      if (validInstances.length < loadedInstances.length) {
+        console.warn(
+          `Cleaned up ${loadedInstances.length - validInstances.length} orphaned component instance(s)`
+        );
+      }
+
       // Restore active frame, or fall back to first frame if saved frame no longer exists
       const frameExists = savedState.frames.some(
         (f) => f.id === savedState.activeFrameId,
@@ -960,7 +977,7 @@ export function Canvas() {
   };
 
   // Wrap text to fit within a given width, returning an array of lines
-  // Handles both explicit newlines and word-wrapping
+  // Handles both explicit newlines, word-wrapping, and character-level breaks for very long words
   const wrapText = (
     ctx: CanvasRenderingContext2D,
     text: string,
@@ -968,6 +985,30 @@ export function Canvas() {
   ): string[] => {
     const paragraphs = text.split("\n");
     const lines: string[] = [];
+
+    // Helper to break a long word character-by-character
+    const breakLongWord = (word: string): string[] => {
+      const brokenParts: string[] = [];
+      let currentPart = "";
+
+      for (const char of word) {
+        const testPart = currentPart + char;
+        const metrics = ctx.measureText(testPart);
+
+        if (metrics.width > maxWidth && currentPart) {
+          brokenParts.push(currentPart);
+          currentPart = char;
+        } else {
+          currentPart = testPart;
+        }
+      }
+
+      if (currentPart) {
+        brokenParts.push(currentPart);
+      }
+
+      return brokenParts;
+    };
 
     for (const paragraph of paragraphs) {
       if (paragraph === "") {
@@ -979,6 +1020,25 @@ export function Canvas() {
       let currentLine = "";
 
       for (const word of words) {
+        // Check if the word itself is too long to fit on a line
+        const wordMetrics = ctx.measureText(word);
+        if (wordMetrics.width > maxWidth) {
+          // Push current line if any
+          if (currentLine) {
+            lines.push(currentLine);
+            currentLine = "";
+          }
+          // Break the long word into parts
+          const wordParts = breakLongWord(word);
+          // Add all parts except the last as separate lines
+          for (let i = 0; i < wordParts.length - 1; i++) {
+            lines.push(wordParts[i]);
+          }
+          // The last part becomes the current line (may be combined with next word)
+          currentLine = wordParts[wordParts.length - 1] || "";
+          continue;
+        }
+
         const testLine = currentLine ? `${currentLine} ${word}` : word;
         const metrics = ctx.measureText(testLine);
 
@@ -3327,7 +3387,7 @@ export function Canvas() {
     if (selectedElementIds.size > 0) {
       elements.forEach((el) => {
         if (selectedElementIds.has(el.id)) {
-          elementsToCopy.push(JSON.parse(JSON.stringify(el)));
+          elementsToCopy.push(structuredClone(el));
         }
       });
     }
@@ -3344,12 +3404,12 @@ export function Canvas() {
             group.elementIds.forEach((id) => {
               const groupEl = elements.find((el) => el.id === id);
               if (groupEl) {
-                elementsToCopy.push(JSON.parse(JSON.stringify(groupEl)));
+                elementsToCopy.push(structuredClone(groupEl));
               }
             });
           }
         } else {
-          elementsToCopy.push(JSON.parse(JSON.stringify(element)));
+          elementsToCopy.push(structuredClone(element));
         }
       }
     }
@@ -3455,7 +3515,7 @@ export function Canvas() {
     elementsToDuplicate.forEach((el) => {
       const newId = generateId();
       const newElement: CanvasElement = {
-        ...JSON.parse(JSON.stringify(el)),
+        ...structuredClone(el),
         id: newId,
         x: el.x + DUPLICATE_OFFSET,
         y: el.y + DUPLICATE_OFFSET,

@@ -78,17 +78,17 @@ Polish the existing WireFlow wireframing application to production quality. No n
 - [x] Selection state visual hierarchy (more distinct multi vs single vs group)
 - [x] Hover state consistency (standardize scale transforms)
 - [x] Empty state illustrations (My Components, Documentation panel)
-- [ ] Divider styling consistency (create standard Divider component)
+- [x] Divider styling consistency (create standard Divider component)
 
 ### Error Handling
-- [ ] Very long text handling (word-break for long strings)
-- [ ] Copy/paste ID regeneration verification
-- [ ] Component instance orphan handling
+- [x] Very long text handling (word-break for long strings)
+- [x] Copy/paste ID regeneration verification
+- [x] Component instance orphan handling
 
 ### Performance
-- [ ] Use structuredClone instead of JSON.parse/stringify in history
-- [ ] Add React.memo to ComponentPreview and UserComponentCard
-- [ ] Cache text measurements by content+font
+- [x] Use structuredClone instead of JSON.parse/stringify in history
+- [x] Add React.memo to ComponentPreview and UserComponentCard
+- [x] Cache text measurements by content+font
 
 ---
 
