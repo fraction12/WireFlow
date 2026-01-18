@@ -23,3 +23,19 @@ Each issue should include:
 - **Root Cause**: Global keyboard handler in Canvas.tsx only checked for `editingElementId`, not other focused input fields or open dialogs
 - **Fix Location**: `components/Canvas.tsx` - Added focus detection for input/textarea/contenteditable elements AND checks for `isPromoteDialogOpen` and `confirmDialog.isOpen` at the start of `handleKeyDown`
 - **Fixed In**: TBD
+
+### KI-002: Text toolbar clicks cause text editing to end and trigger shortcuts
+
+- **Status**: Fixed
+- **Description**: Clicking buttons in the text formatting toolbar (H1, H2, Bold, Italic, alignment, font size) would cause the text textarea to lose focus, ending text editing and allowing keyboard shortcuts to trigger unexpectedly.
+- **Root Cause**: The TextToolbar's `onMouseDown` handler only called `stopPropagation()` but not `preventDefault()`. Without `preventDefault()`, the browser's default behavior moves focus away from the textarea.
+- **Fix Location**: `components/TextToolbar.tsx` - Added `e.preventDefault()` to the toolbar's `onMouseDown` handler to keep focus on the textarea
+- **Fixed In**: TBD
+
+### KI-003: Text toolbar positioned incorrectly when canvas is zoomed or panned
+
+- **Status**: Fixed
+- **Description**: The text formatting toolbar appeared at the wrong position (top-left of where it should be) when the canvas was zoomed or panned. This caused clicks on the toolbar to miss and interact with the canvas instead.
+- **Root Cause**: The TextToolbar component used raw element coordinates (world space) without applying zoom and pan transformations to convert to screen space.
+- **Fix Location**: `components/TextToolbar.tsx` - Added `zoom` and `pan` props, transformed element coordinates to screen space before positioning. `components/Canvas.tsx` - Pass `zoom` and `pan` props to TextToolbar.
+- **Fixed In**: TBD

@@ -4711,6 +4711,8 @@ export function Canvas() {
               element={textElementForToolbar}
               canvasRect={canvasRect}
               onUpdate={handleTextToolbarUpdate}
+              zoom={zoom}
+              pan={pan}
             />
           )}
         </div>

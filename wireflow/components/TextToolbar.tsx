@@ -16,11 +16,13 @@ interface TextToolbarProps {
   element: TextElement;
   canvasRect: DOMRect | null;
   onUpdate: (updates: Partial<TextElement>) => void;
+  zoom: number;
+  pan: { x: number; y: number };
 }
 
 type ToolbarPosition = 'above' | 'below' | 'side';
 
-export function TextToolbar({ element, canvasRect, onUpdate }: TextToolbarProps) {
+export function TextToolbar({ element, canvasRect, onUpdate, zoom, pan }: TextToolbarProps) {
   const [showSizeDropdown, setShowSizeDropdown] = useState(false);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -57,6 +59,12 @@ export function TextToolbar({ element, canvasRect, onUpdate }: TextToolbarProps)
     const gap = 12; // Increased gap from element
     const padding = 16; // Padding from canvas edges
 
+    // Transform element coordinates to screen space
+    const screenX = element.x * zoom + pan.x;
+    const screenY = element.y * zoom + pan.y;
+    const screenWidth = element.width * zoom;
+    const screenHeight = element.height * zoom;
+
     let top = 0;
     let left = 0;
     let calculatedPosition: ToolbarPosition = 'above';
@@ -65,7 +73,7 @@ export function TextToolbar({ element, canvasRect, onUpdate }: TextToolbarProps)
     // Calculate horizontal position - center on the text cursor/click position
     // For text elements, we center on element.x (where the user clicked to create text)
     // This keeps the toolbar stable as the user types and the element width expands
-    const centerX = element.x;
+    const centerX = screenX;
     left = centerX - toolbarWidth / 2;
 
     // Clamp to stay within canvas bounds
@@ -82,29 +90,29 @@ export function TextToolbar({ element, canvasRect, onUpdate }: TextToolbarProps)
     }
 
     // Try positioning above first
-    const aboveY = element.y - toolbarHeight - gap;
+    const aboveY = screenY - toolbarHeight - gap;
     if (aboveY >= padding) {
       top = aboveY;
       calculatedPosition = 'above';
     } else {
       // If not enough space above, try below
-      const belowY = element.y + element.height + gap;
+      const belowY = screenY + screenHeight + gap;
       if (belowY + toolbarHeight <= canvasRect.height - padding) {
         top = belowY;
         calculatedPosition = 'below';
       } else {
         // If no space above or below, position to the side
-        top = element.y;
-        left = element.x + element.width + gap;
+        top = screenY;
+        left = screenX + screenWidth + gap;
         calculatedPosition = 'side';
         pointerOffset = '20px'; // Top aligned for side position
 
         // If no space on right, try left
         if (left + toolbarWidth > canvasRect.width - padding) {
-          left = element.x - toolbarWidth - gap;
+          left = screenX - toolbarWidth - gap;
           if (left < padding) {
             // Last resort: position above or below, overlapping if necessary
-            top = aboveY >= 0 ? aboveY : element.y + element.height + gap;
+            top = aboveY >= 0 ? aboveY : screenY + screenHeight + gap;
             left = Math.max(padding, Math.min(centerX - toolbarWidth / 2, canvasRect.width - toolbarWidth - padding));
             calculatedPosition = aboveY >= 0 ? 'above' : 'below';
           }
@@ -122,7 +130,7 @@ export function TextToolbar({ element, canvasRect, onUpdate }: TextToolbarProps)
       } as React.CSSProperties & { '--pointer-offset': string },
       position: calculatedPosition,
     };
-  }, [canvasRect, element.x, element.y, element.width, element.height]);
+  }, [canvasRect, element.x, element.y, element.width, element.height, zoom, pan.x, pan.y]);
 
   const handlePresetClick = (presetKey: TextPreset) => {
     const config = TEXT_PRESETS[presetKey];
@@ -215,7 +223,10 @@ export function TextToolbar({ element, canvasRect, onUpdate }: TextToolbarProps)
       `}
       role="toolbar"
       aria-label="Text formatting"
-      onMouseDown={(e) => e.stopPropagation()}
+      onMouseDown={(e) => {
+        e.preventDefault(); // Prevent textarea from losing focus
+        e.stopPropagation();
+      }}
     >
       {/* Preset buttons */}
       <div className="flex items-center gap-0.5 border-r border-zinc-300/60 dark:border-zinc-600/60 pr-2 mr-1">
