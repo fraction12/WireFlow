@@ -2966,6 +2966,16 @@ export function Canvas() {
         }
       }
 
+      // Ctrl/Cmd+A: Select all elements
+      if ((e.ctrlKey || e.metaKey) && e.key === "a") {
+        e.preventDefault();
+        if (elements.length > 0) {
+          setSelectedElementIds(new Set(elements.map((el) => el.id)));
+          setSelectedElementId(elements[0].id);
+        }
+        return;
+      }
+
       // Ctrl/Cmd+Z: Undo
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
