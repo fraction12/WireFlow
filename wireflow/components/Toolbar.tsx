@@ -9,6 +9,7 @@ import {
   ArrowRight,
   Minus,
   Type,
+  Pencil,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -25,6 +26,7 @@ export function Toolbar({ currentTool, onToolChange }: ToolbarProps) {
     { name: 'diamond', label: 'Diamond (D)', icon: Diamond },
     { name: 'arrow', label: 'Arrow (A)', icon: ArrowRight },
     { name: 'line', label: 'Line (L)', icon: Minus },
+    { name: 'freedraw', label: 'Pencil (P)', icon: Pencil },
     { name: 'text', label: 'Text (T)', icon: Type },
   ];
 

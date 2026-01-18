@@ -1,5 +1,5 @@
 // Core element types for the canvas
-export type ElementType = 'rectangle' | 'ellipse' | 'diamond' | 'text' | 'arrow' | 'line';
+export type ElementType = 'rectangle' | 'ellipse' | 'diamond' | 'text' | 'arrow' | 'line' | 'freedraw';
 
 // Semantic tags for PM layer
 export type SemanticTag = 'button' | 'input' | 'section' | null;
@@ -79,7 +79,12 @@ export interface LineElement extends BaseElement {
   endY: number;
 }
 
-export type CanvasElement = RectangleElement | EllipseElement | DiamondElement | TextElement | ArrowElement | LineElement;
+export interface FreedrawElement extends BaseElement {
+  type: 'freedraw';
+  points: { x: number; y: number }[]; // Raw points in canvas coordinates
+}
+
+export type CanvasElement = RectangleElement | EllipseElement | DiamondElement | TextElement | ArrowElement | LineElement | FreedrawElement;
 
 // Tool types (Excalidraw-style)
 export type Tool =
@@ -89,7 +94,8 @@ export type Tool =
   | 'diamond'
   | 'arrow'
   | 'line'
-  | 'text';
+  | 'text'
+  | 'freedraw';
 
 // Frame types for classification
 export type FrameType = 'page' | 'modal' | 'flyout';

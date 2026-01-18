@@ -10,6 +10,7 @@ import type {
   TextElement,
   ArrowElement,
   LineElement,
+  FreedrawElement,
   Frame,
   FrameType,
   ComponentGroup,
@@ -306,6 +307,9 @@ export function Canvas() {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [lastPanPoint, setLastPanPoint] = useState<{ x: number; y: number } | null>(null);
+
+  // Freehand drawing state
+  const [freedrawPoints, setFreedrawPoints] = useState<{ x: number; y: number }[]>([]);
 
   // Zoom constraints
   const MIN_ZOOM = 0.1;
@@ -722,6 +726,31 @@ export function Canvas() {
     drawSketchLine(ctx, leftX, leftY, topX, topY, seed + 3); // Top-left edge
   };
 
+  // Draw a freehand path with smooth curves
+  const drawFreedraw = (
+    ctx: CanvasRenderingContext2D,
+    points: { x: number; y: number }[],
+  ) => {
+    if (points.length < 2) return;
+
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+
+    // Use quadratic curves for smooth rendering
+    for (let i = 1; i < points.length - 1; i++) {
+      const xc = (points[i].x + points[i + 1].x) / 2;
+      const yc = (points[i].y + points[i + 1].y) / 2;
+      ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+    }
+
+    // Draw to the last point
+    if (points.length > 1) {
+      ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+    }
+
+    ctx.stroke();
+  };
+
   // Wrap text to fit within a given width, returning an array of lines
   // Handles both explicit newlines and word-wrapping
   const wrapText = (
@@ -985,6 +1014,10 @@ export function Canvas() {
           lineEl.endY,
           seed,
         );
+      } else if (element.type === "freedraw") {
+        // Draw freehand path
+        const freedrawEl = element as FreedrawElement;
+        drawFreedraw(ctx, freedrawEl.points);
       }
 
       // Draw resize handles for selected element (only if not grouped and single selection)
@@ -1605,8 +1638,12 @@ export function Canvas() {
       setIsDrawing(true);
       setStartPoint({ x, y });
 
+      // Freedraw tool: start collecting points immediately
+      if (currentTool === "freedraw") {
+        setFreedrawPoints([{ x, y }]);
+      }
       // Text tool: click-to-place and immediately enter edit mode
-      if (currentTool === "text") {
+      else if (currentTool === "text") {
         recordSnapshot(); // Record for undo
         const newElement: TextElement = {
           id: generateId(),
@@ -1907,6 +1944,31 @@ export function Canvas() {
       }
 
       ctx.setLineDash([]);
+    } else if (currentTool === "freedraw" && isDrawing && freedrawPoints.length > 0) {
+      // Freedraw: add point and preview
+      setFreedrawPoints((prev) => [...prev, { x, y }]);
+
+      redraw();
+
+      const canvas = canvasRef.current;
+      const ctx = canvas?.getContext("2d");
+      if (!ctx) return;
+
+      // Apply zoom transform for preview
+      ctx.save();
+      ctx.translate(pan.x, pan.y);
+      ctx.scale(zoom, zoom);
+
+      ctx.strokeStyle = canvasTheme.sketch;
+      ctx.lineWidth = 1.5;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+
+      // Draw preview of current freehand path
+      const currentPoints = [...freedrawPoints, { x, y }];
+      drawFreedraw(ctx, currentPoints);
+
+      ctx.restore();
     }
   };
 
@@ -2045,11 +2107,38 @@ export function Canvas() {
         setElements([...elements, newElement]);
         setSelectedElementId(newElement.id);
         setCurrentTool("select");
+      } else if (currentTool === "freedraw" && freedrawPoints.length >= 2) {
+        recordSnapshot(); // Record for undo
+        // Calculate bounding box from points
+        const allPoints = [...freedrawPoints, { x, y }];
+        let minX = Infinity, minY = Infinity;
+        let maxX = -Infinity, maxY = -Infinity;
+        allPoints.forEach((p) => {
+          minX = Math.min(minX, p.x);
+          minY = Math.min(minY, p.y);
+          maxX = Math.max(maxX, p.x);
+          maxY = Math.max(maxY, p.y);
+        });
+
+        const newElement: FreedrawElement = {
+          id: generateId(),
+          type: "freedraw",
+          x: minX,
+          y: minY,
+          width: Math.max(maxX - minX, 1),
+          height: Math.max(maxY - minY, 1),
+          points: allPoints,
+        };
+        setElements([...elements, newElement]);
+        setSelectedElementId(newElement.id);
+        setCurrentTool("select");
+        setFreedrawPoints([]);
       }
     }
 
     setIsDrawing(false);
     setStartPoint(null);
+    setFreedrawPoints([]);
     setDragOffset(null);
     setResizeHandle(null);
     setResizeSnapshot(null); // Clear resize snapshot on pointer up
@@ -2376,6 +2465,9 @@ export function Canvas() {
             return;
           case "l":
             setCurrentTool("line");
+            return;
+          case "p":
+            setCurrentTool("freedraw");
             return;
           case "t":
             setCurrentTool("text");
