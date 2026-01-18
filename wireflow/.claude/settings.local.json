@@ -19,7 +19,9 @@
       "Bash(timeout /t 8)",
       "Bash(cmd //c \"taskkill /PID 240472 /F\")",
       "Bash(cmd //c \"taskkill /PID 29944 /F\")",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Skill(ralph-loop:help)",
+      "Skill(ralph-loop:help:*)"
     ]
   }
 }
