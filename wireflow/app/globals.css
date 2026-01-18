@@ -13,6 +13,8 @@
 
   /* Canvas UI colors - respond to theme (selection, handles, marquee) */
   --canvas-selected: #3b82f6;
+  --canvas-selected-bg: rgba(59, 130, 246, 0.08);
+  --canvas-hover: #4b5563;
   --canvas-tagged: #10b981;
   --canvas-group: #8b5cf6;
   --canvas-marquee-fill: rgba(59, 130, 246, 0.1);
@@ -37,6 +39,8 @@
 
   /* Canvas UI colors for dark mode (selection, handles, marquee) */
   --canvas-selected: #60a5fa;
+  --canvas-selected-bg: rgba(96, 165, 250, 0.12);
+  --canvas-hover: #9ca3af;
   --canvas-tagged: #34d399;
   --canvas-group: #a78bfa;
   --canvas-marquee-fill: rgba(96, 165, 250, 0.15);
@@ -55,6 +59,8 @@
 
     /* Canvas UI colors for dark mode (selection, handles, marquee) */
     --canvas-selected: #60a5fa;
+    --canvas-selected-bg: rgba(96, 165, 250, 0.12);
+    --canvas-hover: #9ca3af;
     --canvas-tagged: #34d399;
     --canvas-group: #a78bfa;
     --canvas-marquee-fill: rgba(96, 165, 250, 0.15);
@@ -233,4 +239,102 @@ html {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* TextToolbar enhancements */
+.text-toolbar {
+  /* Enhanced shadow for depth */
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+}
+
+.dark .text-toolbar {
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.3),
+    0 2px 4px -1px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(0, 0, 0, 0.4);
+}
+
+/* Pointer arrow pointing to selected element */
+.text-toolbar::after {
+  content: "";
+  position: absolute;
+  width: 0;
+  height: 0;
+  border: 6px solid transparent;
+  pointer-events: none;
+}
+
+/* Arrow pointing down (when toolbar is above) */
+.text-toolbar.toolbar-position-above::after {
+  bottom: -12px;
+  left: var(--pointer-offset, 50%);
+  transform: translateX(-50%);
+  border-top-color: #e5e7eb; /* zinc-200 */
+  border-bottom-width: 0;
+}
+
+.dark .text-toolbar.toolbar-position-above::after {
+  border-top-color: #3f3f46; /* zinc-700 */
+}
+
+/* Inner triangle for above position (creates filled look) */
+.text-toolbar.toolbar-position-above::before {
+  content: "";
+  position: absolute;
+  bottom: -10px;
+  left: var(--pointer-offset, 50%);
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border: 5px solid transparent;
+  border-top-color: #ffffff;
+  border-bottom-width: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.dark .text-toolbar.toolbar-position-above::before {
+  border-top-color: #27272a; /* zinc-800 */
+}
+
+/* Arrow pointing up (when toolbar is below) */
+.text-toolbar.toolbar-position-below::after {
+  top: -12px;
+  left: var(--pointer-offset, 50%);
+  transform: translateX(-50%);
+  border-bottom-color: #e5e7eb; /* zinc-200 */
+  border-top-width: 0;
+}
+
+.dark .text-toolbar.toolbar-position-below::after {
+  border-bottom-color: #3f3f46; /* zinc-700 */
+}
+
+/* Inner triangle for below position */
+.text-toolbar.toolbar-position-below::before {
+  content: "";
+  position: absolute;
+  top: -10px;
+  left: var(--pointer-offset, 50%);
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border: 5px solid transparent;
+  border-bottom-color: #ffffff;
+  border-top-width: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.dark .text-toolbar.toolbar-position-below::before {
+  border-bottom-color: #27272a; /* zinc-800 */
+}
+
+/* No arrow for side positioning */
+.text-toolbar.toolbar-position-side::after,
+.text-toolbar.toolbar-position-side::before {
+  display: none;
 }

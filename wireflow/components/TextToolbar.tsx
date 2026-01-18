@@ -10,13 +10,15 @@ import {
   AlignRight,
   ChevronDown,
 } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 
 interface TextToolbarProps {
   element: TextElement;
   canvasRect: DOMRect | null;
   onUpdate: (updates: Partial<TextElement>) => void;
 }
+
+type ToolbarPosition = 'above' | 'below' | 'side';
 
 export function TextToolbar({ element, canvasRect, onUpdate }: TextToolbarProps) {
   const [showSizeDropdown, setShowSizeDropdown] = useState(false);
@@ -41,38 +43,84 @@ export function TextToolbar({ element, canvasRect, onUpdate }: TextToolbarProps)
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Calculate toolbar position
-  const getToolbarStyle = (): React.CSSProperties => {
-    if (!canvasRect) return { display: 'none' };
-
-    const toolbarHeight = 40;
-    const gap = 8;
-
-    // Position above the element by default
-    let top = element.y - toolbarHeight - gap;
-    let left = element.x;
-
-    // If too close to top, position below
-    if (top < 0) {
-      top = element.y + element.height + gap;
+  // Calculate toolbar position with improved logic using useMemo to avoid re-render loops
+  const { toolbarStyle, position } = useMemo(() => {
+    if (!canvasRect) {
+      return {
+        toolbarStyle: { display: 'none' } as React.CSSProperties,
+        position: 'above' as ToolbarPosition,
+      };
     }
 
-    // Clamp horizontal position to stay within canvas
-    const toolbarWidth = 400; // Approximate width
-    if (left + toolbarWidth > canvasRect.width) {
-      left = canvasRect.width - toolbarWidth - 10;
+    const toolbarHeight = 44; // Slightly increased for better visual comfort
+    const toolbarWidth = 420; // Approximate width
+    const gap = 12; // Increased gap from element
+    const padding = 16; // Padding from canvas edges
+
+    let top = 0;
+    let left = 0;
+    let calculatedPosition: ToolbarPosition = 'above';
+    let pointerOffset = '50%'; // Centered by default
+
+    // Calculate horizontal position (centered on element)
+    const elementCenterX = element.x + element.width / 2;
+    left = elementCenterX - toolbarWidth / 2;
+
+    // Clamp to stay within canvas bounds
+    if (left < padding) {
+      left = padding;
+      // Calculate pointer offset when toolbar is clamped to left
+      const offset = elementCenterX - left;
+      pointerOffset = `${Math.max(20, Math.min(offset, toolbarWidth - 20))}px`;
+    } else if (left + toolbarWidth > canvasRect.width - padding) {
+      left = canvasRect.width - toolbarWidth - padding;
+      // Calculate pointer offset when toolbar is clamped to right
+      const offset = elementCenterX - left;
+      pointerOffset = `${Math.max(20, Math.min(offset, toolbarWidth - 20))}px`;
     }
-    if (left < 10) {
-      left = 10;
+
+    // Try positioning above first
+    const aboveY = element.y - toolbarHeight - gap;
+    if (aboveY >= padding) {
+      top = aboveY;
+      calculatedPosition = 'above';
+    } else {
+      // If not enough space above, try below
+      const belowY = element.y + element.height + gap;
+      if (belowY + toolbarHeight <= canvasRect.height - padding) {
+        top = belowY;
+        calculatedPosition = 'below';
+      } else {
+        // If no space above or below, position to the side
+        top = element.y;
+        left = element.x + element.width + gap;
+        calculatedPosition = 'side';
+        pointerOffset = '20px'; // Top aligned for side position
+
+        // If no space on right, try left
+        if (left + toolbarWidth > canvasRect.width - padding) {
+          left = element.x - toolbarWidth - gap;
+          if (left < padding) {
+            // Last resort: position above or below, overlapping if necessary
+            top = aboveY >= 0 ? aboveY : element.y + element.height + gap;
+            left = Math.max(padding, Math.min(elementCenterX - toolbarWidth / 2, canvasRect.width - toolbarWidth - padding));
+            calculatedPosition = aboveY >= 0 ? 'above' : 'below';
+          }
+        }
+      }
     }
 
     return {
-      position: 'absolute',
-      top: `${top}px`,
-      left: `${left}px`,
-      zIndex: 50,
+      toolbarStyle: {
+        position: 'absolute',
+        top: `${top}px`,
+        left: `${left}px`,
+        zIndex: 50,
+        '--pointer-offset': pointerOffset,
+      } as React.CSSProperties & { '--pointer-offset': string },
+      position: calculatedPosition,
     };
-  };
+  }, [canvasRect, element.x, element.y, element.width, element.height]);
 
   const handlePresetClick = (presetKey: TextPreset) => {
     const config = TEXT_PRESETS[presetKey];
@@ -118,7 +166,7 @@ export function TextToolbar({ element, canvasRect, onUpdate }: TextToolbarProps)
   const buttonBase = `
     h-8 px-2 flex items-center justify-center rounded
     transition-all duration-150 ease-out
-    focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500
+    focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1
     active:scale-95
   `;
 
@@ -126,24 +174,49 @@ export function TextToolbar({ element, canvasRect, onUpdate }: TextToolbarProps)
     text-zinc-600 dark:text-zinc-400
     hover:bg-zinc-100 dark:hover:bg-zinc-700
     hover:text-zinc-900 dark:hover:text-zinc-100
+    hover:shadow-sm
   `;
 
   const buttonActive = `
     bg-blue-100 text-blue-700
-    dark:bg-blue-900 dark:text-blue-300
+    dark:bg-blue-900/80 dark:text-blue-200
+    shadow-sm
+    font-medium
   `;
+
+  // Determine animation class based on position
+  const getAnimationClass = () => {
+    switch (position) {
+      case 'above':
+        return 'animate-slide-in-down';
+      case 'below':
+        return 'animate-slide-in-up';
+      case 'side':
+        return 'animate-scale-in';
+      default:
+        return 'animate-fade-in';
+    }
+  };
 
   return (
     <div
       ref={toolbarRef}
-      style={getToolbarStyle()}
-      className="flex items-center gap-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg px-2 py-1"
+      style={toolbarStyle}
+      className={`
+        text-toolbar
+        flex items-center gap-1
+        bg-white dark:bg-zinc-800
+        border border-zinc-200 dark:border-zinc-700
+        rounded-lg px-2.5 py-1.5
+        ${getAnimationClass()}
+        toolbar-position-${position}
+      `}
       role="toolbar"
       aria-label="Text formatting"
       onMouseDown={(e) => e.stopPropagation()}
     >
       {/* Preset buttons */}
-      <div className="flex items-center gap-0.5 border-r border-zinc-200 dark:border-zinc-700 pr-2 mr-1">
+      <div className="flex items-center gap-0.5 border-r border-zinc-300/60 dark:border-zinc-600/60 pr-2 mr-1">
         {presets.map(({ key, label }) => (
           <button
             key={key}
@@ -161,7 +234,7 @@ export function TextToolbar({ element, canvasRect, onUpdate }: TextToolbarProps)
       </div>
 
       {/* Bold/Italic buttons */}
-      <div className="flex items-center gap-0.5 border-r border-zinc-200 dark:border-zinc-700 pr-2 mr-1">
+      <div className="flex items-center gap-0.5 border-r border-zinc-300/60 dark:border-zinc-600/60 pr-2 mr-1">
         <button
           onClick={toggleBold}
           className={`${buttonBase} w-8 ${fontWeight === 'bold' ? buttonActive : buttonInactive}`}
@@ -183,7 +256,7 @@ export function TextToolbar({ element, canvasRect, onUpdate }: TextToolbarProps)
       </div>
 
       {/* Alignment buttons */}
-      <div className="flex items-center gap-0.5 border-r border-zinc-200 dark:border-zinc-700 pr-2 mr-1">
+      <div className="flex items-center gap-0.5 border-r border-zinc-300/60 dark:border-zinc-600/60 pr-2 mr-1">
         <button
           onClick={() => handleAlignChange('left')}
           className={`${buttonBase} w-8 ${textAlign === 'left' ? buttonActive : buttonInactive}`}

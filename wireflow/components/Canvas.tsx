@@ -1,21 +1,36 @@
-'use client';
+"use client";
 
-import { useRef, useState, useEffect, useCallback } from 'react';
-import type { CanvasElement, Tool, RectangleElement, EllipseElement, TextElement, ArrowElement, LineElement, Frame, FrameType, ComponentGroup, ComponentTemplate, ElementGroup } from '@/lib/types';
-import { saveWorkspace, loadWorkspace } from '@/lib/persistence';
-import { Toolbar } from './Toolbar';
-import { ExportButton } from './ExportButton';
-import { FrameList } from './FrameList';
-import { ComponentPanel } from './ComponentPanel';
-import { ConfirmDialog } from './ui/ConfirmDialog';
-import { useToast } from './ui/Toast';
-import { ThemeToggle } from './ThemeToggle';
-import { TextToolbar } from './TextToolbar';
+import { useRef, useState, useEffect, useCallback } from "react";
+import type {
+  CanvasElement,
+  Tool,
+  RectangleElement,
+  EllipseElement,
+  TextElement,
+  ArrowElement,
+  LineElement,
+  Frame,
+  FrameType,
+  ComponentGroup,
+  ComponentTemplate,
+  ElementGroup,
+} from "@/lib/types";
+import { saveWorkspace, loadWorkspace } from "@/lib/persistence";
+import { Toolbar } from "./Toolbar";
+import { ExportButton } from "./ExportButton";
+import { FrameList } from "./FrameList";
+import { ComponentPanel } from "./ComponentPanel";
+import { ConfirmDialog } from "./ui/ConfirmDialog";
+import { useToast } from "./ui/Toast";
+import { ThemeToggle } from "./ThemeToggle";
+import { TextToolbar } from "./TextToolbar";
 
 // Canvas color theme interface
 interface CanvasTheme {
   sketch: string;
   selected: string;
+  selectedBg: string;
+  hover: string;
   tagged: string;
   group: string;
   marqueeFill: string;
@@ -26,30 +41,40 @@ interface CanvasTheme {
 
 // Get canvas colors from CSS variables
 function getCanvasTheme(): CanvasTheme {
-  if (typeof window === 'undefined') {
+  if (typeof window === "undefined") {
     // Default light theme for SSR
     return {
-      sketch: '#6b7280',
-      selected: '#3b82f6',
-      tagged: '#10b981',
-      group: '#8b5cf6',
-      marqueeFill: 'rgba(59, 130, 246, 0.1)',
-      marqueeStroke: '#3b82f6',
-      handle: '#3b82f6',
-      handleFill: '#ffffff',
+      sketch: "#6b7280",
+      selected: "#3b82f6",
+      selectedBg: "rgba(59, 130, 246, 0.08)",
+      hover: "#4b5563",
+      tagged: "#10b981",
+      group: "#8b5cf6",
+      marqueeFill: "rgba(59, 130, 246, 0.1)",
+      marqueeStroke: "#3b82f6",
+      handle: "#3b82f6",
+      handleFill: "#ffffff",
     };
   }
 
   const styles = getComputedStyle(document.documentElement);
   return {
-    sketch: styles.getPropertyValue('--canvas-sketch').trim() || '#6b7280',
-    selected: styles.getPropertyValue('--canvas-selected').trim() || '#3b82f6',
-    tagged: styles.getPropertyValue('--canvas-tagged').trim() || '#10b981',
-    group: styles.getPropertyValue('--canvas-group').trim() || '#8b5cf6',
-    marqueeFill: styles.getPropertyValue('--canvas-marquee-fill').trim() || 'rgba(59, 130, 246, 0.1)',
-    marqueeStroke: styles.getPropertyValue('--canvas-marquee-stroke').trim() || '#3b82f6',
-    handle: styles.getPropertyValue('--canvas-handle').trim() || '#3b82f6',
-    handleFill: styles.getPropertyValue('--canvas-handle-fill').trim() || '#ffffff',
+    sketch: styles.getPropertyValue("--canvas-sketch").trim() || "#6b7280",
+    selected: styles.getPropertyValue("--canvas-selected").trim() || "#3b82f6",
+    selectedBg:
+      styles.getPropertyValue("--canvas-selected-bg").trim() ||
+      "rgba(59, 130, 246, 0.08)",
+    hover: styles.getPropertyValue("--canvas-hover").trim() || "#4b5563",
+    tagged: styles.getPropertyValue("--canvas-tagged").trim() || "#10b981",
+    group: styles.getPropertyValue("--canvas-group").trim() || "#8b5cf6",
+    marqueeFill:
+      styles.getPropertyValue("--canvas-marquee-fill").trim() ||
+      "rgba(59, 130, 246, 0.1)",
+    marqueeStroke:
+      styles.getPropertyValue("--canvas-marquee-stroke").trim() || "#3b82f6",
+    handle: styles.getPropertyValue("--canvas-handle").trim() || "#3b82f6",
+    handleFill:
+      styles.getPropertyValue("--canvas-handle-fill").trim() || "#ffffff",
   };
 }
 
@@ -65,13 +90,13 @@ export function Canvas() {
     isOpen: boolean;
     title: string;
     message: string;
-    variant: 'danger' | 'warning' | 'default';
+    variant: "danger" | "warning" | "default";
     onConfirm: () => void;
   }>({
     isOpen: false,
-    title: '',
-    message: '',
-    variant: 'default',
+    title: "",
+    message: "",
+    variant: "default",
     onConfirm: () => {},
   });
 
@@ -79,7 +104,7 @@ export function Canvas() {
     title: string,
     message: string,
     onConfirm: () => void,
-    variant: 'danger' | 'warning' | 'default' = 'danger'
+    variant: "danger" | "warning" | "default" = "danger",
   ) => {
     setConfirmDialog({
       isOpen: true,
@@ -91,7 +116,7 @@ export function Canvas() {
   };
 
   const closeConfirmDialog = () => {
-    setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+    setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
   };
 
   // Constants for sketch rendering and interaction
@@ -103,14 +128,16 @@ export function Canvas() {
   const MIN_ELEMENT_SIZE = 20;
 
   // Generate unique IDs (using substring instead of deprecated substr)
-  const generateId = () => `el_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-  const generateFrameId = () => `frame_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+  const generateId = () =>
+    `el_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+  const generateFrameId = () =>
+    `frame_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
   // Initialize with default frame
   const defaultFrame: Frame = {
     id: generateFrameId(),
-    name: 'Page 1',
-    type: 'page',
+    name: "Page 1",
+    type: "page",
     elements: [],
     createdAt: new Date().toISOString(),
   };
@@ -120,28 +147,38 @@ export function Canvas() {
   const [activeFrameId, setActiveFrameId] = useState<string>(defaultFrame.id);
 
   // Computed: Get active frame and its elements
-  const activeFrame = frames.find(f => f.id === activeFrameId);
+  const activeFrame = frames.find((f) => f.id === activeFrameId);
   const elements = activeFrame?.elements || [];
 
   // Wrapper to update active frame's elements
-  const setElements = (newElements: CanvasElement[] | ((prev: CanvasElement[]) => CanvasElement[])) => {
-    const elementsArray = typeof newElements === 'function'
-      ? newElements(elements)
-      : newElements;
+  const setElements = (
+    newElements: CanvasElement[] | ((prev: CanvasElement[]) => CanvasElement[]),
+  ) => {
+    const elementsArray =
+      typeof newElements === "function" ? newElements(elements) : newElements;
 
-    setFrames(frames.map(frame =>
-      frame.id === activeFrameId
-        ? { ...frame, elements: elementsArray }
-        : frame
-    ));
+    setFrames(
+      frames.map((frame) =>
+        frame.id === activeFrameId
+          ? { ...frame, elements: elementsArray }
+          : frame,
+      ),
+    );
   };
 
   // Tool and interaction state
-  const [currentTool, setCurrentTool] = useState<Tool>('select');
-  const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
+  const [currentTool, setCurrentTool] = useState<Tool>("select");
+  const [selectedElementId, setSelectedElementId] = useState<string | null>(
+    null,
+  );
+  const [hoveredElementId, setHoveredElementId] = useState<string | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null);
-  const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
+  const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(
+    null,
+  );
+  const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(
+    null,
+  );
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
 
   // Resize snapshot: captures initial element bounds and pointer origin at resize start.
@@ -150,7 +187,12 @@ export function Canvas() {
   const [resizeSnapshot, setResizeSnapshot] = useState<{
     initialBounds: { x: number; y: number; width: number; height: number };
     pointerOrigin: { x: number; y: number };
-    arrowEndpoints?: { startX: number; startY: number; endX: number; endY: number };
+    arrowEndpoints?: {
+      startX: number;
+      startY: number;
+      endX: number;
+      endY: number;
+    };
   } | null>(null);
 
   // Component grouping state
@@ -161,15 +203,17 @@ export function Canvas() {
   const [elementGroups, setElementGroups] = useState<ElementGroup[]>([]);
 
   // Multi-selection state: holds IDs of all currently selected elements
-  const [selectedElementIds, setSelectedElementIds] = useState<Set<string>>(new Set());
+  const [selectedElementIds, setSelectedElementIds] = useState<Set<string>>(
+    new Set(),
+  );
 
   // Text editing state: tracks inline editing of text elements
   // - editingElementId: which text element is currently being edited (null = not editing)
   // - editingText: current text value during editing
   // - originalText: text value before editing started (for cancel/escape)
   const [editingElementId, setEditingElementId] = useState<string | null>(null);
-  const [editingText, setEditingText] = useState('');
-  const [originalText, setOriginalText] = useState('');
+  const [editingText, setEditingText] = useState("");
+  const [originalText, setOriginalText] = useState("");
   const textInputRef = useRef<HTMLTextAreaElement>(null);
 
   // Track if current selection was made by clicking (for Backspace delete behavior)
@@ -182,8 +226,13 @@ export function Canvas() {
   // - marqueeStart: starting corner of the selection rectangle
   // - marqueeEnd: current corner of the selection rectangle (during drag)
   const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
-  const [marqueeStart, setMarqueeStart] = useState<{ x: number; y: number } | null>(null);
-  const [marqueeEnd, setMarqueeEnd] = useState<{ x: number; y: number } | null>(null);
+  const [marqueeStart, setMarqueeStart] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [marqueeEnd, setMarqueeEnd] = useState<{ x: number; y: number } | null>(
+    null,
+  );
 
   // Persistence: track if initial load has completed
   const hasLoadedRef = useRef(false);
@@ -201,13 +250,13 @@ export function Canvas() {
     updateTheme();
 
     // Listen for system color scheme changes
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    mediaQuery.addEventListener('change', updateTheme);
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    mediaQuery.addEventListener("change", updateTheme);
 
     // Listen for class changes on document element (for manual toggle)
     const observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
-        if (mutation.attributeName === 'class') {
+        if (mutation.attributeName === "class") {
           updateTheme();
           break;
         }
@@ -216,7 +265,7 @@ export function Canvas() {
     observer.observe(document.documentElement, { attributes: true });
 
     return () => {
-      mediaQuery.removeEventListener('change', updateTheme);
+      mediaQuery.removeEventListener("change", updateTheme);
       observer.disconnect();
     };
   }, []);
@@ -230,8 +279,8 @@ export function Canvas() {
     };
 
     updateRect();
-    window.addEventListener('resize', updateRect);
-    return () => window.removeEventListener('resize', updateRect);
+    window.addEventListener("resize", updateRect);
+    return () => window.removeEventListener("resize", updateRect);
   }, []);
 
   // Load workspace from localStorage on mount
@@ -245,8 +294,12 @@ export function Canvas() {
       setComponentGroups(savedState.componentGroups);
       setElementGroups(savedState.elementGroups || []);
       // Restore active frame, or fall back to first frame if saved frame no longer exists
-      const frameExists = savedState.frames.some(f => f.id === savedState.activeFrameId);
-      setActiveFrameId(frameExists ? savedState.activeFrameId : savedState.frames[0].id);
+      const frameExists = savedState.frames.some(
+        (f) => f.id === savedState.activeFrameId,
+      );
+      setActiveFrameId(
+        frameExists ? savedState.activeFrameId : savedState.frames[0].id,
+      );
     }
   }, []);
 
@@ -269,41 +322,55 @@ export function Canvas() {
   }, [frames, componentGroups, elementGroups, activeFrameId]);
 
   // Helper function to get component group elements (defined before redraw)
-  const getGroupElements = useCallback((groupId: string): CanvasElement[] => {
-    return elements.filter(el => el.groupId === groupId);
-  }, [elements]);
+  const getGroupElements = useCallback(
+    (groupId: string): CanvasElement[] => {
+      return elements.filter((el) => el.groupId === groupId);
+    },
+    [elements],
+  );
 
   // Helper function to get user-created element group elements
-  const getElementGroupElements = useCallback((elementGroupId: string): CanvasElement[] => {
-    return elements.filter(el => el.elementGroupId === elementGroupId);
-  }, [elements]);
+  const getElementGroupElements = useCallback(
+    (elementGroupId: string): CanvasElement[] => {
+      return elements.filter((el) => el.elementGroupId === elementGroupId);
+    },
+    [elements],
+  );
 
   // Helper function to find element group by element ID
-  const findElementGroupByElementId = useCallback((elementId: string): ElementGroup | undefined => {
-    const element = elements.find(el => el.id === elementId);
-    if (!element?.elementGroupId) return undefined;
-    return elementGroups.find(g => g.id === element.elementGroupId);
-  }, [elements, elementGroups]);
+  const findElementGroupByElementId = useCallback(
+    (elementId: string): ElementGroup | undefined => {
+      const element = elements.find((el) => el.id === elementId);
+      if (!element?.elementGroupId) return undefined;
+      return elementGroups.find((g) => g.id === element.elementGroupId);
+    },
+    [elements, elementGroups],
+  );
 
   // Helper function to get all element IDs in a group (for selection expansion)
-  const getGroupedElementIds = useCallback((elementId: string): string[] => {
-    const element = elements.find(el => el.id === elementId);
-    if (!element) return [elementId];
+  const getGroupedElementIds = useCallback(
+    (elementId: string): string[] => {
+      const element = elements.find((el) => el.id === elementId);
+      if (!element) return [elementId];
 
-    // Check user-created element group first
-    if (element.elementGroupId) {
-      const group = elementGroups.find(g => g.id === element.elementGroupId);
-      if (group) return group.elementIds;
-    }
+      // Check user-created element group first
+      if (element.elementGroupId) {
+        const group = elementGroups.find(
+          (g) => g.id === element.elementGroupId,
+        );
+        if (group) return group.elementIds;
+      }
 
-    // Check component group
-    if (element.groupId) {
-      const group = componentGroups.find(g => g.id === element.groupId);
-      if (group) return group.elementIds;
-    }
+      // Check component group
+      if (element.groupId) {
+        const group = componentGroups.find((g) => g.id === element.groupId);
+        if (group) return group.elementIds;
+      }
 
-    return [elementId];
-  }, [elements, elementGroups, componentGroups]);
+      return [elementId];
+    },
+    [elements, elementGroups, componentGroups],
+  );
 
   // Helper function to get normalized marquee bounds (handles any drag direction)
   const getMarqueeBounds = useCallback(() => {
@@ -318,21 +385,32 @@ export function Canvas() {
 
   // Helper function to check if an element intersects with a rectangle (marquee)
   // Uses bounding box intersection - element is selected if any part overlaps
-  const elementIntersectsRect = useCallback((element: CanvasElement, rect: { x: number; y: number; width: number; height: number }): boolean => {
-    // For arrows and lines, use their bounding box
-    const elLeft = element.x;
-    const elRight = element.x + element.width;
-    const elTop = element.y;
-    const elBottom = element.y + element.height;
+  const elementIntersectsRect = useCallback(
+    (
+      element: CanvasElement,
+      rect: { x: number; y: number; width: number; height: number },
+    ): boolean => {
+      // For arrows and lines, use their bounding box
+      const elLeft = element.x;
+      const elRight = element.x + element.width;
+      const elTop = element.y;
+      const elBottom = element.y + element.height;
 
-    const rectLeft = rect.x;
-    const rectRight = rect.x + rect.width;
-    const rectTop = rect.y;
-    const rectBottom = rect.y + rect.height;
+      const rectLeft = rect.x;
+      const rectRight = rect.x + rect.width;
+      const rectTop = rect.y;
+      const rectBottom = rect.y + rect.height;
 
-    // Check for intersection (not fully contained, just overlap)
-    return !(elRight < rectLeft || elLeft > rectRight || elBottom < rectTop || elTop > rectBottom);
-  }, []);
+      // Check for intersection (not fully contained, just overlap)
+      return !(
+        elRight < rectLeft ||
+        elLeft > rectRight ||
+        elBottom < rectTop ||
+        elTop > rectBottom
+      );
+    },
+    [],
+  );
 
   // Get all elements that intersect with the current marquee
   const getElementsInMarquee = useCallback((): string[] => {
@@ -341,13 +419,13 @@ export function Canvas() {
 
     const intersectingIds: string[] = [];
 
-    elements.forEach(el => {
+    elements.forEach((el) => {
       if (elementIntersectsRect(el, bounds)) {
         // If element is in a group, add all group members
         if (el.elementGroupId) {
-          const group = elementGroups.find(g => g.id === el.elementGroupId);
+          const group = elementGroups.find((g) => g.id === el.elementGroupId);
           if (group) {
-            group.elementIds.forEach(id => {
+            group.elementIds.forEach((id) => {
               if (!intersectingIds.includes(id)) {
                 intersectingIds.push(id);
               }
@@ -355,9 +433,9 @@ export function Canvas() {
           }
         } else if (el.groupId) {
           // Component group
-          const group = componentGroups.find(g => g.id === el.groupId);
+          const group = componentGroups.find((g) => g.id === el.groupId);
           if (group) {
-            group.elementIds.forEach(id => {
+            group.elementIds.forEach((id) => {
               if (!intersectingIds.includes(id)) {
                 intersectingIds.push(id);
               }
@@ -372,16 +450,33 @@ export function Canvas() {
     });
 
     return intersectingIds;
-  }, [elements, elementGroups, componentGroups, getMarqueeBounds, elementIntersectsRect]);
+  }, [
+    elements,
+    elementGroups,
+    componentGroups,
+    getMarqueeBounds,
+    elementIntersectsRect,
+  ]);
 
   // Sketch-style rendering helpers
-  const getRandomOffset = (base: number, seed: number, amplitude: number = SKETCH_AMPLITUDE): number => {
+  const getRandomOffset = (
+    base: number,
+    seed: number,
+    amplitude: number = SKETCH_AMPLITUDE,
+  ): number => {
     // Use seed for deterministic randomness based on position
     const pseudo = Math.sin(seed * 12.9898 + base * 78.233) * 43758.5453;
     return (pseudo - Math.floor(pseudo)) * amplitude - amplitude / 2;
   };
 
-  const drawSketchLine = (ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, seed: number = 0) => {
+  const drawSketchLine = (
+    ctx: CanvasRenderingContext2D,
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    seed: number = 0,
+  ) => {
     const distance = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
 
     // Safety: Skip drawing degenerate (zero-length) lines
@@ -414,15 +509,29 @@ export function Canvas() {
     ctx.stroke();
   };
 
-  const drawSketchRect = (ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, seed: number = 0) => {
+  const drawSketchRect = (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    seed: number = 0,
+  ) => {
     // Draw four sides with slight variations
-    drawSketchLine(ctx, x, y, x + width, y, seed);           // Top
+    drawSketchLine(ctx, x, y, x + width, y, seed); // Top
     drawSketchLine(ctx, x + width, y, x + width, y + height, seed + 1); // Right
     drawSketchLine(ctx, x + width, y + height, x, y + height, seed + 2); // Bottom
-    drawSketchLine(ctx, x, y + height, x, y, seed + 3);      // Left
+    drawSketchLine(ctx, x, y + height, x, y, seed + 3); // Left
   };
 
-  const drawSketchEllipse = (ctx: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, seed: number = 0) => {
+  const drawSketchEllipse = (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    seed: number = 0,
+  ) => {
     // Draw ellipse with sketch-style wobble
     const centerX = x + width / 2;
     const centerY = y + height / 2;
@@ -453,18 +562,22 @@ export function Canvas() {
 
   // Wrap text to fit within a given width, returning an array of lines
   // Handles both explicit newlines and word-wrapping
-  const wrapText = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] => {
-    const paragraphs = text.split('\n');
+  const wrapText = (
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    maxWidth: number,
+  ): string[] => {
+    const paragraphs = text.split("\n");
     const lines: string[] = [];
 
     for (const paragraph of paragraphs) {
-      if (paragraph === '') {
-        lines.push('');
+      if (paragraph === "") {
+        lines.push("");
         continue;
       }
 
-      const words = paragraph.split(' ');
-      let currentLine = '';
+      const words = paragraph.split(" ");
+      let currentLine = "";
 
       for (const word of words) {
         const testLine = currentLine ? `${currentLine} ${word}` : word;
@@ -483,7 +596,7 @@ export function Canvas() {
       }
     }
 
-    return lines.length > 0 ? lines : [''];
+    return lines.length > 0 ? lines : [""];
   };
 
   // Draw all elements on canvas
@@ -491,7 +604,7 @@ export function Canvas() {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     // Clear canvas
@@ -503,12 +616,13 @@ export function Canvas() {
       ctx.strokeStyle = canvasTheme.sketch;
       ctx.fillStyle = canvasTheme.sketch;
       ctx.lineWidth = 1.5;
-      ctx.font = '16px sans-serif';
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
+      ctx.font = "16px sans-serif";
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
 
       // Highlight selected elements with theme selected color (single or multi-select)
-      const isSelected = element.id === selectedElementId || selectedElementIds.has(element.id);
+      const isSelected =
+        element.id === selectedElementId || selectedElementIds.has(element.id);
       if (isSelected) {
         ctx.strokeStyle = canvasTheme.selected;
         ctx.fillStyle = canvasTheme.selected;
@@ -521,38 +635,65 @@ export function Canvas() {
       }
 
       // Use element ID as seed for deterministic randomness
-      const seed = parseInt(element.id.split('_')[1]) || 0;
+      const seed = parseInt(element.id.split("_")[1]) || 0;
 
-      if (element.type === 'rectangle') {
-        drawSketchRect(ctx, element.x, element.y, element.width, element.height, seed);
-      } else if (element.type === 'ellipse') {
-        drawSketchEllipse(ctx, element.x, element.y, element.width, element.height, seed);
-      } else if (element.type === 'text') {
+      if (element.type === "rectangle") {
+        drawSketchRect(
+          ctx,
+          element.x,
+          element.y,
+          element.width,
+          element.height,
+          seed,
+        );
+      } else if (element.type === "ellipse") {
+        drawSketchEllipse(
+          ctx,
+          element.x,
+          element.y,
+          element.width,
+          element.height,
+          seed,
+        );
+      } else if (element.type === "text") {
         const textEl = element as TextElement;
         const padding = 4;
 
+        // Determine visual state for text element
+        const isHovered =
+          element.id === hoveredElementId && currentTool === "select";
+        const isBeingEdited = element.id === editingElementId;
+
         // Get typography properties with defaults
         const fontSize = textEl.fontSize || 16;
-        const fontWeight = textEl.fontWeight || 'normal';
-        const fontStyle = textEl.fontStyle || 'normal';
-        const textAlign = textEl.textAlign || 'left';
+        const fontWeight = textEl.fontWeight || "normal";
+        const fontStyle = textEl.fontStyle || "normal";
+        const textAlign = textEl.textAlign || "left";
         const lineHeight = textEl.lineHeight || Math.round(fontSize * 1.5);
 
         // Build font string: [style] [weight] size family
-        const fontString = `${fontStyle === 'italic' ? 'italic ' : ''}${fontWeight === 'bold' ? 'bold ' : ''}${fontSize}px sans-serif`;
+        const fontString = `${fontStyle === "italic" ? "italic " : ""}${fontWeight === "bold" ? "bold " : ""}${fontSize}px sans-serif`;
         ctx.font = fontString;
         ctx.textAlign = textAlign;
 
         const maxWidth = element.width - padding * 2;
-        const lines = wrapText(ctx, textEl.content || 'Text', maxWidth);
+        const lines = wrapText(ctx, textEl.content || "Text", maxWidth);
+
+        // Draw subtle background for selected text elements (not when editing)
+        if (isSelected && !isBeingEdited) {
+          ctx.fillStyle = canvasTheme.selectedBg;
+          ctx.fillRect(element.x, element.y, element.width, element.height);
+          // Restore fill style for text
+          ctx.fillStyle = canvasTheme.selected;
+        }
 
         // Calculate x position based on alignment
         let textX: number;
         switch (textAlign) {
-          case 'center':
+          case "center":
             textX = element.x + element.width / 2;
             break;
-          case 'right':
+          case "right":
             textX = element.x + element.width - padding;
             break;
           default: // 'left'
@@ -565,44 +706,122 @@ export function Canvas() {
         });
 
         // Reset text align for other elements
-        ctx.textAlign = 'left';
+        ctx.textAlign = "left";
 
-        // Draw sketch-style bounding box
-        drawSketchRect(ctx, element.x, element.y, element.width, element.height, seed);
-      } else if (element.type === 'arrow') {
+        // Visual state handling for text border
+        if (isBeingEdited) {
+          // When editing, don't draw the canvas border (textarea overlay handles it)
+          // Skip drawing sketch rect entirely
+        } else if (isSelected) {
+          // Selected: use selected color with slightly thicker line for prominence
+          ctx.strokeStyle = canvasTheme.selected;
+          ctx.lineWidth = 2;
+          drawSketchRect(
+            ctx,
+            element.x,
+            element.y,
+            element.width,
+            element.height,
+            seed,
+          );
+          ctx.lineWidth = 1.5; // Reset line width
+        } else if (isHovered) {
+          // Hovered: subtle darker gray to indicate interactivity
+          ctx.strokeStyle = canvasTheme.hover;
+          ctx.lineWidth = 1.5;
+          drawSketchRect(
+            ctx,
+            element.x,
+            element.y,
+            element.width,
+            element.height,
+            seed,
+          );
+        } else {
+          // Default: standard sketch-style border with lighter opacity for subtlety
+          ctx.save();
+          ctx.globalAlpha = 0.7; // Make not-selected text borders more subtle
+          drawSketchRect(
+            ctx,
+            element.x,
+            element.y,
+            element.width,
+            element.height,
+            seed,
+          );
+          ctx.restore();
+        }
+      } else if (element.type === "arrow") {
         const arrowEl = element as ArrowElement;
         // Draw sketch-style arrow line
-        drawSketchLine(ctx, arrowEl.startX, arrowEl.startY, arrowEl.endX, arrowEl.endY, seed);
+        drawSketchLine(
+          ctx,
+          arrowEl.startX,
+          arrowEl.startY,
+          arrowEl.endX,
+          arrowEl.endY,
+          seed,
+        );
 
         // Draw sketch-style arrowhead
-        const angle = Math.atan2(arrowEl.endY - arrowEl.startY, arrowEl.endX - arrowEl.startX);
+        const angle = Math.atan2(
+          arrowEl.endY - arrowEl.startY,
+          arrowEl.endX - arrowEl.startX,
+        );
 
-        const head1X = arrowEl.endX - ARROW_HEAD_LENGTH * Math.cos(angle - Math.PI / 6);
-        const head1Y = arrowEl.endY - ARROW_HEAD_LENGTH * Math.sin(angle - Math.PI / 6);
-        const head2X = arrowEl.endX - ARROW_HEAD_LENGTH * Math.cos(angle + Math.PI / 6);
-        const head2Y = arrowEl.endY - ARROW_HEAD_LENGTH * Math.sin(angle + Math.PI / 6);
+        const head1X =
+          arrowEl.endX - ARROW_HEAD_LENGTH * Math.cos(angle - Math.PI / 6);
+        const head1Y =
+          arrowEl.endY - ARROW_HEAD_LENGTH * Math.sin(angle - Math.PI / 6);
+        const head2X =
+          arrowEl.endX - ARROW_HEAD_LENGTH * Math.cos(angle + Math.PI / 6);
+        const head2Y =
+          arrowEl.endY - ARROW_HEAD_LENGTH * Math.sin(angle + Math.PI / 6);
 
-        drawSketchLine(ctx, arrowEl.endX, arrowEl.endY, head1X, head1Y, seed + 10);
-        drawSketchLine(ctx, arrowEl.endX, arrowEl.endY, head2X, head2Y, seed + 11);
-      } else if (element.type === 'line') {
+        drawSketchLine(
+          ctx,
+          arrowEl.endX,
+          arrowEl.endY,
+          head1X,
+          head1Y,
+          seed + 10,
+        );
+        drawSketchLine(
+          ctx,
+          arrowEl.endX,
+          arrowEl.endY,
+          head2X,
+          head2Y,
+          seed + 11,
+        );
+      } else if (element.type === "line") {
         // Draw sketch-style line (like arrow but without arrowhead)
         const lineEl = element as LineElement;
-        drawSketchLine(ctx, lineEl.startX, lineEl.startY, lineEl.endX, lineEl.endY, seed);
+        drawSketchLine(
+          ctx,
+          lineEl.startX,
+          lineEl.startY,
+          lineEl.endX,
+          lineEl.endY,
+          seed,
+        );
       }
 
       // Draw resize handles for selected element (only if not grouped and single selection)
       const isInGroup = element.groupId || element.elementGroupId;
-      const isSingleSelection = selectedElementIds.size === 0 || (selectedElementIds.size === 1 && selectedElementIds.has(element.id));
+      const isSingleSelection =
+        selectedElementIds.size === 0 ||
+        (selectedElementIds.size === 1 && selectedElementIds.has(element.id));
       if (element.id === selectedElementId && !isInGroup && isSingleSelection) {
         ctx.fillStyle = canvasTheme.handle;
         ctx.strokeStyle = canvasTheme.handle;
 
-        if (element.type === 'arrow' || element.type === 'line') {
+        if (element.type === "arrow" || element.type === "line") {
           // Endpoint handles for arrows and lines: start and end points for length control
           const lineEl = element as ArrowElement | LineElement;
           const endpointHandles = [
             { x: lineEl.startX, y: lineEl.startY }, // Start point
-            { x: lineEl.endX, y: lineEl.endY },     // End point
+            { x: lineEl.endX, y: lineEl.endY }, // End point
           ];
 
           endpointHandles.forEach((handle) => {
@@ -614,14 +833,29 @@ export function Canvas() {
           // Corner handles for rectangles, ellipses, and text
           const handles = [
             { x: element.x - HANDLE_SIZE / 2, y: element.y - HANDLE_SIZE / 2 }, // NW
-            { x: element.x + element.width - HANDLE_SIZE / 2, y: element.y - HANDLE_SIZE / 2 }, // NE
-            { x: element.x - HANDLE_SIZE / 2, y: element.y + element.height - HANDLE_SIZE / 2 }, // SW
-            { x: element.x + element.width - HANDLE_SIZE / 2, y: element.y + element.height - HANDLE_SIZE / 2 }, // SE
+            {
+              x: element.x + element.width - HANDLE_SIZE / 2,
+              y: element.y - HANDLE_SIZE / 2,
+            }, // NE
+            {
+              x: element.x - HANDLE_SIZE / 2,
+              y: element.y + element.height - HANDLE_SIZE / 2,
+            }, // SW
+            {
+              x: element.x + element.width - HANDLE_SIZE / 2,
+              y: element.y + element.height - HANDLE_SIZE / 2,
+            }, // SE
           ];
 
           handles.forEach((handle) => {
             ctx.beginPath();
-            ctx.arc(handle.x + HANDLE_SIZE / 2, handle.y + HANDLE_SIZE / 2, HANDLE_SIZE / 2, 0, Math.PI * 2);
+            ctx.arc(
+              handle.x + HANDLE_SIZE / 2,
+              handle.y + HANDLE_SIZE / 2,
+              HANDLE_SIZE / 2,
+              0,
+              Math.PI * 2,
+            );
             ctx.fill();
           });
         }
@@ -629,16 +863,18 @@ export function Canvas() {
     });
 
     // Draw component group selection outlines
-    componentGroups.forEach(group => {
+    componentGroups.forEach((group) => {
       if (group.id === selectedGroupId) {
         const groupElements = getGroupElements(group.id);
         if (groupElements.length === 0) return;
 
         // Calculate bounding box
-        let minX = Infinity, minY = Infinity;
-        let maxX = -Infinity, maxY = -Infinity;
+        let minX = Infinity,
+          minY = Infinity;
+        let maxX = -Infinity,
+          maxY = -Infinity;
 
-        groupElements.forEach(el => {
+        groupElements.forEach((el) => {
           minX = Math.min(minX, el.x);
           minY = Math.min(minY, el.y);
           maxX = Math.max(maxX, el.x + el.width);
@@ -646,35 +882,44 @@ export function Canvas() {
         });
 
         // Draw group selection box with sketch style
-        ctx.strokeStyle = canvasTheme.group;  // Purple for component groups
+        ctx.strokeStyle = canvasTheme.group; // Purple for component groups
         ctx.lineWidth = 2;
         ctx.setLineDash([8, 4]); // Dashed for group outline
-        const groupSeed = parseInt(group.id.split('_')[1]) || 0;
-        drawSketchRect(ctx, minX - 5, minY - 5, maxX - minX + 10, maxY - minY + 10, groupSeed);
+        const groupSeed = parseInt(group.id.split("_")[1]) || 0;
+        drawSketchRect(
+          ctx,
+          minX - 5,
+          minY - 5,
+          maxX - minX + 10,
+          maxY - minY + 10,
+          groupSeed,
+        );
         ctx.setLineDash([]);
 
         // Draw group label
         ctx.fillStyle = canvasTheme.group;
-        ctx.font = '12px sans-serif';
+        ctx.font = "12px sans-serif";
         const label = `Component: ${group.componentType}`;
         ctx.fillText(label, minX, minY - 10);
       }
     });
 
     // Draw user-created element group selection outlines
-    elementGroups.forEach(group => {
+    elementGroups.forEach((group) => {
       // Check if any element in this group is selected
       const groupElements = getElementGroupElements(group.id);
-      const hasSelectedElement = groupElements.some(el =>
-        el.id === selectedElementId || selectedElementIds.has(el.id)
+      const hasSelectedElement = groupElements.some(
+        (el) => el.id === selectedElementId || selectedElementIds.has(el.id),
       );
 
       if (hasSelectedElement && groupElements.length > 0) {
         // Calculate bounding box
-        let minX = Infinity, minY = Infinity;
-        let maxX = -Infinity, maxY = -Infinity;
+        let minX = Infinity,
+          minY = Infinity;
+        let maxX = -Infinity,
+          maxY = -Infinity;
 
-        groupElements.forEach(el => {
+        groupElements.forEach((el) => {
           minX = Math.min(minX, el.x);
           minY = Math.min(minY, el.y);
           maxX = Math.max(maxX, el.x + el.width);
@@ -682,33 +927,46 @@ export function Canvas() {
         });
 
         // Draw group selection box with sketch style
-        ctx.strokeStyle = canvasTheme.selected;  // Blue for user groups
+        ctx.strokeStyle = canvasTheme.selected; // Blue for user groups
         ctx.lineWidth = 2;
         ctx.setLineDash([8, 4]); // Dashed for group outline
-        const groupSeed = parseInt(group.id.split('_')[1]) || 0;
-        drawSketchRect(ctx, minX - 5, minY - 5, maxX - minX + 10, maxY - minY + 10, groupSeed);
+        const groupSeed = parseInt(group.id.split("_")[1]) || 0;
+        drawSketchRect(
+          ctx,
+          minX - 5,
+          minY - 5,
+          maxX - minX + 10,
+          maxY - minY + 10,
+          groupSeed,
+        );
         ctx.setLineDash([]);
 
         // Draw group label
         ctx.fillStyle = canvasTheme.selected;
-        ctx.font = '12px sans-serif';
-        ctx.fillText('Group', minX, minY - 10);
+        ctx.font = "12px sans-serif";
+        ctx.fillText("Group", minX, minY - 10);
       }
     });
 
     // Draw multi-selection bounding box (when multiple ungrouped elements are selected)
     if (selectedElementIds.size > 1) {
-      const selectedElements = elements.filter(el => selectedElementIds.has(el.id));
+      const selectedElements = elements.filter((el) =>
+        selectedElementIds.has(el.id),
+      );
       // Only draw if we have multiple elements and they're not all in the same group
-      const allInSameGroup = selectedElements.every(el =>
-        el.elementGroupId && el.elementGroupId === selectedElements[0]?.elementGroupId
+      const allInSameGroup = selectedElements.every(
+        (el) =>
+          el.elementGroupId &&
+          el.elementGroupId === selectedElements[0]?.elementGroupId,
       );
 
       if (!allInSameGroup && selectedElements.length > 0) {
-        let minX = Infinity, minY = Infinity;
-        let maxX = -Infinity, maxY = -Infinity;
+        let minX = Infinity,
+          minY = Infinity;
+        let maxX = -Infinity,
+          maxY = -Infinity;
 
-        selectedElements.forEach(el => {
+        selectedElements.forEach((el) => {
           minX = Math.min(minX, el.x);
           minY = Math.min(minY, el.y);
           maxX = Math.max(maxX, el.x + el.width);
@@ -743,26 +1001,56 @@ export function Canvas() {
       ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
       ctx.setLineDash([]);
     }
-  }, [elements, selectedElementId, selectedElementIds, componentGroups, selectedGroupId, elementGroups, getGroupElements, getElementGroupElements, isMarqueeSelecting, marqueeStart, marqueeEnd, canvasTheme]);
+  }, [
+    elements,
+    selectedElementId,
+    selectedElementIds,
+    hoveredElementId,
+    editingElementId,
+    currentTool,
+    componentGroups,
+    selectedGroupId,
+    elementGroups,
+    getGroupElements,
+    getElementGroupElements,
+    isMarqueeSelecting,
+    marqueeStart,
+    marqueeEnd,
+    canvasTheme,
+  ]);
 
   useEffect(() => {
     redraw();
   }, [redraw]);
 
   // Find element at point
-  const findElementAtPoint = (x: number, y: number): { element: CanvasElement | null; groupId?: string } => {
+  const findElementAtPoint = (
+    x: number,
+    y: number,
+  ): { element: CanvasElement | null; groupId?: string } => {
     // Search in reverse order (top element first)
     for (let i = elements.length - 1; i >= 0; i--) {
       const el = elements[i];
       let isHit = false;
 
-      if (el.type === 'arrow' || el.type === 'line') {
+      if (el.type === "arrow" || el.type === "line") {
         // Point-to-line distance check for arrows and lines
         const lineEl = el as ArrowElement | LineElement;
-        const dist = pointToLineDistance(x, y, lineEl.startX, lineEl.startY, lineEl.endX, lineEl.endY);
+        const dist = pointToLineDistance(
+          x,
+          y,
+          lineEl.startX,
+          lineEl.startY,
+          lineEl.endX,
+          lineEl.endY,
+        );
         isHit = dist < 10;
       } else {
-        isHit = x >= el.x && x <= el.x + el.width && y >= el.y && y <= el.y + el.height;
+        isHit =
+          x >= el.x &&
+          x <= el.x + el.width &&
+          y >= el.y &&
+          y <= el.y + el.height;
       }
 
       if (isHit) {
@@ -776,7 +1064,14 @@ export function Canvas() {
   };
 
   // Helper function for arrow hit detection
-  const pointToLineDistance = (px: number, py: number, x1: number, y1: number, x2: number, y2: number) => {
+  const pointToLineDistance = (
+    px: number,
+    py: number,
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+  ) => {
     const A = px - x1;
     const B = py - y1;
     const C = x2 - x1;
@@ -803,18 +1098,24 @@ export function Canvas() {
 
   // Check if click is on a resize handle.
   // Returns handle ID: 'nw'|'ne'|'sw'|'se' for rectangles/text, 'start'|'end' for arrows/lines.
-  const getResizeHandle = (x: number, y: number, element: CanvasElement): string | null => {
-    if (element.type === 'arrow' || element.type === 'line') {
+  const getResizeHandle = (
+    x: number,
+    y: number,
+    element: CanvasElement,
+  ): string | null => {
+    if (element.type === "arrow" || element.type === "line") {
       // Endpoint handles for arrows and lines
       const lineEl = element as ArrowElement | LineElement;
       const endpointHandles = {
-        'start': { x: lineEl.startX, y: lineEl.startY },
-        'end': { x: lineEl.endX, y: lineEl.endY },
+        start: { x: lineEl.startX, y: lineEl.startY },
+        end: { x: lineEl.endX, y: lineEl.endY },
       };
 
       for (const [key, pos] of Object.entries(endpointHandles)) {
-        if (Math.abs(x - pos.x) <= HANDLE_SIZE + HANDLE_TOLERANCE &&
-            Math.abs(y - pos.y) <= HANDLE_SIZE + HANDLE_TOLERANCE) {
+        if (
+          Math.abs(x - pos.x) <= HANDLE_SIZE + HANDLE_TOLERANCE &&
+          Math.abs(y - pos.y) <= HANDLE_SIZE + HANDLE_TOLERANCE
+        ) {
           return key;
         }
       }
@@ -823,15 +1124,17 @@ export function Canvas() {
 
     // Corner handles for rectangles and text
     const handles = {
-      'nw': { x: element.x, y: element.y },
-      'ne': { x: element.x + element.width, y: element.y },
-      'sw': { x: element.x, y: element.y + element.height },
-      'se': { x: element.x + element.width, y: element.y + element.height },
+      nw: { x: element.x, y: element.y },
+      ne: { x: element.x + element.width, y: element.y },
+      sw: { x: element.x, y: element.y + element.height },
+      se: { x: element.x + element.width, y: element.y + element.height },
     };
 
     for (const [key, pos] of Object.entries(handles)) {
-      if (Math.abs(x - pos.x) <= HANDLE_SIZE + HANDLE_TOLERANCE &&
-          Math.abs(y - pos.y) <= HANDLE_SIZE + HANDLE_TOLERANCE) {
+      if (
+        Math.abs(x - pos.x) <= HANDLE_SIZE + HANDLE_TOLERANCE &&
+        Math.abs(y - pos.y) <= HANDLE_SIZE + HANDLE_TOLERANCE
+      ) {
         return key;
       }
     }
@@ -841,55 +1144,69 @@ export function Canvas() {
   // Text editing helpers
   const enterEditMode = (element: TextElement) => {
     setEditingElementId(element.id);
-    setEditingText(element.content || '');
-    setOriginalText(element.content || '');
+    setEditingText(element.content || "");
+    setOriginalText(element.content || "");
     setSelectedByClick(false); // Clear click-selection flag (prevents Backspace delete after editing)
-    // Focus input after React renders it
-    setTimeout(() => textInputRef.current?.focus(), 0);
+    // Focus input after React renders it, then select all text for immediate editing
+    setTimeout(() => {
+      textInputRef.current?.focus();
+      textInputRef.current?.select(); // Auto-select all text for easy replacement
+    }, 0);
   };
 
   const commitTextEdit = () => {
     if (!editingElementId) return;
-    const editingElement = elements.find(el => el.id === editingElementId);
-    if (!editingElement || editingElement.type !== 'text') {
+    const editingElement = elements.find((el) => el.id === editingElementId);
+    if (!editingElement || editingElement.type !== "text") {
       exitEditMode();
       return;
     }
 
     // Update element with new text (or 'Text' if empty to maintain placeholder)
-    const finalText = editingText.trim() || 'Text';
+    const finalText = editingText.trim() || "Text";
 
     // Calculate required height based on line count and element's typography
     const textEl = editingElement as TextElement;
     const fontSize = textEl.fontSize || 16;
     const lineHeight = textEl.lineHeight || Math.round(fontSize * 1.5);
-    const lineCount = finalText.split('\n').length;
-    const requiredHeight = Math.max(editingElement.height, lineCount * lineHeight + 8);
+    const lineCount = finalText.split("\n").length;
+    const requiredHeight = Math.max(
+      editingElement.height,
+      lineCount * lineHeight + 8,
+    );
 
-    setElements(elements.map(el =>
-      el.id === editingElementId && el.type === 'text'
-        ? { ...el, content: finalText, height: requiredHeight } as TextElement
-        : el
-    ));
+    setElements(
+      elements.map((el) =>
+        el.id === editingElementId && el.type === "text"
+          ? ({
+              ...el,
+              content: finalText,
+              height: requiredHeight,
+            } as TextElement)
+          : el,
+      ),
+    );
     exitEditMode();
   };
 
   const cancelTextEdit = () => {
     // Restore original text
     if (editingElementId) {
-      setElements(elements.map(el =>
-        el.id === editingElementId && el.type === 'text'
-          ? { ...el, content: originalText } as TextElement
-          : el
-      ));
+      setElements(
+        elements.map((el) =>
+          el.id === editingElementId && el.type === "text"
+            ? ({ ...el, content: originalText } as TextElement)
+            : el,
+        ),
+      );
     }
     exitEditMode();
   };
 
   const exitEditMode = () => {
     setEditingElementId(null);
-    setEditingText('');
-    setOriginalText('');
+    setEditingText("");
+    setOriginalText("");
   };
 
   // Double-click handler for entering text edit mode
@@ -904,12 +1221,15 @@ export function Canvas() {
     const { element: clickedElement } = findElementAtPoint(x, y);
 
     // Only text elements are editable via double-click
-    if (clickedElement && clickedElement.type === 'text') {
+    if (clickedElement && clickedElement.type === "text") {
       enterEditMode(clickedElement as TextElement);
     }
   };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    // Clear hover state when starting any interaction
+    setHoveredElementId(null);
+
     // If in edit mode, clicking outside the text input commits the edit
     if (editingElementId) {
       commitTextEdit();
@@ -922,7 +1242,7 @@ export function Canvas() {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    if (currentTool === 'select') {
+    if (currentTool === "select") {
       const { element: clickedElement, groupId } = findElementAtPoint(x, y);
 
       if (clickedElement) {
@@ -930,7 +1250,7 @@ export function Canvas() {
 
         // Check if element is part of a user-created element group
         const elementGroup = clickedElement.elementGroupId
-          ? elementGroups.find(g => g.id === clickedElement.elementGroupId)
+          ? elementGroups.find((g) => g.id === clickedElement.elementGroupId)
           : undefined;
 
         // Handle Shift+click for multi-selection
@@ -940,18 +1260,28 @@ export function Canvas() {
             ? elementGroup.elementIds
             : [clickedElement.id];
 
-          setSelectedElementIds(prev => {
+          setSelectedElementIds((prev) => {
             const newSet = new Set(prev);
             // If the clicked element (or any in its group) is already selected, remove them
-            const alreadySelected = idsToToggle.some(id => newSet.has(id));
+            const alreadySelected = idsToToggle.some((id) => newSet.has(id));
             if (alreadySelected) {
-              idsToToggle.forEach(id => newSet.delete(id));
+              idsToToggle.forEach((id) => newSet.delete(id));
             } else {
-              idsToToggle.forEach(id => newSet.add(id));
+              idsToToggle.forEach((id) => newSet.add(id));
             }
             return newSet;
           });
           // Don't change primary selection or start dragging in multi-select mode
+          return;
+        }
+
+        // Single-click-to-edit: If clicking an already-selected text element, enter edit mode
+        if (
+          clickedElement.type === "text" &&
+          selectedElementId === clickedElement.id &&
+          !e.shiftKey
+        ) {
+          enterEditMode(clickedElement as TextElement);
           return;
         }
 
@@ -975,7 +1305,9 @@ export function Canvas() {
 
         // Check if click is on a resize handle (only for non-grouped elements)
         const isInAnyGroup = groupId || clickedElement.elementGroupId;
-        const handle = !isInAnyGroup ? getResizeHandle(x, y, clickedElement) : null;
+        const handle = !isInAnyGroup
+          ? getResizeHandle(x, y, clickedElement)
+          : null;
 
         if (handle) {
           // Enter resize mode: capture snapshot of initial bounds and pointer position.
@@ -991,7 +1323,10 @@ export function Canvas() {
             pointerOrigin: { x, y },
           };
           // For arrows and lines, also capture initial endpoints
-          if (clickedElement.type === 'arrow' || clickedElement.type === 'line') {
+          if (
+            clickedElement.type === "arrow" ||
+            clickedElement.type === "line"
+          ) {
             const lineEl = clickedElement as ArrowElement | LineElement;
             snapshot.arrowEndpoints = {
               startX: lineEl.startX,
@@ -1026,19 +1361,19 @@ export function Canvas() {
       setStartPoint({ x, y });
 
       // Text tool: click-to-place
-      if (currentTool === 'text') {
+      if (currentTool === "text") {
         const newElement: TextElement = {
           id: generateId(),
-          type: 'text',
+          type: "text",
           x,
           y,
           width: 100,
           height: 20,
-          content: 'Text',
+          content: "Text",
         };
         setElements([...elements, newElement]);
         setSelectedElementId(newElement.id);
-        setCurrentTool('select');
+        setCurrentTool("select");
         setIsDrawing(false);
         setStartPoint(null);
       }
@@ -1063,11 +1398,22 @@ export function Canvas() {
       return;
     }
 
+    // Track hover state when in select mode and not actively drawing
+    if (currentTool === "select" && !isDrawing) {
+      const { element: hoveredElement } = findElementAtPoint(x, y);
+      if (hoveredElement) {
+        setHoveredElementId(hoveredElement.id);
+      } else {
+        setHoveredElementId(null);
+      }
+      return;
+    }
+
     // Return early if not in an active interaction
     if (!isDrawing) return;
 
-    if (currentTool === 'select' && selectedElementId) {
-      const element = elements.find(el => el.id === selectedElementId);
+    if (currentTool === "select" && selectedElementId) {
+      const element = elements.find((el) => el.id === selectedElementId);
       if (!element) return;
 
       if (resizeHandle && resizeSnapshot) {
@@ -1075,7 +1421,10 @@ export function Canvas() {
         const dx = x - pointerOrigin.x; // Pointer delta X
         const dy = y - pointerOrigin.y; // Pointer delta Y
 
-        if ((element.type === 'arrow' || element.type === 'line') && arrowEndpoints) {
+        if (
+          (element.type === "arrow" || element.type === "line") &&
+          arrowEndpoints
+        ) {
           // ARROW/LINE RESIZE MODE: Move the start or end point to change length/direction.
           // The opposite endpoint stays fixed as the anchor.
           //
@@ -1088,10 +1437,10 @@ export function Canvas() {
           let newEndX = arrowEndpoints.endX;
           let newEndY = arrowEndpoints.endY;
 
-          if (resizeHandle === 'start') {
+          if (resizeHandle === "start") {
             newStartX = arrowEndpoints.startX + dx;
             newStartY = arrowEndpoints.startY + dy;
-          } else if (resizeHandle === 'end') {
+          } else if (resizeHandle === "end") {
             newEndX = arrowEndpoints.endX + dx;
             newEndY = arrowEndpoints.endY + dy;
           }
@@ -1102,23 +1451,28 @@ export function Canvas() {
           const newWidth = Math.abs(newEndX - newStartX) || 1;
           const newHeight = Math.abs(newEndY - newStartY) || 1;
 
-          setElements(elements.map(el => {
-            if (el.id === selectedElementId && (el.type === 'arrow' || el.type === 'line')) {
-              return {
-                ...el,
-                x: newX,
-                y: newY,
-                width: newWidth,
-                height: newHeight,
-                startX: newStartX,
-                startY: newStartY,
-                endX: newEndX,
-                endY: newEndY,
-              } as ArrowElement | LineElement;
-            }
-            return el;
-          }));
-        } else if (element.type !== 'arrow' && element.type !== 'line') {
+          setElements(
+            elements.map((el) => {
+              if (
+                el.id === selectedElementId &&
+                (el.type === "arrow" || el.type === "line")
+              ) {
+                return {
+                  ...el,
+                  x: newX,
+                  y: newY,
+                  width: newWidth,
+                  height: newHeight,
+                  startX: newStartX,
+                  startY: newStartY,
+                  endX: newEndX,
+                  endY: newEndY,
+                } as ArrowElement | LineElement;
+              }
+              return el;
+            }),
+          );
+        } else if (element.type !== "arrow" && element.type !== "line") {
           // RECTANGLE/TEXT RESIZE MODE: Compute new bounds from the snapshot.
           //
           // Handle-to-Anchor Mapping:
@@ -1130,18 +1484,18 @@ export function Canvas() {
           //   'se'     |  NW corner (x, y)
 
           // Compute the anchor corner (opposite corner that must stay fixed)
-          const anchorX = resizeHandle.includes('w')
-            ? initialBounds.x + initialBounds.width  // Anchor is on the right (E side)
-            : initialBounds.x;                        // Anchor is on the left (W side)
-          const anchorY = resizeHandle.includes('n')
+          const anchorX = resizeHandle.includes("w")
+            ? initialBounds.x + initialBounds.width // Anchor is on the right (E side)
+            : initialBounds.x; // Anchor is on the left (W side)
+          const anchorY = resizeHandle.includes("n")
             ? initialBounds.y + initialBounds.height // Anchor is on the bottom (S side)
-            : initialBounds.y;                        // Anchor is on the top (N side)
+            : initialBounds.y; // Anchor is on the top (N side)
 
           // Compute new moving corner position (the corner being dragged)
-          const movingCornerInitialX = resizeHandle.includes('w')
+          const movingCornerInitialX = resizeHandle.includes("w")
             ? initialBounds.x
             : initialBounds.x + initialBounds.width;
-          const movingCornerInitialY = resizeHandle.includes('n')
+          const movingCornerInitialY = resizeHandle.includes("n")
             ? initialBounds.y
             : initialBounds.y + initialBounds.height;
 
@@ -1149,13 +1503,13 @@ export function Canvas() {
           let newMovingY = movingCornerInitialY + dy;
 
           // Clamp moving corner to enforce minimum size and prevent inversion.
-          if (resizeHandle.includes('w')) {
+          if (resizeHandle.includes("w")) {
             newMovingX = Math.min(newMovingX, anchorX - MIN_ELEMENT_SIZE);
           } else {
             newMovingX = Math.max(newMovingX, anchorX + MIN_ELEMENT_SIZE);
           }
 
-          if (resizeHandle.includes('n')) {
+          if (resizeHandle.includes("n")) {
             newMovingY = Math.min(newMovingY, anchorY - MIN_ELEMENT_SIZE);
           } else {
             newMovingY = Math.max(newMovingY, anchorY + MIN_ELEMENT_SIZE);
@@ -1167,12 +1521,20 @@ export function Canvas() {
           const newWidth = Math.abs(newMovingX - anchorX);
           const newHeight = Math.abs(newMovingY - anchorY);
 
-          setElements(elements.map(el => {
-            if (el.id === selectedElementId) {
-              return { ...el, x: newX, y: newY, width: newWidth, height: newHeight };
-            }
-            return el;
-          }));
+          setElements(
+            elements.map((el) => {
+              if (el.id === selectedElementId) {
+                return {
+                  ...el,
+                  x: newX,
+                  y: newY,
+                  width: newWidth,
+                  height: newHeight,
+                };
+              }
+              return el;
+            }),
+          );
         }
       } else if (dragOffset) {
         // Move - either group or individual element
@@ -1190,52 +1552,74 @@ export function Canvas() {
           moveSelectedElements(dx, dy);
         } else {
           // Move single element
-          setElements(elements.map(el => {
-            if (el.id === selectedElementId) {
-              if (el.type === 'arrow' || el.type === 'line') {
-                // Arrows and lines need endpoint updates when moved
-                const lineEl = el as ArrowElement | LineElement;
-                return {
-                  ...lineEl,
-                  x: x - dragOffset.x,
-                  y: y - dragOffset.y,
-                  startX: lineEl.startX + dx,
-                  startY: lineEl.startY + dy,
-                  endX: lineEl.endX + dx,
-                  endY: lineEl.endY + dy,
-                };
+          setElements(
+            elements.map((el) => {
+              if (el.id === selectedElementId) {
+                if (el.type === "arrow" || el.type === "line") {
+                  // Arrows and lines need endpoint updates when moved
+                  const lineEl = el as ArrowElement | LineElement;
+                  return {
+                    ...lineEl,
+                    x: x - dragOffset.x,
+                    y: y - dragOffset.y,
+                    startX: lineEl.startX + dx,
+                    startY: lineEl.startY + dy,
+                    endX: lineEl.endX + dx,
+                    endY: lineEl.endY + dy,
+                  };
+                }
+                return { ...el, x: x - dragOffset.x, y: y - dragOffset.y };
               }
-              return { ...el, x: x - dragOffset.x, y: y - dragOffset.y };
-            }
-            return el;
-          }));
+              return el;
+            }),
+          );
         }
       }
-    } else if (startPoint && (currentTool === 'rectangle' || currentTool === 'ellipse' || currentTool === 'arrow' || currentTool === 'line')) {
+    } else if (
+      startPoint &&
+      (currentTool === "rectangle" ||
+        currentTool === "ellipse" ||
+        currentTool === "arrow" ||
+        currentTool === "line")
+    ) {
       // Preview while drawing (drag-to-draw tools)
       redraw();
 
       const canvas = canvasRef.current;
-      const ctx = canvas?.getContext('2d');
+      const ctx = canvas?.getContext("2d");
       if (!ctx) return;
 
       ctx.strokeStyle = canvasTheme.sketch;
       ctx.lineWidth = 1.5;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
       ctx.setLineDash([8, 4]);
 
       const previewSeed = Date.now() % 1000;
 
-      if (currentTool === 'rectangle') {
+      if (currentTool === "rectangle") {
         const width = x - startPoint.x;
         const height = y - startPoint.y;
-        drawSketchRect(ctx, startPoint.x, startPoint.y, width, height, previewSeed);
-      } else if (currentTool === 'ellipse') {
+        drawSketchRect(
+          ctx,
+          startPoint.x,
+          startPoint.y,
+          width,
+          height,
+          previewSeed,
+        );
+      } else if (currentTool === "ellipse") {
         const width = x - startPoint.x;
         const height = y - startPoint.y;
-        drawSketchEllipse(ctx, startPoint.x, startPoint.y, width, height, previewSeed);
-      } else if (currentTool === 'arrow' || currentTool === 'line') {
+        drawSketchEllipse(
+          ctx,
+          startPoint.x,
+          startPoint.y,
+          width,
+          height,
+          previewSeed,
+        );
+      } else if (currentTool === "arrow" || currentTool === "line") {
         drawSketchLine(ctx, startPoint.x, startPoint.y, x, y, previewSeed);
       }
 
@@ -1254,9 +1638,9 @@ export function Canvas() {
       if (selectedIds.length > 0) {
         // If Shift was held when starting, add to existing selection
         if (e.shiftKey) {
-          setSelectedElementIds(prev => {
+          setSelectedElementIds((prev) => {
             const newSet = new Set(prev);
-            selectedIds.forEach(id => newSet.add(id));
+            selectedIds.forEach((id) => newSet.add(id));
             return newSet;
           });
         } else {
@@ -1285,15 +1669,15 @@ export function Canvas() {
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    if (startPoint && currentTool !== 'select' && currentTool !== 'text') {
+    if (startPoint && currentTool !== "select" && currentTool !== "text") {
       const width = x - startPoint.x;
       const height = y - startPoint.y;
 
-      if (currentTool === 'rectangle') {
+      if (currentTool === "rectangle") {
         if (Math.abs(width) > 5 && Math.abs(height) > 5) {
           const newElement: RectangleElement = {
             id: generateId(),
-            type: 'rectangle',
+            type: "rectangle",
             x: width > 0 ? startPoint.x : x,
             y: height > 0 ? startPoint.y : y,
             width: Math.abs(width),
@@ -1301,13 +1685,13 @@ export function Canvas() {
           };
           setElements([...elements, newElement]);
           setSelectedElementId(newElement.id);
-          setCurrentTool('select');
+          setCurrentTool("select");
         }
-      } else if (currentTool === 'ellipse') {
+      } else if (currentTool === "ellipse") {
         if (Math.abs(width) > 5 && Math.abs(height) > 5) {
           const newElement: EllipseElement = {
             id: generateId(),
-            type: 'ellipse',
+            type: "ellipse",
             x: width > 0 ? startPoint.x : x,
             y: height > 0 ? startPoint.y : y,
             width: Math.abs(width),
@@ -1315,12 +1699,12 @@ export function Canvas() {
           };
           setElements([...elements, newElement]);
           setSelectedElementId(newElement.id);
-          setCurrentTool('select');
+          setCurrentTool("select");
         }
-      } else if (currentTool === 'arrow') {
+      } else if (currentTool === "arrow") {
         const newElement: ArrowElement = {
           id: generateId(),
-          type: 'arrow',
+          type: "arrow",
           x: Math.min(startPoint.x, x),
           y: Math.min(startPoint.y, y),
           width: Math.abs(x - startPoint.x) || 1,
@@ -1332,11 +1716,11 @@ export function Canvas() {
         };
         setElements([...elements, newElement]);
         setSelectedElementId(newElement.id);
-        setCurrentTool('select');
-      } else if (currentTool === 'line') {
+        setCurrentTool("select");
+      } else if (currentTool === "line") {
         const newElement: LineElement = {
           id: generateId(),
-          type: 'line',
+          type: "line",
           x: Math.min(startPoint.x, x),
           y: Math.min(startPoint.y, y),
           width: Math.abs(x - startPoint.x) || 1,
@@ -1348,7 +1732,7 @@ export function Canvas() {
         };
         setElements([...elements, newElement]);
         setSelectedElementId(newElement.id);
-        setCurrentTool('select');
+        setCurrentTool("select");
       }
     }
 
@@ -1367,7 +1751,7 @@ export function Canvas() {
       if (editingElementId) return;
 
       // Check for Ctrl/Cmd+G to create group (needs multiple elements selected)
-      if ((e.ctrlKey || e.metaKey) && e.key === 'g' && !e.shiftKey) {
+      if ((e.ctrlKey || e.metaKey) && e.key === "g" && !e.shiftKey) {
         if (selectedElementIds.size >= 2) {
           e.preventDefault();
           createElementGroup();
@@ -1376,11 +1760,11 @@ export function Canvas() {
       }
 
       // Check for Ctrl/Cmd+Shift+G to ungroup
-      if ((e.ctrlKey || e.metaKey) && e.key === 'G' && e.shiftKey) {
+      if ((e.ctrlKey || e.metaKey) && e.key === "G" && e.shiftKey) {
         e.preventDefault();
         // Find if any selected element is in a user group
         const selectedElement = selectedElementId
-          ? elements.find(el => el.id === selectedElementId)
+          ? elements.find((el) => el.id === selectedElementId)
           : null;
 
         if (selectedElement?.elementGroupId) {
@@ -1394,108 +1778,153 @@ export function Canvas() {
 
       // Text formatting shortcuts (when text element is selected)
       if (selectedElementId) {
-        const selectedElement = elements.find(el => el.id === selectedElementId);
-        if (selectedElement?.type === 'text') {
+        const selectedElement = elements.find(
+          (el) => el.id === selectedElementId,
+        );
+        if (selectedElement?.type === "text") {
           const textEl = selectedElement as TextElement;
 
           // Ctrl/Cmd+B: Toggle bold
-          if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+          if ((e.ctrlKey || e.metaKey) && e.key === "b") {
             e.preventDefault();
-            const newWeight = textEl.fontWeight === 'bold' ? 'normal' : 'bold';
-            setElements(elements.map(el =>
-              el.id === selectedElementId
-                ? { ...el, fontWeight: newWeight, preset: undefined }
-                : el
-            ));
+            const newWeight = textEl.fontWeight === "bold" ? "normal" : "bold";
+            setElements(
+              elements.map((el) =>
+                el.id === selectedElementId
+                  ? { ...el, fontWeight: newWeight, preset: undefined }
+                  : el,
+              ),
+            );
             return;
           }
 
           // Ctrl/Cmd+I: Toggle italic
-          if ((e.ctrlKey || e.metaKey) && e.key === 'i') {
+          if ((e.ctrlKey || e.metaKey) && e.key === "i") {
             e.preventDefault();
-            const newStyle = textEl.fontStyle === 'italic' ? 'normal' : 'italic';
-            setElements(elements.map(el =>
-              el.id === selectedElementId
-                ? { ...el, fontStyle: newStyle }
-                : el
-            ));
+            const newStyle =
+              textEl.fontStyle === "italic" ? "normal" : "italic";
+            setElements(
+              elements.map((el) =>
+                el.id === selectedElementId
+                  ? { ...el, fontStyle: newStyle }
+                  : el,
+              ),
+            );
             return;
           }
 
           // Ctrl/Cmd+Shift+L: Align left
-          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'L') {
+          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "L") {
             e.preventDefault();
-            setElements(elements.map(el =>
-              el.id === selectedElementId
-                ? { ...el, textAlign: 'left' as const }
-                : el
-            ));
+            setElements(
+              elements.map((el) =>
+                el.id === selectedElementId
+                  ? { ...el, textAlign: "left" as const }
+                  : el,
+              ),
+            );
             return;
           }
 
           // Ctrl/Cmd+Shift+E: Align center
-          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'E') {
+          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "E") {
             e.preventDefault();
-            setElements(elements.map(el =>
-              el.id === selectedElementId
-                ? { ...el, textAlign: 'center' as const }
-                : el
-            ));
+            setElements(
+              elements.map((el) =>
+                el.id === selectedElementId
+                  ? { ...el, textAlign: "center" as const }
+                  : el,
+              ),
+            );
             return;
           }
 
           // Ctrl/Cmd+Shift+R: Align right
-          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'R') {
+          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "R") {
             e.preventDefault();
-            setElements(elements.map(el =>
-              el.id === selectedElementId
-                ? { ...el, textAlign: 'right' as const }
-                : el
-            ));
+            setElements(
+              elements.map((el) =>
+                el.id === selectedElementId
+                  ? { ...el, textAlign: "right" as const }
+                  : el,
+              ),
+            );
             return;
           }
 
           // Ctrl/Cmd+Alt+1: Apply H1 preset
-          if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === '1') {
+          if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === "1") {
             e.preventDefault();
-            setElements(elements.map(el =>
-              el.id === selectedElementId
-                ? { ...el, fontSize: 32, fontWeight: 'bold' as const, lineHeight: Math.round(32 * 1.2), preset: 'heading1' as const }
-                : el
-            ));
+            setElements(
+              elements.map((el) =>
+                el.id === selectedElementId
+                  ? {
+                      ...el,
+                      fontSize: 32,
+                      fontWeight: "bold" as const,
+                      lineHeight: Math.round(32 * 1.2),
+                      preset: "heading1" as const,
+                    }
+                  : el,
+              ),
+            );
             return;
           }
 
           // Ctrl/Cmd+Alt+2: Apply H2 preset
-          if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === '2') {
+          if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === "2") {
             e.preventDefault();
-            setElements(elements.map(el =>
-              el.id === selectedElementId
-                ? { ...el, fontSize: 24, fontWeight: 'bold' as const, lineHeight: Math.round(24 * 1.25), preset: 'heading2' as const }
-                : el
-            ));
+            setElements(
+              elements.map((el) =>
+                el.id === selectedElementId
+                  ? {
+                      ...el,
+                      fontSize: 24,
+                      fontWeight: "bold" as const,
+                      lineHeight: Math.round(24 * 1.25),
+                      preset: "heading2" as const,
+                    }
+                  : el,
+              ),
+            );
             return;
           }
 
           // Ctrl/Cmd+Alt+3: Apply H3 preset
-          if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === '3') {
+          if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === "3") {
             e.preventDefault();
-            setElements(elements.map(el =>
-              el.id === selectedElementId
-                ? { ...el, fontSize: 20, fontWeight: 'bold' as const, lineHeight: Math.round(20 * 1.3), preset: 'heading3' as const }
-                : el
-            ));
+            setElements(
+              elements.map((el) =>
+                el.id === selectedElementId
+                  ? {
+                      ...el,
+                      fontSize: 20,
+                      fontWeight: "bold" as const,
+                      lineHeight: Math.round(20 * 1.3),
+                      preset: "heading3" as const,
+                    }
+                  : el,
+              ),
+            );
             return;
           }
 
           // Ctrl/Cmd+Alt+0: Apply Body preset
-          if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === '0') {
+          if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === "0") {
             e.preventDefault();
-            setElements(elements.map(el =>
-              el.id === selectedElementId
-                ? { ...el, fontSize: 16, fontWeight: 'normal' as const, lineHeight: Math.round(16 * 1.5), preset: 'body' as const }
-                : el
-            ));
+            setElements(
+              elements.map((el) =>
+                el.id === selectedElementId
+                  ? {
+                      ...el,
+                      fontSize: 16,
+                      fontWeight: "normal" as const,
+                      lineHeight: Math.round(16 * 1.5),
+                      preset: "body" as const,
+                    }
+                  : el,
+              ),
+            );
             return;
           }
         }
@@ -1504,12 +1933,12 @@ export function Canvas() {
       // Only handle deletion if an element is selected
       if (!selectedElementId) return;
 
-      const element = elements.find(el => el.id === selectedElementId);
+      const element = elements.find((el) => el.id === selectedElementId);
       if (!element) return;
 
       // Check for Delete or Backspace key
       // Backspace only deletes if element was selected by clicking (not after editing text)
-      if (e.key === 'Delete' || (e.key === 'Backspace' && selectedByClick)) {
+      if (e.key === "Delete" || (e.key === "Backspace" && selectedByClick)) {
         // Prevent default browser behavior (e.g., navigate back)
         e.preventDefault();
 
@@ -1517,46 +1946,46 @@ export function Canvas() {
         if (element.elementGroupId) {
           const groupId = element.elementGroupId;
           showConfirmDialog(
-            'Delete group?',
-            'This will delete all elements in this group. This action cannot be undone.',
+            "Delete group?",
+            "This will delete all elements in this group. This action cannot be undone.",
             () => {
               deleteElementGroup(groupId);
               setSelectedByClick(false);
             },
-            'danger'
+            "danger",
           );
         }
         // If element is in a component group, delete entire component group with confirmation
         else if (element.groupId) {
-          const componentName = element.componentType || 'grouped';
+          const componentName = element.componentType || "grouped";
           const groupId = element.groupId;
           showConfirmDialog(
             `Delete ${componentName} component?`,
-            'This will delete the entire component and all its elements. This action cannot be undone.',
+            "This will delete the entire component and all its elements. This action cannot be undone.",
             () => {
               deleteGroup(groupId);
               setSelectedByClick(false);
             },
-            'danger'
+            "danger",
           );
         }
         // If multiple elements are selected (not in a group), delete all selected
         else if (selectedElementIds.size > 1) {
-          setElements(elements.filter(el => !selectedElementIds.has(el.id)));
+          setElements(elements.filter((el) => !selectedElementIds.has(el.id)));
           setSelectedElementIds(new Set());
           setSelectedElementId(null);
           setSelectedByClick(false);
         }
         // Remove single element from state
         else {
-          setElements(elements.filter(el => el.id !== selectedElementId));
+          setElements(elements.filter((el) => el.id !== selectedElementId));
           setSelectedElementId(null);
           setSelectedByClick(false);
         }
       }
 
       // Check for 'G' key (without modifiers) to ungroup component groups (legacy behavior)
-      if (e.key === 'g' && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      if (e.key === "g" && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
         if (element.groupId) {
           e.preventDefault();
           ungroupComponent(element.groupId);
@@ -1568,13 +1997,21 @@ export function Canvas() {
     };
 
     // Add event listener
-    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown);
 
     // Cleanup on unmount
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [selectedElementId, selectedElementIds, elements, componentGroups, elementGroups, editingElementId, selectedByClick]);
+  }, [
+    selectedElementId,
+    selectedElementIds,
+    elements,
+    componentGroups,
+    elementGroups,
+    editingElementId,
+    selectedByClick,
+  ]);
 
   // Frame management handlers
   const handleCreateFrame = (type: FrameType) => {
@@ -1587,7 +2024,7 @@ export function Canvas() {
     };
 
     setFrames([...frames, newFrame]);
-    setActiveFrameId(newFrame.id);  // Auto-switch to new frame
+    setActiveFrameId(newFrame.id); // Auto-switch to new frame
   };
 
   const handleSwitchFrame = (frameId: string) => {
@@ -1600,25 +2037,25 @@ export function Canvas() {
   };
 
   const handleRenameFrame = (frameId: string, newName: string) => {
-    setFrames(frames.map(frame =>
-      frame.id === frameId
-        ? { ...frame, name: newName }
-        : frame
-    ));
+    setFrames(
+      frames.map((frame) =>
+        frame.id === frameId ? { ...frame, name: newName } : frame,
+      ),
+    );
   };
 
   const handleDeleteFrame = (frameId: string) => {
     // Safety: Prevent deleting the last frame
     if (frames.length === 1) {
       addToast({
-        type: 'warning',
-        title: 'Cannot delete frame',
-        message: 'You must have at least one frame.',
+        type: "warning",
+        title: "Cannot delete frame",
+        message: "You must have at least one frame.",
       });
       return;
     }
 
-    const newFrames = frames.filter(f => f.id !== frameId);
+    const newFrames = frames.filter((f) => f.id !== frameId);
     setFrames(newFrames);
 
     // Safety: If deleted active frame, switch to first frame (with bounds check)
@@ -1631,84 +2068,100 @@ export function Canvas() {
   const handleRequestDeleteFrame = (frameId: string, frameName: string) => {
     if (frames.length === 1) {
       addToast({
-        type: 'warning',
-        title: 'Cannot delete frame',
-        message: 'You must have at least one frame.',
+        type: "warning",
+        title: "Cannot delete frame",
+        message: "You must have at least one frame.",
       });
       return;
     }
 
     showConfirmDialog(
       `Delete "${frameName}"?`,
-      'This will permanently delete this frame and all its elements. This action cannot be undone.',
+      "This will permanently delete this frame and all its elements. This action cannot be undone.",
       () => handleDeleteFrame(frameId),
-      'danger'
+      "danger",
     );
   };
 
   // Component group operations
-  const generateGroupId = () => `grp_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+  const generateGroupId = () =>
+    `grp_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
-  const createComponentGroup = (template: ComponentTemplate, insertX: number, insertY: number): ComponentGroup => {
+  const createComponentGroup = (
+    template: ComponentTemplate,
+    insertX: number,
+    insertY: number,
+  ): ComponentGroup => {
     const groupId = generateGroupId();
     const elementIds: string[] = [];
 
     // Create all elements with group reference
-    const newElements: CanvasElement[] = template.elements.map(tplEl => {
-      const elId = generateId();
-      elementIds.push(elId);
+    const newElements: CanvasElement[] = template.elements
+      .map((tplEl) => {
+        const elId = generateId();
+        elementIds.push(elId);
 
-      const baseProps = {
-        id: elId,
-        x: insertX + tplEl.offsetX,
-        y: insertY + tplEl.offsetY,
-        width: tplEl.width,
-        height: tplEl.height,
-        semanticTag: tplEl.semanticTag,
-        description: tplEl.description,
-        groupId,
-        componentType: template.type,
-      };
+        const baseProps = {
+          id: elId,
+          x: insertX + tplEl.offsetX,
+          y: insertY + tplEl.offsetY,
+          width: tplEl.width,
+          height: tplEl.height,
+          semanticTag: tplEl.semanticTag,
+          description: tplEl.description,
+          groupId,
+          componentType: template.type,
+        };
 
-      if (tplEl.type === 'text') {
-        return {
-          ...baseProps,
-          type: 'text',
-          content: tplEl.content || 'Text',
-        } as TextElement;
-      } else if (tplEl.type === 'rectangle') {
-        return {
-          ...baseProps,
-          type: 'rectangle',
-        } as RectangleElement;
-      } else if (tplEl.type === 'arrow') {
-        // Arrow support (if needed in future templates)
-        return {
-          ...baseProps,
-          type: 'arrow',
-          startX: insertX + tplEl.offsetX,
-          startY: insertY + tplEl.offsetY,
-          endX: insertX + tplEl.offsetX + tplEl.width,
-          endY: insertY + tplEl.offsetY + tplEl.height,
-        } as ArrowElement;
-      } else if (tplEl.type === 'line') {
-        // Line support (if needed in future templates)
-        return {
-          ...baseProps,
-          type: 'line',
-          startX: insertX + tplEl.offsetX,
-          startY: insertY + tplEl.offsetY,
-          endX: insertX + tplEl.offsetX + tplEl.width,
-          endY: insertY + tplEl.offsetY,
-        } as LineElement;
-      } else if (tplEl.type === 'ellipse') {
-        return {
-          ...baseProps,
-          type: 'ellipse',
-        } as EllipseElement;
-      }
-      return null;
-    }).filter((el): el is RectangleElement | EllipseElement | TextElement | ArrowElement | LineElement => el !== null);
+        if (tplEl.type === "text") {
+          return {
+            ...baseProps,
+            type: "text",
+            content: tplEl.content || "Text",
+          } as TextElement;
+        } else if (tplEl.type === "rectangle") {
+          return {
+            ...baseProps,
+            type: "rectangle",
+          } as RectangleElement;
+        } else if (tplEl.type === "arrow") {
+          // Arrow support (if needed in future templates)
+          return {
+            ...baseProps,
+            type: "arrow",
+            startX: insertX + tplEl.offsetX,
+            startY: insertY + tplEl.offsetY,
+            endX: insertX + tplEl.offsetX + tplEl.width,
+            endY: insertY + tplEl.offsetY + tplEl.height,
+          } as ArrowElement;
+        } else if (tplEl.type === "line") {
+          // Line support (if needed in future templates)
+          return {
+            ...baseProps,
+            type: "line",
+            startX: insertX + tplEl.offsetX,
+            startY: insertY + tplEl.offsetY,
+            endX: insertX + tplEl.offsetX + tplEl.width,
+            endY: insertY + tplEl.offsetY,
+          } as LineElement;
+        } else if (tplEl.type === "ellipse") {
+          return {
+            ...baseProps,
+            type: "ellipse",
+          } as EllipseElement;
+        }
+        return null;
+      })
+      .filter(
+        (
+          el,
+        ): el is
+          | RectangleElement
+          | EllipseElement
+          | TextElement
+          | ArrowElement
+          | LineElement => el !== null,
+      );
 
     // Add elements to canvas
     setElements([...elements, ...newElements]);
@@ -1729,83 +2182,94 @@ export function Canvas() {
   };
 
   const moveGroup = (groupId: string, dx: number, dy: number) => {
-    setElements(elements.map(el =>
-      el.groupId === groupId
-        ? el.type === 'arrow'
-          ? {
-              ...el,
-              x: el.x + dx,
-              y: el.y + dy,
-              startX: (el as ArrowElement).startX + dx,
-              startY: (el as ArrowElement).startY + dy,
-              endX: (el as ArrowElement).endX + dx,
-              endY: (el as ArrowElement).endY + dy,
-            } as ArrowElement
-          : { ...el, x: el.x + dx, y: el.y + dy }
-        : el
-    ));
+    setElements(
+      elements.map((el) =>
+        el.groupId === groupId
+          ? el.type === "arrow"
+            ? ({
+                ...el,
+                x: el.x + dx,
+                y: el.y + dy,
+                startX: (el as ArrowElement).startX + dx,
+                startY: (el as ArrowElement).startY + dy,
+                endX: (el as ArrowElement).endX + dx,
+                endY: (el as ArrowElement).endY + dy,
+              } as ArrowElement)
+            : { ...el, x: el.x + dx, y: el.y + dy }
+          : el,
+      ),
+    );
 
-    setComponentGroups(componentGroups.map(grp =>
-      grp.id === groupId
-        ? { ...grp, x: grp.x + dx, y: grp.y + dy }
-        : grp
-    ));
+    setComponentGroups(
+      componentGroups.map((grp) =>
+        grp.id === groupId ? { ...grp, x: grp.x + dx, y: grp.y + dy } : grp,
+      ),
+    );
   };
 
   // Move all elements in a user-created element group
   const moveElementGroup = (elementGroupId: string, dx: number, dy: number) => {
-    setElements(elements.map(el => {
-      if (el.elementGroupId !== elementGroupId) return el;
+    setElements(
+      elements.map((el) => {
+        if (el.elementGroupId !== elementGroupId) return el;
 
-      if (el.type === 'arrow' || el.type === 'line') {
-        const lineEl = el as ArrowElement | LineElement;
-        return {
-          ...lineEl,
-          x: el.x + dx,
-          y: el.y + dy,
-          startX: lineEl.startX + dx,
-          startY: lineEl.startY + dy,
-          endX: lineEl.endX + dx,
-          endY: lineEl.endY + dy,
-        } as ArrowElement | LineElement;
-      }
-      return { ...el, x: el.x + dx, y: el.y + dy };
-    }));
+        if (el.type === "arrow" || el.type === "line") {
+          const lineEl = el as ArrowElement | LineElement;
+          return {
+            ...lineEl,
+            x: el.x + dx,
+            y: el.y + dy,
+            startX: lineEl.startX + dx,
+            startY: lineEl.startY + dy,
+            endX: lineEl.endX + dx,
+            endY: lineEl.endY + dy,
+          } as ArrowElement | LineElement;
+        }
+        return { ...el, x: el.x + dx, y: el.y + dy };
+      }),
+    );
   };
 
   // Move all currently selected elements (for multi-selection without grouping)
   const moveSelectedElements = (dx: number, dy: number) => {
-    setElements(elements.map(el => {
-      if (!selectedElementIds.has(el.id)) return el;
+    setElements(
+      elements.map((el) => {
+        if (!selectedElementIds.has(el.id)) return el;
 
-      if (el.type === 'arrow' || el.type === 'line') {
-        const lineEl = el as ArrowElement | LineElement;
-        return {
-          ...lineEl,
-          x: el.x + dx,
-          y: el.y + dy,
-          startX: lineEl.startX + dx,
-          startY: lineEl.startY + dy,
-          endX: lineEl.endX + dx,
-          endY: lineEl.endY + dy,
-        } as ArrowElement | LineElement;
-      }
-      return { ...el, x: el.x + dx, y: el.y + dy };
-    }));
+        if (el.type === "arrow" || el.type === "line") {
+          const lineEl = el as ArrowElement | LineElement;
+          return {
+            ...lineEl,
+            x: el.x + dx,
+            y: el.y + dy,
+            startX: lineEl.startX + dx,
+            startY: lineEl.startY + dy,
+            endX: lineEl.endX + dx,
+            endY: lineEl.endY + dy,
+          } as ArrowElement | LineElement;
+        }
+        return { ...el, x: el.x + dx, y: el.y + dy };
+      }),
+    );
   };
 
   // Generate unique element group ID
-  const generateElementGroupId = () => `egrp_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+  const generateElementGroupId = () =>
+    `egrp_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
   // Create a new user element group from selected elements
   const createElementGroup = () => {
     // Need at least 2 elements selected to create a group
     if (selectedElementIds.size < 2) return;
 
-    const selectedElements = elements.filter(el => selectedElementIds.has(el.id));
+    const selectedElements = elements.filter((el) =>
+      selectedElementIds.has(el.id),
+    );
 
     // Prevent grouping if any element is already in a group (no nested groups)
-    const hasGroupedElements = selectedElements.some(el => el.elementGroupId || el.groupId);
+    const hasGroupedElements = selectedElements.some(
+      (el) => el.elementGroupId || el.groupId,
+    );
     if (hasGroupedElements) {
       return; // Silently fail - could show a message in the future
     }
@@ -1817,11 +2281,11 @@ export function Canvas() {
     const elementIds = Array.from(selectedElementIds);
 
     // Update elements with group reference
-    setElements(elements.map(el =>
-      selectedElementIds.has(el.id)
-        ? { ...el, elementGroupId: groupId }
-        : el
-    ));
+    setElements(
+      elements.map((el) =>
+        selectedElementIds.has(el.id) ? { ...el, elementGroupId: groupId } : el,
+      ),
+    );
 
     // Create the group record
     const newGroup: ElementGroup = {
@@ -1840,14 +2304,16 @@ export function Canvas() {
   // Ungroup a user-created element group
   const ungroupElements = (elementGroupId: string) => {
     // Remove group reference from all elements
-    setElements(elements.map(el =>
-      el.elementGroupId === elementGroupId
-        ? { ...el, elementGroupId: undefined }
-        : el
-    ));
+    setElements(
+      elements.map((el) =>
+        el.elementGroupId === elementGroupId
+          ? { ...el, elementGroupId: undefined }
+          : el,
+      ),
+    );
 
     // Remove the group record
-    setElementGroups(elementGroups.filter(grp => grp.id !== elementGroupId));
+    setElementGroups(elementGroups.filter((grp) => grp.id !== elementGroupId));
 
     // Keep elements selected individually
     // selectedElementIds remains unchanged
@@ -1855,8 +2321,8 @@ export function Canvas() {
 
   // Delete all elements in a user-created element group
   const deleteElementGroup = (elementGroupId: string) => {
-    setElements(elements.filter(el => el.elementGroupId !== elementGroupId));
-    setElementGroups(elementGroups.filter(grp => grp.id !== elementGroupId));
+    setElements(elements.filter((el) => el.elementGroupId !== elementGroupId));
+    setElementGroups(elementGroups.filter((grp) => grp.id !== elementGroupId));
 
     // Clear selections
     setSelectedElementIds(new Set());
@@ -1865,14 +2331,16 @@ export function Canvas() {
 
   const ungroupComponent = (groupId: string) => {
     // Remove group reference from all elements
-    setElements(elements.map(el =>
-      el.groupId === groupId
-        ? { ...el, groupId: undefined, componentType: undefined }
-        : el
-    ));
+    setElements(
+      elements.map((el) =>
+        el.groupId === groupId
+          ? { ...el, groupId: undefined, componentType: undefined }
+          : el,
+      ),
+    );
 
     // Remove group
-    setComponentGroups(componentGroups.filter(grp => grp.id !== groupId));
+    setComponentGroups(componentGroups.filter((grp) => grp.id !== groupId));
 
     // Clear group selection
     if (selectedGroupId === groupId) {
@@ -1881,8 +2349,8 @@ export function Canvas() {
   };
 
   const deleteGroup = (groupId: string) => {
-    setElements(elements.filter(el => el.groupId !== groupId));
-    setComponentGroups(componentGroups.filter(grp => grp.id !== groupId));
+    setElements(elements.filter((el) => el.groupId !== groupId));
+    setComponentGroups(componentGroups.filter((grp) => grp.id !== groupId));
 
     // Clear selections
     setSelectedGroupId(null);
@@ -1892,16 +2360,20 @@ export function Canvas() {
   // Text toolbar update handler
   const handleTextToolbarUpdate = (updates: Partial<TextElement>) => {
     if (!selectedElementId) return;
-    setElements(elements.map(el =>
-      el.id === selectedElementId && el.type === 'text'
-        ? { ...el, ...updates }
-        : el
-    ));
+    setElements(
+      elements.map((el) =>
+        el.id === selectedElementId && el.type === "text"
+          ? { ...el, ...updates }
+          : el,
+      ),
+    );
   };
 
   // Get selected text element for toolbar
   const selectedTextElement = selectedElementId
-    ? elements.find(el => el.id === selectedElementId && el.type === 'text') as TextElement | undefined
+    ? (elements.find(
+        (el) => el.id === selectedElementId && el.type === "text",
+      ) as TextElement | undefined)
     : undefined;
 
   // Component insertion handler
@@ -1916,7 +2388,7 @@ export function Canvas() {
     setSelectedGroupId(group.id);
 
     // Switch to select tool
-    setCurrentTool('select');
+    setCurrentTool("select");
   };
 
   return (
@@ -1936,7 +2408,7 @@ export function Canvas() {
       <div className="flex-1 flex flex-col">
         <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700 px-4 py-3 flex justify-between items-center">
           <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            {activeFrame?.name || 'WireFlow'}
+            {activeFrame?.name || "WireFlow"}
           </h1>
           <div className="flex items-center gap-2">
             <ThemeToggle />
@@ -1944,70 +2416,85 @@ export function Canvas() {
           </div>
         </div>
 
-        <div ref={canvasContainerRef} className="flex-1 overflow-hidden relative bg-white dark:bg-zinc-900">
+        <div
+          ref={canvasContainerRef}
+          className="flex-1 overflow-hidden relative bg-white dark:bg-zinc-900"
+        >
           <canvas
             ref={canvasRef}
             width={2000}
             height={2000}
-            className={`absolute inset-0 ${currentTool === 'select' ? 'cursor-default' : 'cursor-crosshair'}`}
+            className={`absolute inset-0 ${currentTool === "select" ? "cursor-default" : "cursor-crosshair"}`}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
+            onMouseLeave={() => setHoveredElementId(null)}
             onDoubleClick={handleDoubleClick}
             role="img"
-            aria-label={`Canvas for ${activeFrame?.name || 'wireframing'}. Use the toolbar to select drawing tools.`}
+            aria-label={`Canvas for ${activeFrame?.name || "wireframing"}. Use the toolbar to select drawing tools.`}
           />
           {/* Inline text editing overlay */}
-          {editingElementId && (() => {
-            const editingElement = elements.find(el => el.id === editingElementId);
-            if (!editingElement || editingElement.type !== 'text') return null;
+          {editingElementId &&
+            (() => {
+              const editingElement = elements.find(
+                (el) => el.id === editingElementId,
+              );
+              if (!editingElement || editingElement.type !== "text")
+                return null;
 
-            const textEl = editingElement as TextElement;
-            // Get typography properties with defaults
-            const fontSize = textEl.fontSize || 16;
-            const fontWeight = textEl.fontWeight || 'normal';
-            const fontStyle = textEl.fontStyle || 'normal';
-            const textAlign = textEl.textAlign || 'left';
-            const lineHeight = textEl.lineHeight || Math.round(fontSize * 1.5);
+              const textEl = editingElement as TextElement;
+              // Get typography properties with defaults
+              const fontSize = textEl.fontSize || 16;
+              const fontWeight = textEl.fontWeight || "normal";
+              const fontStyle = textEl.fontStyle || "normal";
+              const textAlign = textEl.textAlign || "left";
+              const lineHeight =
+                textEl.lineHeight || Math.round(fontSize * 1.5);
 
-            // Calculate height based on line count (for auto-grow)
-            const lineCount = editingText.split('\n').length;
-            const minHeight = Math.max(editingElement.height, lineHeight);
-            const calculatedHeight = Math.max(minHeight, lineCount * lineHeight + 8);
+              // Calculate height based on line count (for auto-grow)
+              const lineCount = editingText.split("\n").length;
+              const minHeight = Math.max(editingElement.height, lineHeight);
+              const calculatedHeight = Math.max(
+                minHeight,
+                lineCount * lineHeight + 8,
+              );
 
-            return (
-              <textarea
-                ref={textInputRef}
-                value={editingText}
-                onChange={(e) => setEditingText(e.target.value)}
-                onKeyDown={(e) => {
-                  // Shift+Enter for newline, Enter alone commits
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    commitTextEdit();
-                  } else if (e.key === 'Escape') {
-                    e.preventDefault();
-                    cancelTextEdit();
-                  }
-                }}
-                onBlur={commitTextEdit}
-                className="absolute bg-white dark:bg-zinc-800 border-2 border-blue-500 dark:border-blue-400 px-1 text-zinc-900 dark:text-zinc-100 caret-zinc-900 dark:caret-zinc-100 focus:outline-none resize-none overflow-hidden rounded"
-                style={{
-                  left: editingElement.x,
-                  top: editingElement.y,
-                  width: Math.max(editingElement.width, 100),
-                  height: calculatedHeight,
-                  fontFamily: 'sans-serif',
-                  fontSize: `${fontSize}px`,
-                  fontWeight: fontWeight,
-                  fontStyle: fontStyle,
-                  textAlign: textAlign,
-                  lineHeight: `${lineHeight}px`,
-                }}
-                aria-label="Edit text element"
-              />
-            );
-          })()}
+              return (
+                <textarea
+                  ref={textInputRef}
+                  value={editingText}
+                  onChange={(e) => setEditingText(e.target.value)}
+                  onKeyDown={(e) => {
+                    // Shift+Enter for newline, Enter alone commits
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      commitTextEdit();
+                    } else if (e.key === "Escape") {
+                      e.preventDefault();
+                      cancelTextEdit();
+                    }
+                  }}
+                  onBlur={commitTextEdit}
+                  className="absolute bg-white dark:bg-zinc-800 border-2 border-blue-500 dark:border-blue-400 px-1 text-zinc-900 dark:text-zinc-100 caret-zinc-900 dark:caret-zinc-100 focus:outline-none resize-none overflow-hidden rounded animate-scale-in"
+                  style={{
+                    left: editingElement.x,
+                    top: editingElement.y,
+                    width: Math.max(editingElement.width, 100),
+                    height: calculatedHeight,
+                    fontFamily: "sans-serif",
+                    fontSize: `${fontSize}px`,
+                    fontWeight: fontWeight,
+                    fontStyle: fontStyle,
+                    textAlign: textAlign,
+                    lineHeight: `${lineHeight}px`,
+                    transition:
+                      "border-color 150ms ease-out, box-shadow 150ms ease-out",
+                    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
+                  }}
+                  aria-label="Edit text element"
+                />
+              );
+            })()}
           {/* Text formatting toolbar */}
           {selectedTextElement && !editingElementId && (
             <TextToolbar

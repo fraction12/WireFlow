@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(npm run dev:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(npx prettier:*)"
     ]
   }
 }
