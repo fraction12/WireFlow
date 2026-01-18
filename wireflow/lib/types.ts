@@ -4,6 +4,12 @@ export type ElementType = 'rectangle' | 'ellipse' | 'text' | 'arrow' | 'line';
 // Semantic tags for PM layer
 export type SemanticTag = 'button' | 'input' | 'section' | null;
 
+// Text formatting types
+export type TextAlign = 'left' | 'center' | 'right';
+export type FontWeight = 'normal' | 'bold';
+export type FontStyle = 'normal' | 'italic';
+export type TextPreset = 'heading1' | 'heading2' | 'heading3' | 'body' | 'label' | 'caption';
+
 // Component types for component library
 export type ComponentType =
   | 'table'
@@ -45,6 +51,11 @@ export interface TextElement extends BaseElement {
   type: 'text';
   content: string;
   fontSize?: number;
+  fontWeight?: FontWeight;
+  fontStyle?: FontStyle;
+  textAlign?: TextAlign;
+  lineHeight?: number;
+  preset?: TextPreset;
 }
 
 export interface ArrowElement extends BaseElement {

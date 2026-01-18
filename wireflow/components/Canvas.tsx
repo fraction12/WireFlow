@@ -10,6 +10,7 @@ import { ComponentPanel } from './ComponentPanel';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { useToast } from './ui/Toast';
 import { ThemeToggle } from './ThemeToggle';
+import { TextToolbar } from './TextToolbar';
 
 // Canvas color theme interface
 interface CanvasTheme {
@@ -54,6 +55,8 @@ function getCanvasTheme(): CanvasTheme {
 
 export function Canvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const [canvasRect, setCanvasRect] = useState<DOMRect | null>(null);
   const [canvasTheme, setCanvasTheme] = useState<CanvasTheme>(getCanvasTheme);
   const { addToast } = useToast();
 
@@ -216,6 +219,19 @@ export function Canvas() {
       mediaQuery.removeEventListener('change', updateTheme);
       observer.disconnect();
     };
+  }, []);
+
+  // Track canvas container rect for toolbar positioning
+  useEffect(() => {
+    const updateRect = () => {
+      if (canvasContainerRef.current) {
+        setCanvasRect(canvasContainerRef.current.getBoundingClientRect());
+      }
+    };
+
+    updateRect();
+    window.addEventListener('resize', updateRect);
+    return () => window.removeEventListener('resize', updateRect);
   }, []);
 
   // Load workspace from localStorage on mount
@@ -514,14 +530,42 @@ export function Canvas() {
       } else if (element.type === 'text') {
         const textEl = element as TextElement;
         const padding = 4;
-        const lineHeight = 20;
+
+        // Get typography properties with defaults
+        const fontSize = textEl.fontSize || 16;
+        const fontWeight = textEl.fontWeight || 'normal';
+        const fontStyle = textEl.fontStyle || 'normal';
+        const textAlign = textEl.textAlign || 'left';
+        const lineHeight = textEl.lineHeight || Math.round(fontSize * 1.5);
+
+        // Build font string: [style] [weight] size family
+        const fontString = `${fontStyle === 'italic' ? 'italic ' : ''}${fontWeight === 'bold' ? 'bold ' : ''}${fontSize}px sans-serif`;
+        ctx.font = fontString;
+        ctx.textAlign = textAlign;
+
         const maxWidth = element.width - padding * 2;
         const lines = wrapText(ctx, textEl.content || 'Text', maxWidth);
 
+        // Calculate x position based on alignment
+        let textX: number;
+        switch (textAlign) {
+          case 'center':
+            textX = element.x + element.width / 2;
+            break;
+          case 'right':
+            textX = element.x + element.width - padding;
+            break;
+          default: // 'left'
+            textX = element.x + padding;
+        }
+
         // Render each line of wrapped text
         lines.forEach((line, index) => {
-          ctx.fillText(line, element.x + padding, element.y + 16 + index * lineHeight);
+          ctx.fillText(line, textX, element.y + fontSize + index * lineHeight);
         });
+
+        // Reset text align for other elements
+        ctx.textAlign = 'left';
 
         // Draw sketch-style bounding box
         drawSketchRect(ctx, element.x, element.y, element.width, element.height, seed);
@@ -815,8 +859,10 @@ export function Canvas() {
     // Update element with new text (or 'Text' if empty to maintain placeholder)
     const finalText = editingText.trim() || 'Text';
 
-    // Calculate required height based on line count
-    const lineHeight = 20;
+    // Calculate required height based on line count and element's typography
+    const textEl = editingElement as TextElement;
+    const fontSize = textEl.fontSize || 16;
+    const lineHeight = textEl.lineHeight || Math.round(fontSize * 1.5);
     const lineCount = finalText.split('\n').length;
     const requiredHeight = Math.max(editingElement.height, lineCount * lineHeight + 8);
 
@@ -1346,6 +1392,115 @@ export function Canvas() {
         return;
       }
 
+      // Text formatting shortcuts (when text element is selected)
+      if (selectedElementId) {
+        const selectedElement = elements.find(el => el.id === selectedElementId);
+        if (selectedElement?.type === 'text') {
+          const textEl = selectedElement as TextElement;
+
+          // Ctrl/Cmd+B: Toggle bold
+          if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+            e.preventDefault();
+            const newWeight = textEl.fontWeight === 'bold' ? 'normal' : 'bold';
+            setElements(elements.map(el =>
+              el.id === selectedElementId
+                ? { ...el, fontWeight: newWeight, preset: undefined }
+                : el
+            ));
+            return;
+          }
+
+          // Ctrl/Cmd+I: Toggle italic
+          if ((e.ctrlKey || e.metaKey) && e.key === 'i') {
+            e.preventDefault();
+            const newStyle = textEl.fontStyle === 'italic' ? 'normal' : 'italic';
+            setElements(elements.map(el =>
+              el.id === selectedElementId
+                ? { ...el, fontStyle: newStyle }
+                : el
+            ));
+            return;
+          }
+
+          // Ctrl/Cmd+Shift+L: Align left
+          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'L') {
+            e.preventDefault();
+            setElements(elements.map(el =>
+              el.id === selectedElementId
+                ? { ...el, textAlign: 'left' as const }
+                : el
+            ));
+            return;
+          }
+
+          // Ctrl/Cmd+Shift+E: Align center
+          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'E') {
+            e.preventDefault();
+            setElements(elements.map(el =>
+              el.id === selectedElementId
+                ? { ...el, textAlign: 'center' as const }
+                : el
+            ));
+            return;
+          }
+
+          // Ctrl/Cmd+Shift+R: Align right
+          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'R') {
+            e.preventDefault();
+            setElements(elements.map(el =>
+              el.id === selectedElementId
+                ? { ...el, textAlign: 'right' as const }
+                : el
+            ));
+            return;
+          }
+
+          // Ctrl/Cmd+Alt+1: Apply H1 preset
+          if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === '1') {
+            e.preventDefault();
+            setElements(elements.map(el =>
+              el.id === selectedElementId
+                ? { ...el, fontSize: 32, fontWeight: 'bold' as const, lineHeight: Math.round(32 * 1.2), preset: 'heading1' as const }
+                : el
+            ));
+            return;
+          }
+
+          // Ctrl/Cmd+Alt+2: Apply H2 preset
+          if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === '2') {
+            e.preventDefault();
+            setElements(elements.map(el =>
+              el.id === selectedElementId
+                ? { ...el, fontSize: 24, fontWeight: 'bold' as const, lineHeight: Math.round(24 * 1.25), preset: 'heading2' as const }
+                : el
+            ));
+            return;
+          }
+
+          // Ctrl/Cmd+Alt+3: Apply H3 preset
+          if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === '3') {
+            e.preventDefault();
+            setElements(elements.map(el =>
+              el.id === selectedElementId
+                ? { ...el, fontSize: 20, fontWeight: 'bold' as const, lineHeight: Math.round(20 * 1.3), preset: 'heading3' as const }
+                : el
+            ));
+            return;
+          }
+
+          // Ctrl/Cmd+Alt+0: Apply Body preset
+          if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === '0') {
+            e.preventDefault();
+            setElements(elements.map(el =>
+              el.id === selectedElementId
+                ? { ...el, fontSize: 16, fontWeight: 'normal' as const, lineHeight: Math.round(16 * 1.5), preset: 'body' as const }
+                : el
+            ));
+            return;
+          }
+        }
+      }
+
       // Only handle deletion if an element is selected
       if (!selectedElementId) return;
 
@@ -1734,6 +1889,21 @@ export function Canvas() {
     setSelectedElementId(null);
   };
 
+  // Text toolbar update handler
+  const handleTextToolbarUpdate = (updates: Partial<TextElement>) => {
+    if (!selectedElementId) return;
+    setElements(elements.map(el =>
+      el.id === selectedElementId && el.type === 'text'
+        ? { ...el, ...updates }
+        : el
+    ));
+  };
+
+  // Get selected text element for toolbar
+  const selectedTextElement = selectedElementId
+    ? elements.find(el => el.id === selectedElementId && el.type === 'text') as TextElement | undefined
+    : undefined;
+
   // Component insertion handler
   const handleInsertComponent = (template: ComponentTemplate) => {
     // Insert at canvas center
@@ -1774,7 +1944,7 @@ export function Canvas() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-hidden relative bg-white dark:bg-zinc-900">
+        <div ref={canvasContainerRef} className="flex-1 overflow-hidden relative bg-white dark:bg-zinc-900">
           <canvas
             ref={canvasRef}
             width={2000}
@@ -1792,8 +1962,15 @@ export function Canvas() {
             const editingElement = elements.find(el => el.id === editingElementId);
             if (!editingElement || editingElement.type !== 'text') return null;
 
+            const textEl = editingElement as TextElement;
+            // Get typography properties with defaults
+            const fontSize = textEl.fontSize || 16;
+            const fontWeight = textEl.fontWeight || 'normal';
+            const fontStyle = textEl.fontStyle || 'normal';
+            const textAlign = textEl.textAlign || 'left';
+            const lineHeight = textEl.lineHeight || Math.round(fontSize * 1.5);
+
             // Calculate height based on line count (for auto-grow)
-            const lineHeight = 20;
             const lineCount = editingText.split('\n').length;
             const minHeight = Math.max(editingElement.height, lineHeight);
             const calculatedHeight = Math.max(minHeight, lineCount * lineHeight + 8);
@@ -1814,19 +1991,31 @@ export function Canvas() {
                   }
                 }}
                 onBlur={commitTextEdit}
-                className="absolute bg-white dark:bg-zinc-800 border-2 border-blue-500 dark:border-blue-400 px-1 text-sm text-zinc-900 dark:text-zinc-100 caret-zinc-900 dark:caret-zinc-100 focus:outline-none resize-none overflow-hidden rounded"
+                className="absolute bg-white dark:bg-zinc-800 border-2 border-blue-500 dark:border-blue-400 px-1 text-zinc-900 dark:text-zinc-100 caret-zinc-900 dark:caret-zinc-100 focus:outline-none resize-none overflow-hidden rounded"
                 style={{
                   left: editingElement.x,
                   top: editingElement.y,
                   width: Math.max(editingElement.width, 100),
                   height: calculatedHeight,
-                  fontFamily: 'inherit',
+                  fontFamily: 'sans-serif',
+                  fontSize: `${fontSize}px`,
+                  fontWeight: fontWeight,
+                  fontStyle: fontStyle,
+                  textAlign: textAlign,
                   lineHeight: `${lineHeight}px`,
                 }}
                 aria-label="Edit text element"
               />
             );
           })()}
+          {/* Text formatting toolbar */}
+          {selectedTextElement && !editingElementId && (
+            <TextToolbar
+              element={selectedTextElement}
+              canvasRect={canvasRect}
+              onUpdate={handleTextToolbarUpdate}
+            />
+          )}
         </div>
       </div>
 
