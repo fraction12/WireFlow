@@ -1515,6 +1515,28 @@ export function Canvas() {
     return Math.round(value / GRID_SIZE) * GRID_SIZE;
   };
 
+  // Constrain line/arrow endpoint to 45-degree increments (for Shift key)
+  const constrainToAngle = (
+    startX: number,
+    startY: number,
+    endX: number,
+    endY: number
+  ): { x: number; y: number } => {
+    const dx = endX - startX;
+    const dy = endY - startY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    // Snap to nearest 45-degree increment (0, 45, 90, 135, 180, 225, 270, 315)
+    const angle = Math.atan2(dy, dx);
+    const snapAngle = Math.PI / 4; // 45 degrees
+    const snappedAngle = Math.round(angle / snapAngle) * snapAngle;
+
+    return {
+      x: startX + distance * Math.cos(snappedAngle),
+      y: startY + distance * Math.sin(snappedAngle),
+    };
+  };
+
   // Find alignment guides when moving an element
   const ALIGNMENT_TOLERANCE = 5;
 
@@ -2306,11 +2328,21 @@ export function Canvas() {
       } else if (currentTool === "arrow" || currentTool === "line") {
         // Find snap points for preview
         const startSnap = findNearestSnapPoint(startPoint.x, startPoint.y);
-        const endSnap = findNearestSnapPoint(x, y);
+        let rawEndX = x;
+        let rawEndY = y;
+
+        // Shift key: constrain to 45-degree angles
+        if (e.shiftKey) {
+          const constrained = constrainToAngle(startPoint.x, startPoint.y, x, y);
+          rawEndX = constrained.x;
+          rawEndY = constrained.y;
+        }
+
+        const endSnap = e.shiftKey ? null : findNearestSnapPoint(rawEndX, rawEndY);
         const previewStartX = startSnap ? startSnap.x : startPoint.x;
         const previewStartY = startSnap ? startSnap.y : startPoint.y;
-        const previewEndX = endSnap ? endSnap.x : x;
-        const previewEndY = endSnap ? endSnap.y : y;
+        const previewEndX = endSnap ? endSnap.x : rawEndX;
+        const previewEndY = endSnap ? endSnap.y : rawEndY;
 
         drawSketchLine(ctx, previewStartX, previewStartY, previewEndX, previewEndY, previewSeed);
 
@@ -2464,13 +2496,21 @@ export function Canvas() {
         }
       } else if (currentTool === "arrow") {
         recordSnapshot(); // Record for undo
-        // Snap start and end points to nearby elements
+        // Handle Shift key for angle constraint
+        let rawEndX = x;
+        let rawEndY = y;
+        if (e.shiftKey) {
+          const constrained = constrainToAngle(startPoint.x, startPoint.y, x, y);
+          rawEndX = constrained.x;
+          rawEndY = constrained.y;
+        }
+        // Snap start and end points to nearby elements (skip end snap if shift is held)
         const startSnap = findNearestSnapPoint(startPoint.x, startPoint.y);
-        const endSnap = findNearestSnapPoint(x, y);
+        const endSnap = e.shiftKey ? null : findNearestSnapPoint(rawEndX, rawEndY);
         const finalStartX = startSnap ? startSnap.x : startPoint.x;
         const finalStartY = startSnap ? startSnap.y : startPoint.y;
-        const finalEndX = endSnap ? endSnap.x : x;
-        const finalEndY = endSnap ? endSnap.y : y;
+        const finalEndX = endSnap ? endSnap.x : rawEndX;
+        const finalEndY = endSnap ? endSnap.y : rawEndY;
 
         const newElement: ArrowElement = {
           id: generateId(),
@@ -2489,13 +2529,21 @@ export function Canvas() {
         setCurrentTool("select");
       } else if (currentTool === "line") {
         recordSnapshot(); // Record for undo
-        // Snap start and end points to nearby elements
+        // Handle Shift key for angle constraint
+        let rawEndX = x;
+        let rawEndY = y;
+        if (e.shiftKey) {
+          const constrained = constrainToAngle(startPoint.x, startPoint.y, x, y);
+          rawEndX = constrained.x;
+          rawEndY = constrained.y;
+        }
+        // Snap start and end points to nearby elements (skip end snap if shift is held)
         const startSnap = findNearestSnapPoint(startPoint.x, startPoint.y);
-        const endSnap = findNearestSnapPoint(x, y);
+        const endSnap = e.shiftKey ? null : findNearestSnapPoint(rawEndX, rawEndY);
         const finalStartX = startSnap ? startSnap.x : startPoint.x;
         const finalStartY = startSnap ? startSnap.y : startPoint.y;
-        const finalEndX = endSnap ? endSnap.x : x;
-        const finalEndY = endSnap ? endSnap.y : y;
+        const finalEndX = endSnap ? endSnap.x : rawEndX;
+        const finalEndY = endSnap ? endSnap.y : rawEndY;
 
         const newElement: LineElement = {
           id: generateId(),
