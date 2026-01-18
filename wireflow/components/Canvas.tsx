@@ -320,6 +320,11 @@ export function Canvas() {
   // Freehand drawing state
   const [freedrawPoints, setFreedrawPoints] = useState<{ x: number; y: number }[]>([]);
 
+  // Grid and snap settings
+  const [showGrid, setShowGrid] = useState(false);
+  const [snapToGrid, setSnapToGrid] = useState(false);
+  const GRID_SIZE = 20; // Grid cell size in pixels
+
   // Zoom constraints
   const MIN_ZOOM = 0.1;
   const MAX_ZOOM = 5;
@@ -814,6 +819,36 @@ export function Canvas() {
     ctx.save();
     ctx.translate(pan.x, pan.y);
     ctx.scale(zoom, zoom);
+
+    // Draw grid if enabled
+    if (showGrid) {
+      ctx.strokeStyle = "rgba(200, 200, 200, 0.3)";
+      ctx.lineWidth = 0.5;
+
+      // Calculate visible area in canvas coordinates
+      const visibleLeft = -pan.x / zoom;
+      const visibleTop = -pan.y / zoom;
+      const visibleRight = (canvas.width - pan.x) / zoom;
+      const visibleBottom = (canvas.height - pan.y) / zoom;
+
+      // Draw vertical lines
+      const startX = Math.floor(visibleLeft / GRID_SIZE) * GRID_SIZE;
+      for (let x = startX; x < visibleRight; x += GRID_SIZE) {
+        ctx.beginPath();
+        ctx.moveTo(x, visibleTop);
+        ctx.lineTo(x, visibleBottom);
+        ctx.stroke();
+      }
+
+      // Draw horizontal lines
+      const startY = Math.floor(visibleTop / GRID_SIZE) * GRID_SIZE;
+      for (let y = startY; y < visibleBottom; y += GRID_SIZE) {
+        ctx.beginPath();
+        ctx.moveTo(visibleLeft, y);
+        ctx.lineTo(visibleRight, y);
+        ctx.stroke();
+      }
+    }
 
     // Draw all elements
     elements.forEach((element) => {
@@ -1442,6 +1477,12 @@ export function Canvas() {
     );
   };
 
+  // Snap coordinate to grid
+  const snapToGridCoord = (value: number): number => {
+    if (!snapToGrid) return value;
+    return Math.round(value / GRID_SIZE) * GRID_SIZE;
+  };
+
   // Connector snap points - find nearby element connection points
   const SNAP_DISTANCE = 15;
 
@@ -2031,7 +2072,14 @@ export function Canvas() {
           // Move multiple selected elements (not in a group)
           moveSelectedElements(dx, dy);
         } else {
-          // Move single element
+          // Move single element with optional grid snap
+          const rawX = x - dragOffset.x;
+          const rawY = y - dragOffset.y;
+          const newX = snapToGridCoord(rawX);
+          const newY = snapToGridCoord(rawY);
+          const snapDx = newX - element.x;
+          const snapDy = newY - element.y;
+
           setElements(
             elements.map((el) => {
               if (el.id === selectedElementId) {
@@ -2040,15 +2088,15 @@ export function Canvas() {
                   const lineEl = el as ArrowElement | LineElement;
                   return {
                     ...lineEl,
-                    x: x - dragOffset.x,
-                    y: y - dragOffset.y,
-                    startX: lineEl.startX + dx,
-                    startY: lineEl.startY + dy,
-                    endX: lineEl.endX + dx,
-                    endY: lineEl.endY + dy,
+                    x: newX,
+                    y: newY,
+                    startX: lineEl.startX + snapDx,
+                    startY: lineEl.startY + snapDy,
+                    endX: lineEl.endX + snapDx,
+                    endY: lineEl.endY + snapDy,
                   };
                 }
-                return { ...el, x: x - dragOffset.x, y: y - dragOffset.y };
+                return { ...el, x: newX, y: newY };
               }
               return el;
             }),
@@ -3487,6 +3535,31 @@ export function Canvas() {
                 title="Zoom in (Ctrl++)"
               >
                 +
+              </button>
+            </div>
+            {/* Grid controls */}
+            <div className="flex items-center gap-1 border-l border-zinc-200 dark:border-zinc-700 pl-3 ml-2">
+              <button
+                onClick={() => setShowGrid(!showGrid)}
+                className={`px-2 py-1 text-xs rounded transition-colors ${
+                  showGrid
+                    ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
+                    : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                }`}
+                title="Toggle grid (G)"
+              >
+                Grid
+              </button>
+              <button
+                onClick={() => setSnapToGrid(!snapToGrid)}
+                className={`px-2 py-1 text-xs rounded transition-colors ${
+                  snapToGrid
+                    ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
+                    : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                }`}
+                title="Toggle snap to grid (Shift+G)"
+              >
+                Snap
               </button>
             </div>
             <ThemeToggle />
