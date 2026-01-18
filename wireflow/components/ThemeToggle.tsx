@@ -1,10 +1,13 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { Sun, Moon, Monitor } from 'lucide-react';
 import { useTheme } from './ThemeProvider';
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
+  const previousThemeRef = useRef(theme);
+  const announceRef = useRef<HTMLDivElement>(null);
 
   const cycleTheme = () => {
     const themes: Array<'light' | 'dark' | 'system'> = ['light', 'dark', 'system'];
@@ -35,6 +38,15 @@ export function ThemeToggle() {
     }
   };
 
+  // Announce theme changes to screen readers
+  useEffect(() => {
+    if (previousThemeRef.current !== theme && announceRef.current) {
+      // Update the announcement text only when theme changes
+      announceRef.current.textContent = `Theme changed to ${getLabel()}`;
+      previousThemeRef.current = theme;
+    }
+  }, [theme]);
+
   return (
     <>
       <button
@@ -46,9 +58,13 @@ export function ThemeToggle() {
         {getIcon()}
       </button>
       {/* Screen reader announcement for theme changes */}
-      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
-        Theme changed to {getLabel()}
-      </div>
+      <div
+        ref={announceRef}
+        className="fixed left-[-10000px] w-px h-px overflow-hidden"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      />
     </>
   );
 }

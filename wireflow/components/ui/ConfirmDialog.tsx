@@ -103,13 +103,7 @@ export function ConfirmDialog({
   }[variant];
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="dialog-title"
-      aria-describedby="dialog-description"
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50 dark:bg-black/70 animate-fade-in"
@@ -120,6 +114,10 @@ export function ConfirmDialog({
       {/* Dialog */}
       <div
         ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dialog-title"
+        aria-describedby="dialog-description"
         onKeyDown={handleKeyDown}
         className="relative bg-white dark:bg-zinc-900 rounded-xl shadow-2xl max-w-md w-full mx-4 animate-scale-in"
       >
@@ -157,15 +155,15 @@ export function ConfirmDialog({
           {/* Actions */}
           <div className="flex gap-3 justify-end">
             <button
+              ref={cancelButtonRef}
               onClick={onCancel}
               className="px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             >
               {cancelLabel}
             </button>
             <button
-              ref={confirmButtonRef}
               onClick={onConfirm}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 ${confirmButtonColors}`}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${confirmButtonColors}`}
             >
               {confirmLabel}
             </button>

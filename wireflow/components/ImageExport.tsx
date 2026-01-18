@@ -311,36 +311,48 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
       return;
     }
 
-    const bounds = getBoundingBox();
-    const canvas = document.createElement('canvas');
-    const scale = 2; // 2x for retina
-    canvas.width = bounds.width * scale;
-    canvas.height = bounds.height * scale;
+    try {
+      const bounds = getBoundingBox();
+      const canvas = document.createElement('canvas');
+      const scale = 2; // 2x for retina
+      canvas.width = bounds.width * scale;
+      canvas.height = bounds.height * scale;
 
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        throw new Error('Failed to get canvas context');
+      }
 
-    // White background
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // White background
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Scale for retina
-    ctx.scale(scale, scale);
+      // Scale for retina
+      ctx.scale(scale, scale);
 
-    renderToCanvas(ctx, bounds.x, bounds.y);
+      renderToCanvas(ctx, bounds.x, bounds.y);
 
-    // Download
-    const link = document.createElement('a');
-    link.download = `${frameName}-${Date.now()}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+      // Download
+      const link = document.createElement('a');
+      link.download = `${frameName}-${Date.now()}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
 
-    addToast({
-      type: 'success',
-      title: 'PNG exported',
-      message: `Exported ${elements.length} element(s) as PNG`,
-    });
-    setIsOpen(false);
+      addToast({
+        type: 'success',
+        title: 'PNG exported',
+        message: `Exported ${elements.length} element(s) as PNG`,
+      });
+    } catch (error) {
+      console.error('PNG export failed:', error);
+      addToast({
+        type: 'error',
+        title: 'Export failed',
+        message: 'Failed to export PNG. Please try again.',
+      });
+    } finally {
+      setIsOpen(false);
+    }
   };
 
   const exportSVG = () => {
@@ -354,128 +366,138 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
       return;
     }
 
-    const bounds = getBoundingBox();
-    const sketchColor = '#6b7280';
+    try {
+      const bounds = getBoundingBox();
+      const sketchColor = '#6b7280';
 
-    let svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${bounds.width} ${bounds.height}" width="${bounds.width}" height="${bounds.height}">
+      let svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${bounds.width} ${bounds.height}" width="${bounds.width}" height="${bounds.height}">
   <rect width="100%" height="100%" fill="white"/>
   <g stroke="${sketchColor}" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
 `;
 
-    elements.forEach((element) => {
-      const x = element.x - bounds.x;
-      const y = element.y - bounds.y;
+      elements.forEach((element) => {
+        const x = element.x - bounds.x;
+        const y = element.y - bounds.y;
 
-      // Calculate rotation transform for SVG
-      const rotation = element.rotation || 0;
-      const rotationDegrees = (rotation * 180) / Math.PI;
-      const hasRotation = rotation !== 0 && element.type !== 'arrow' && element.type !== 'line' && element.type !== 'freedraw' && element.type !== 'text';
-      const centerX = x + element.width / 2;
-      const centerY = y + element.height / 2;
-      const rotateAttr = hasRotation ? ` transform="rotate(${rotationDegrees.toFixed(2)} ${centerX.toFixed(2)} ${centerY.toFixed(2)})"` : '';
+        // Calculate rotation transform for SVG
+        const rotation = element.rotation || 0;
+        const rotationDegrees = (rotation * 180) / Math.PI;
+        const hasRotation = rotation !== 0 && element.type !== 'arrow' && element.type !== 'line' && element.type !== 'freedraw' && element.type !== 'text';
+        const centerX = x + element.width / 2;
+        const centerY = y + element.height / 2;
+        const rotateAttr = hasRotation ? ` transform="rotate(${rotationDegrees.toFixed(2)} ${centerX.toFixed(2)} ${centerY.toFixed(2)})"` : '';
 
-      if (element.type === 'rectangle') {
-        svgContent += `    <rect x="${x}" y="${y}" width="${element.width}" height="${element.height}"${rotateAttr}/>\n`;
-      } else if (element.type === 'ellipse') {
-        const cx = x + element.width / 2;
-        const cy = y + element.height / 2;
-        const rx = element.width / 2;
-        const ry = element.height / 2;
-        svgContent += `    <ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}"${rotateAttr}/>\n`;
-      } else if (element.type === 'diamond') {
-        const topX = x + element.width / 2;
-        const topY = y;
-        const rightX = x + element.width;
-        const rightY = y + element.height / 2;
-        const bottomX = x + element.width / 2;
-        const bottomY = y + element.height;
-        const leftX = x;
-        const leftY = y + element.height / 2;
-        svgContent += `    <polygon points="${topX},${topY} ${rightX},${rightY} ${bottomX},${bottomY} ${leftX},${leftY}"${rotateAttr}/>\n`;
-      } else if (element.type === 'text') {
-        const textEl = element as TextElement;
-        const fontSize = textEl.fontSize || 16;
-        const fontWeight = textEl.fontWeight || 'normal';
-        const fontStyle = textEl.fontStyle || 'normal';
-        const textAlign = textEl.textAlign || 'left';
+        if (element.type === 'rectangle') {
+          svgContent += `    <rect x="${x}" y="${y}" width="${element.width}" height="${element.height}"${rotateAttr}/>\n`;
+        } else if (element.type === 'ellipse') {
+          const cx = x + element.width / 2;
+          const cy = y + element.height / 2;
+          const rx = element.width / 2;
+          const ry = element.height / 2;
+          svgContent += `    <ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}"${rotateAttr}/>\n`;
+        } else if (element.type === 'diamond') {
+          const topX = x + element.width / 2;
+          const topY = y;
+          const rightX = x + element.width;
+          const rightY = y + element.height / 2;
+          const bottomX = x + element.width / 2;
+          const bottomY = y + element.height;
+          const leftX = x;
+          const leftY = y + element.height / 2;
+          svgContent += `    <polygon points="${topX},${topY} ${rightX},${rightY} ${bottomX},${bottomY} ${leftX},${leftY}"${rotateAttr}/>\n`;
+        } else if (element.type === 'text') {
+          const textEl = element as TextElement;
+          const fontSize = textEl.fontSize || 16;
+          const fontWeight = textEl.fontWeight || 'normal';
+          const fontStyle = textEl.fontStyle || 'normal';
+          const textAlign = textEl.textAlign || 'left';
 
-        let textX: number;
-        let anchor: string;
-        switch (textAlign) {
-          case 'center':
-            textX = x + element.width / 2;
-            anchor = 'middle';
-            break;
-          case 'right':
-            textX = x + element.width - 8;
-            anchor = 'end';
-            break;
-          default:
-            textX = x + 8;
-            anchor = 'start';
+          let textX: number;
+          let anchor: string;
+          switch (textAlign) {
+            case 'center':
+              textX = x + element.width / 2;
+              anchor = 'middle';
+              break;
+            case 'right':
+              textX = x + element.width - 8;
+              anchor = 'end';
+              break;
+            default:
+              textX = x + 8;
+              anchor = 'start';
+          }
+
+          const textY = y + fontSize + 8;
+          const style = `font-size:${fontSize}px;font-weight:${fontWeight};font-style:${fontStyle};font-family:sans-serif`;
+          const escapedContent = (textEl.content || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          svgContent += `    <text x="${textX}" y="${textY}" fill="${sketchColor}" text-anchor="${anchor}" style="${style}">${escapedContent}</text>\n`;
+        } else if (element.type === 'arrow') {
+          const arrowEl = element as ArrowElement;
+          const startX = arrowEl.startX - bounds.x;
+          const startY = arrowEl.startY - bounds.y;
+          const endX = arrowEl.endX - bounds.x;
+          const endY = arrowEl.endY - bounds.y;
+
+          svgContent += `    <line x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}"/>\n`;
+
+          // Arrowhead
+          const angle = Math.atan2(endY - startY, endX - startX);
+          const head1X = endX - ARROW_HEAD_LENGTH * Math.cos(angle - Math.PI / 6);
+          const head1Y = endY - ARROW_HEAD_LENGTH * Math.sin(angle - Math.PI / 6);
+          const head2X = endX - ARROW_HEAD_LENGTH * Math.cos(angle + Math.PI / 6);
+          const head2Y = endY - ARROW_HEAD_LENGTH * Math.sin(angle + Math.PI / 6);
+
+          svgContent += `    <line x1="${endX}" y1="${endY}" x2="${head1X}" y2="${head1Y}"/>\n`;
+          svgContent += `    <line x1="${endX}" y1="${endY}" x2="${head2X}" y2="${head2Y}"/>\n`;
+        } else if (element.type === 'line') {
+          const lineEl = element as LineElement;
+          const startX = lineEl.startX - bounds.x;
+          const startY = lineEl.startY - bounds.y;
+          const endX = lineEl.endX - bounds.x;
+          const endY = lineEl.endY - bounds.y;
+
+          svgContent += `    <line x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}"/>\n`;
+        } else if (element.type === 'freedraw') {
+          const freedrawEl = element as FreedrawElement;
+          if (freedrawEl.points.length >= 2) {
+            const pathPoints = freedrawEl.points.map((p, i) => {
+              const px = p.x - bounds.x;
+              const py = p.y - bounds.y;
+              return i === 0 ? `M${px},${py}` : `L${px},${py}`;
+            }).join(' ');
+            svgContent += `    <path d="${pathPoints}"/>\n`;
+          }
         }
+      });
 
-        const textY = y + fontSize + 8;
-        const style = `font-size:${fontSize}px;font-weight:${fontWeight};font-style:${fontStyle};font-family:sans-serif`;
-        const escapedContent = (textEl.content || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        svgContent += `    <text x="${textX}" y="${textY}" fill="${sketchColor}" text-anchor="${anchor}" style="${style}">${escapedContent}</text>\n`;
-      } else if (element.type === 'arrow') {
-        const arrowEl = element as ArrowElement;
-        const startX = arrowEl.startX - bounds.x;
-        const startY = arrowEl.startY - bounds.y;
-        const endX = arrowEl.endX - bounds.x;
-        const endY = arrowEl.endY - bounds.y;
-
-        svgContent += `    <line x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}"/>\n`;
-
-        // Arrowhead
-        const angle = Math.atan2(endY - startY, endX - startX);
-        const head1X = endX - ARROW_HEAD_LENGTH * Math.cos(angle - Math.PI / 6);
-        const head1Y = endY - ARROW_HEAD_LENGTH * Math.sin(angle - Math.PI / 6);
-        const head2X = endX - ARROW_HEAD_LENGTH * Math.cos(angle + Math.PI / 6);
-        const head2Y = endY - ARROW_HEAD_LENGTH * Math.sin(angle + Math.PI / 6);
-
-        svgContent += `    <line x1="${endX}" y1="${endY}" x2="${head1X}" y2="${head1Y}"/>\n`;
-        svgContent += `    <line x1="${endX}" y1="${endY}" x2="${head2X}" y2="${head2Y}"/>\n`;
-      } else if (element.type === 'line') {
-        const lineEl = element as LineElement;
-        const startX = lineEl.startX - bounds.x;
-        const startY = lineEl.startY - bounds.y;
-        const endX = lineEl.endX - bounds.x;
-        const endY = lineEl.endY - bounds.y;
-
-        svgContent += `    <line x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}"/>\n`;
-      } else if (element.type === 'freedraw') {
-        const freedrawEl = element as FreedrawElement;
-        if (freedrawEl.points.length >= 2) {
-          const pathPoints = freedrawEl.points.map((p, i) => {
-            const px = p.x - bounds.x;
-            const py = p.y - bounds.y;
-            return i === 0 ? `M${px},${py}` : `L${px},${py}`;
-          }).join(' ');
-          svgContent += `    <path d="${pathPoints}"/>\n`;
-        }
-      }
-    });
-
-    svgContent += `  </g>
+      svgContent += `  </g>
 </svg>`;
 
-    // Download
-    const blob = new Blob([svgContent], { type: 'image/svg+xml' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.download = `${frameName}-${Date.now()}.svg`;
-    link.href = url;
-    link.click();
-    URL.revokeObjectURL(url);
+      // Download
+      const blob = new Blob([svgContent], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = `${frameName}-${Date.now()}.svg`;
+      link.href = url;
+      link.click();
+      URL.revokeObjectURL(url);
 
-    addToast({
-      type: 'success',
-      title: 'SVG exported',
-      message: `Exported ${elements.length} element(s) as SVG`,
-    });
-    setIsOpen(false);
+      addToast({
+        type: 'success',
+        title: 'SVG exported',
+        message: `Exported ${elements.length} element(s) as SVG`,
+      });
+    } catch (error) {
+      console.error('SVG export failed:', error);
+      addToast({
+        type: 'error',
+        title: 'Export failed',
+        message: 'Failed to export SVG. Please try again.',
+      });
+    } finally {
+      setIsOpen(false);
+    }
   };
 
   return (

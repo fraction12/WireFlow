@@ -152,6 +152,17 @@ export function Canvas() {
   const [pendingPromoteGroupId, setPendingPromoteGroupId] = useState<string | null>(null);
   const [newComponentName, setNewComponentName] = useState('');
 
+  // Lock body scroll when promote dialog is open
+  useEffect(() => {
+    if (isPromoteDialogOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isPromoteDialogOpen]);
+
   // Constants for sketch rendering and interaction
   const SKETCH_AMPLITUDE = 1.5;
   const SEGMENT_DISTANCE = 20;
@@ -4682,22 +4693,27 @@ export function Canvas() {
             <div className="flex items-center gap-1 text-sm text-zinc-600 dark:text-zinc-400">
               <button
                 onClick={zoomOut}
-                className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded"
+                disabled={zoom <= MIN_ZOOM}
+                className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                 title="Zoom out (Ctrl+-)"
+                aria-label="Zoom out"
               >
                 −
               </button>
               <button
                 onClick={resetZoom}
-                className="px-2 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded min-w-[50px] text-center"
+                className="px-2 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded min-w-[50px] text-center transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                 title="Reset zoom (Ctrl+0)"
+                aria-label="Reset zoom to 100%"
               >
                 {Math.round(zoom * 100)}%
               </button>
               <button
                 onClick={zoomIn}
-                className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded"
+                disabled={zoom >= MAX_ZOOM}
+                className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                 title="Zoom in (Ctrl++)"
+                aria-label="Zoom in"
               >
                 +
               </button>
@@ -4706,23 +4722,27 @@ export function Canvas() {
             <div className="flex items-center gap-1 border-l border-zinc-200 dark:border-zinc-700 pl-3 ml-2">
               <button
                 onClick={() => setShowGrid(!showGrid)}
-                className={`px-2 py-1 text-xs rounded transition-colors ${
+                className={`px-2 py-1 text-xs rounded transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
                   showGrid
                     ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
                     : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                 }`}
                 title="Toggle grid (G)"
+                aria-label="Toggle grid"
+                aria-pressed={showGrid}
               >
                 Grid
               </button>
               <button
                 onClick={() => setSnapToGrid(!snapToGrid)}
-                className={`px-2 py-1 text-xs rounded transition-colors ${
+                className={`px-2 py-1 text-xs rounded transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
                   snapToGrid
                     ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
                     : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                 }`}
                 title="Toggle snap to grid (Shift+G)"
+                aria-label="Toggle snap to grid"
+                aria-pressed={snapToGrid}
               >
                 Snap
               </button>
@@ -4760,7 +4780,15 @@ export function Canvas() {
             ref={canvasRef}
             width={2000}
             height={2000}
-            className={`absolute inset-0 ${currentTool === "select" ? "cursor-default" : "cursor-crosshair"} ${isPanning ? "cursor-grabbing" : ""}`}
+            className={
+              isPanning
+                ? "absolute inset-0 cursor-grabbing"
+                : currentTool === "select"
+                  ? hoveredElementId
+                    ? "absolute inset-0 cursor-move"
+                    : "absolute inset-0 cursor-default"
+                  : "absolute inset-0 cursor-crosshair"
+            }
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
@@ -4799,8 +4827,9 @@ export function Canvas() {
             }}
             onDoubleClick={handleDoubleClick}
             onWheel={handleWheel}
-            role="img"
-            aria-label={`Canvas for ${activeFrame?.name || "wireframing"}. Use the toolbar to select drawing tools.`}
+            tabIndex={0}
+            role="application"
+            aria-label={`Canvas for ${activeFrame?.name || "wireframing"}. Use the toolbar to select drawing tools. Press Delete to remove selected elements, Ctrl+Z to undo, Ctrl+Y to redo.`}
           />
           {/* Inline text editing overlay */}
           {editingElementId &&
@@ -4875,11 +4904,11 @@ export function Canvas() {
                   autoCorrect="off"
                   autoCapitalize="off"
                   data-gramm="false"
-                  className="absolute resize-none overflow-hidden"
+                  className="absolute resize-none overflow-hidden focus:outline-2 focus:outline-offset-1 focus:outline-blue-400/30"
                   style={{
-                    left: (editingElement.x + TEXT_PADDING) * zoom + pan.x,
+                    left: editingElement.x * zoom + pan.x,
                     top: editingElement.y * zoom + pan.y,
-                    width: Math.max(currentWidth - TEXT_PADDING * 2, MIN_TEXT_WIDTH) * zoom,
+                    width: currentWidth * zoom,
                     minWidth: MIN_TEXT_WIDTH * zoom,
                     height: calculatedHeight * zoom,
                     fontFamily: "sans-serif",
@@ -4888,15 +4917,18 @@ export function Canvas() {
                     fontStyle: fontStyle,
                     textAlign: textAlign,
                     lineHeight: `${lineHeight * zoom}px`,
+                    // Internal text padding to match canvas rendering
+                    paddingLeft: `${TEXT_PADDING * zoom}px`,
+                    paddingRight: `${TEXT_PADDING * zoom}px`,
+                    paddingTop: `${TEXT_PADDING * zoom}px`,
+                    paddingBottom: `${TEXT_PADDING * zoom}px`,
                     // Fully transparent - WYSIWYG
                     background: "transparent",
                     color: canvasTheme.sketch,
                     caretColor: canvasTheme.selected,
-                    // Remove ALL styling
-                    padding: 0,
+                    // Remove default styling
                     margin: 0,
                     border: "none",
-                    outline: "none",
                     boxShadow: "none",
                     WebkitAppearance: "none",
                   }}
@@ -4976,43 +5008,106 @@ export function Canvas() {
 
       {/* Promote to Component Dialog */}
       {isPromoteDialogOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-zinc-900 rounded-lg shadow-xl p-6 w-96 max-w-[90vw]">
-            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-4">
-              Create Component
-            </h2>
-            <p className="text-sm text-zinc-600 dark:text-zinc-400 mb-4">
-              Enter a name for your new component. It will be added to your component library.
-            </p>
-            <input
-              type="text"
-              value={newComponentName}
-              onChange={(e) => setNewComponentName(e.target.value)}
-              placeholder="Component name"
-              className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && newComponentName.trim()) {
-                  handlePromoteDialogConfirm();
-                } else if (e.key === 'Escape') {
-                  handlePromoteDialogCancel();
-                }
-              }}
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={handlePromoteDialogCancel}
-                className="px-4 py-2 text-sm text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handlePromoteDialogConfirm}
-                disabled={!newComponentName.trim()}
-                className="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* Backdrop */}
+          <div
+            className="absolute inset-0 bg-black/50 dark:bg-black/70 animate-fade-in"
+            onClick={handlePromoteDialogCancel}
+            aria-hidden="true"
+          />
+
+          {/* Dialog */}
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="promote-dialog-title"
+            aria-describedby="promote-dialog-description"
+            onKeyDown={(e) => {
+              // Handle escape at dialog level
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                handlePromoteDialogCancel();
+              }
+
+              // Trap focus within dialog
+              if (e.key !== 'Tab') return;
+
+              const focusableElements = e.currentTarget.querySelectorAll(
+                'input:not([disabled]), button:not([disabled])'
+              );
+
+              if (!focusableElements || focusableElements.length === 0) return;
+
+              const firstElement = focusableElements[0] as HTMLElement;
+              const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+
+              if (e.shiftKey && document.activeElement === firstElement) {
+                e.preventDefault();
+                lastElement.focus();
+              } else if (!e.shiftKey && document.activeElement === lastElement) {
+                e.preventDefault();
+                firstElement.focus();
+              }
+            }}
+            className="relative bg-white dark:bg-zinc-900 rounded-xl shadow-2xl max-w-md w-full mx-4 animate-scale-in"
+          >
+            <div className="p-6">
+              {/* Title */}
+              <h2
+                id="promote-dialog-title"
+                className="text-lg font-semibold text-zinc-900 dark:text-zinc-100 mb-2"
               >
                 Create Component
-              </button>
+              </h2>
+
+              {/* Description */}
+              <p
+                id="promote-dialog-description"
+                className="text-sm text-zinc-600 dark:text-zinc-400 mb-4"
+              >
+                Enter a name for your new component. It will be added to your component library.
+              </p>
+
+              {/* Input with label */}
+              <div className="mb-6">
+                <label htmlFor="component-name-input" className="sr-only">
+                  Component name
+                </label>
+                <input
+                  id="component-name-input"
+                  type="text"
+                  value={newComponentName}
+                  onChange={(e) => setNewComponentName(e.target.value)}
+                  placeholder="Component name"
+                  className="w-full px-3 py-2 border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (newComponentName.trim()) {
+                        handlePromoteDialogConfirm();
+                      }
+                    }
+                  }}
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={handlePromoteDialogCancel}
+                  className="px-4 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-300 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handlePromoteDialogConfirm}
+                  disabled={!newComponentName.trim()}
+                  className="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
+                >
+                  Create Component
+                </button>
+              </div>
             </div>
           </div>
         </div>

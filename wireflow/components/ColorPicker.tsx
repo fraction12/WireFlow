@@ -150,20 +150,27 @@ export function ColorPicker({
   const renderDropdown = () => {
     if (!isOpen) return null;
 
+    // Generate unique ID for aria-activedescendant
+    const getOptionId = (index: number) => `color-option-${label}-${index}`;
+
     return (
       <div
-        ref={dropdownRef}
         className="absolute top-full left-0 mt-2 p-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg z-50 animate-scale-in"
         role="listbox"
         aria-label={`Select ${label.toLowerCase()} color`}
+        aria-activedescendant={focusedIndex >= 0 ? getOptionId(focusedIndex) : undefined}
+        onKeyDown={handleDropdownKeyDown}
+        tabIndex={-1}
       >
-        <div className="grid grid-cols-4 gap-1.5">
-          {colors.map((color) => {
+        <div className="grid grid-cols-5 gap-1.5">
+          {colors.map((color, index) => {
             const isSelected = color.hex.toLowerCase() === selectedColor.toLowerCase();
+            const isFocused = index === focusedIndex;
             const isTransparent = color.hex === 'transparent';
 
             return (
               <button
+                id={getOptionId(index)}
                 key={color.hex}
                 onClick={() => handleColorSelect(color)}
                 className={`
@@ -173,6 +180,8 @@ export function ColorPicker({
                   hover:scale-110 active:scale-95
                   ${isSelected
                     ? 'border-blue-500 ring-2 ring-blue-200 dark:ring-blue-800'
+                    : isFocused
+                    ? 'border-blue-400 ring-2 ring-blue-100 dark:ring-blue-900'
                     : 'border-zinc-200 dark:border-zinc-600 hover:border-zinc-400 dark:hover:border-zinc-400'
                   }
                 `}
@@ -183,6 +192,7 @@ export function ColorPicker({
                 aria-label={color.name}
                 role="option"
                 aria-selected={isSelected}
+                tabIndex={-1}
               >
                 {/* Transparent indicator */}
                 {isTransparent && (
