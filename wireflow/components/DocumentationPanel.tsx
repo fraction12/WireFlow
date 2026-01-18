@@ -4,7 +4,6 @@ import { useState } from 'react';
 import type { FrameDocumentation, ElementAnnotation } from '@/lib/types';
 import {
   FileText,
-  ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
 
@@ -181,9 +180,35 @@ export function DocumentationPanel({
         {/* Empty state when no element selected */}
         {!selectedElementId && (
           <div className="border-t border-zinc-200 dark:border-zinc-700 pt-4">
-            <div className="text-center py-6 text-zinc-400 dark:text-zinc-500">
-              <ChevronLeft size={24} className="mx-auto mb-2 opacity-50" />
-              <p className="text-sm">Select an element to add annotations</p>
+            <div className="text-center py-8 text-zinc-400 dark:text-zinc-500">
+              {/* Empty state illustration - cursor selecting element */}
+              <svg
+                width="56"
+                height="56"
+                viewBox="0 0 56 56"
+                className="mx-auto mb-3 opacity-30"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                {/* Unselected element (rectangle) */}
+                <rect x="16" y="16" width="24" height="18" rx="2" strokeDasharray="3 2" />
+                {/* Cursor arrow */}
+                <path
+                  d="M8 8 L8 26 L13 21 L18 30 L21 28 L16 19 L22 19 Z"
+                  fill="currentColor"
+                  stroke="none"
+                  className="opacity-60"
+                />
+                {/* Document/annotation icon */}
+                <rect x="32" y="36" width="14" height="12" rx="1" />
+                <line x1="35" y1="40" x2="43" y2="40" />
+                <line x1="35" y1="44" x2="40" y2="44" />
+              </svg>
+              <p className="text-sm font-medium mb-1">No element selected</p>
+              <p className="text-xs opacity-70">Click an element to add documentation</p>
             </div>
           </div>
         )}

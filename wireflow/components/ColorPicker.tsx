@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { HexColorPicker } from 'react-colorful';
 import { STROKE_COLORS, FILL_COLORS, getContrastColor, type PresetColor } from '@/lib/colors';
 import { Check } from 'lucide-react';
+import { Divider } from '@/components/ui/Divider';
 
 interface ColorPickerProps {
   /** Currently selected color */
@@ -184,7 +185,7 @@ export function ColorPicker({
                   w-8 h-8 rounded-lg flex items-center justify-center
                   transition-all duration-150 ease-out
                   focus:outline-none
-                  hover:scale-110 active:scale-95
+                  hover:scale-105 active:scale-95
                   ${isSelected
                     ? 'ring-2 ring-blue-500 ring-offset-1'
                     : isFocused
@@ -223,7 +224,7 @@ export function ColorPicker({
         </div>
 
         {/* Divider */}
-        <div className="my-2 h-px bg-zinc-200 dark:bg-zinc-700" />
+        <Divider className="my-2" />
 
         {/* Custom Color Toggle */}
         <button

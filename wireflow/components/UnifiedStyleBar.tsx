@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { ColorPicker } from './ColorPicker';
+import { Divider } from '@/components/ui/Divider';
 import { DEFAULT_STROKE_COLOR, DEFAULT_FILL_COLOR } from '@/lib/colors';
 import { TEXT_PRESETS, FONT_SIZES } from '@/lib/textPresets';
 import type { TextElement, TextAlign, FontWeight, FontStyle, TextPreset } from '@/lib/types';
@@ -297,7 +298,7 @@ export function UnifiedStyleBar({
       </div>
 
       {/* Divider */}
-      <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700" />
+      <Divider orientation="vertical" />
 
       {/* ============================================ */}
       {/* TEXT PRESETS (Disabled when no text selected) */}
@@ -326,7 +327,7 @@ export function UnifiedStyleBar({
       </div>
 
       {/* Divider */}
-      <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700" />
+      <Divider orientation="vertical" />
 
       {/* ============================================ */}
       {/* BOLD & ITALIC (Disabled when no text selected) */}
@@ -364,7 +365,7 @@ export function UnifiedStyleBar({
       </div>
 
       {/* Divider */}
-      <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700" />
+      <Divider orientation="vertical" />
 
       {/* ============================================ */}
       {/* TEXT ALIGNMENT (Disabled when no text selected) */}
@@ -414,7 +415,7 @@ export function UnifiedStyleBar({
       </div>
 
       {/* Divider */}
-      <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700" />
+      <Divider orientation="vertical" />
 
       {/* ============================================ */}
       {/* FONT SIZE DROPDOWN (Disabled when no text selected) */}
@@ -484,7 +485,7 @@ export function UnifiedStyleBar({
       </div>
 
       {/* Divider */}
-      <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700" />
+      <Divider orientation="vertical" />
 
       {/* ============================================ */}
       {/* RESET BUTTON (Always Enabled) */}

@@ -63,6 +63,10 @@ interface CanvasTheme {
   hover: string;
   tagged: string;
   group: string;
+  multiSelect: string;
+  multiSelectBg: string;
+  elementGroup: string;
+  elementGroupBg: string;
   marqueeFill: string;
   marqueeStroke: string;
   handle: string;
@@ -80,6 +84,10 @@ function getCanvasTheme(): CanvasTheme {
       hover: "#4b5563",
       tagged: "#10b981",
       group: "#8b5cf6",
+      multiSelect: "#06b6d4", // Cyan for multi-selection
+      multiSelectBg: "rgba(6, 182, 212, 0.08)",
+      elementGroup: "#14b8a6", // Teal for user element groups
+      elementGroupBg: "rgba(20, 184, 166, 0.08)",
       marqueeFill: "rgba(59, 130, 246, 0.1)",
       marqueeStroke: "#3b82f6",
       handle: "#3b82f6",
@@ -97,6 +105,16 @@ function getCanvasTheme(): CanvasTheme {
     hover: styles.getPropertyValue("--canvas-hover").trim() || "#4b5563",
     tagged: styles.getPropertyValue("--canvas-tagged").trim() || "#10b981",
     group: styles.getPropertyValue("--canvas-group").trim() || "#8b5cf6",
+    multiSelect:
+      styles.getPropertyValue("--canvas-multi-select").trim() || "#06b6d4",
+    multiSelectBg:
+      styles.getPropertyValue("--canvas-multi-select-bg").trim() ||
+      "rgba(6, 182, 212, 0.08)",
+    elementGroup:
+      styles.getPropertyValue("--canvas-element-group").trim() || "#14b8a6",
+    elementGroupBg:
+      styles.getPropertyValue("--canvas-element-group-bg").trim() ||
+      "rgba(20, 184, 166, 0.08)",
     marqueeFill:
       styles.getPropertyValue("--canvas-marquee-fill").trim() ||
       "rgba(59, 130, 246, 0.1)",
@@ -181,11 +199,15 @@ export function Canvas() {
   // Selection visual constants
   const SELECTION_PADDING = 4;
   const GROUP_SELECTION_PADDING = 6;
+  const MULTI_SELECT_PADDING = 5;
   const SELECTION_DASH_PATTERN: [number, number] = [4, 4];
   const GROUP_DASH_PATTERN: [number, number] = [6, 4];
+  const MULTI_SELECT_DASH_PATTERN: [number, number] = [2, 3]; // Dotted pattern for multi-selection
+  const ELEMENT_GROUP_DASH_PATTERN: [number, number] = [8, 3]; // Long dash for element groups
   const SELECTION_LINE_WIDTH = 2;
   const GROUP_LINE_WIDTH = 1.5;
-  const MULTI_SELECT_LINE_WIDTH = 1;
+  const MULTI_SELECT_LINE_WIDTH = 1.5;
+  const ELEMENT_GROUP_LINE_WIDTH = 2;
 
   // Generate unique IDs (using substring instead of deprecated substr)
   const generateId = () =>
@@ -1518,10 +1540,10 @@ export function Canvas() {
           maxY = Math.max(maxY, el.y + el.height);
         });
 
-        // Draw group selection box with sketch style
-        ctx.strokeStyle = canvasTheme.selected; // Blue for user groups
-        ctx.lineWidth = GROUP_LINE_WIDTH;
-        ctx.setLineDash(GROUP_DASH_PATTERN); // Dashed for group outline
+        // Draw group selection box with sketch style - teal for user element groups
+        ctx.strokeStyle = canvasTheme.elementGroup;
+        ctx.lineWidth = ELEMENT_GROUP_LINE_WIDTH;
+        ctx.setLineDash(ELEMENT_GROUP_DASH_PATTERN); // Long dash for element groups
         const groupSeed = parseInt(group.id.split("_")[1]) || 0;
         drawSketchRect(
           ctx,
@@ -1533,9 +1555,9 @@ export function Canvas() {
         );
         ctx.setLineDash([]);
 
-        // Draw group label
-        ctx.fillStyle = canvasTheme.selected;
-        ctx.font = "12px sans-serif";
+        // Draw group label with teal color
+        ctx.fillStyle = canvasTheme.elementGroup;
+        ctx.font = "bold 11px sans-serif";
         ctx.fillText("Group", minX, minY - 10);
       }
     });
@@ -1720,11 +1742,22 @@ export function Canvas() {
           maxY = Math.max(maxY, el.y + el.height);
         });
 
-        ctx.strokeStyle = canvasTheme.selected;
+        // Cyan dotted border for multi-selection (visually distinct from single/group)
+        ctx.strokeStyle = canvasTheme.multiSelect;
         ctx.lineWidth = MULTI_SELECT_LINE_WIDTH;
-        ctx.setLineDash(SELECTION_DASH_PATTERN);
-        ctx.strokeRect(minX - 3, minY - 3, maxX - minX + 6, maxY - minY + 6);
+        ctx.setLineDash(MULTI_SELECT_DASH_PATTERN);
+        ctx.strokeRect(
+          minX - MULTI_SELECT_PADDING,
+          minY - MULTI_SELECT_PADDING,
+          maxX - minX + MULTI_SELECT_PADDING * 2,
+          maxY - minY + MULTI_SELECT_PADDING * 2
+        );
         ctx.setLineDash([]);
+
+        // Draw selection count label
+        ctx.fillStyle = canvasTheme.multiSelect;
+        ctx.font = "bold 10px sans-serif";
+        ctx.fillText(`${selectedElements.length} selected`, minX - MULTI_SELECT_PADDING, minY - MULTI_SELECT_PADDING - 4);
       }
     }
 
@@ -4157,14 +4190,14 @@ export function Canvas() {
             endY: insertY + tplEl.offsetY + tplEl.height,
           } as ArrowElement;
         } else if (tplEl.type === "line") {
-          // Line support (if needed in future templates)
+          // Line support - use explicit startX/startY/endX/endY if provided
           return {
             ...baseProps,
             type: "line",
-            startX: insertX + tplEl.offsetX,
-            startY: insertY + tplEl.offsetY,
-            endX: insertX + tplEl.offsetX + tplEl.width,
-            endY: insertY + tplEl.offsetY,
+            startX: insertX + (tplEl.startX ?? tplEl.offsetX),
+            startY: insertY + (tplEl.startY ?? tplEl.offsetY),
+            endX: insertX + (tplEl.endX ?? tplEl.offsetX + tplEl.width),
+            endY: insertY + (tplEl.endY ?? tplEl.offsetY),
           } as LineElement;
         } else if (tplEl.type === "ellipse") {
           return {

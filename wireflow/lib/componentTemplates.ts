@@ -109,7 +109,7 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
         offsetY: 20,
         width: 16,
         height: 16,
-        content: 'v',
+        content: '\u25BC',
       },
     ],
   },
@@ -190,7 +190,7 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
         offsetY: 30,
         width: 60,
         height: 16,
-        content: 'Logo',
+        content: 'Brand',
       },
       {
         type: 'text',
@@ -210,7 +210,7 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
       },
       {
         type: 'text',
-        offsetX: 380,
+        offsetX: 360,
         offsetY: 30,
         width: 50,
         height: 16,
@@ -218,7 +218,7 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
       },
       {
         type: 'text',
-        offsetX: 460,
+        offsetX: 440,
         offsetY: 30,
         width: 60,
         height: 16,
@@ -269,10 +269,10 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
       },
       {
         type: 'text',
-        offsetX: 368,
+        offsetX: 360,
         offsetY: 28,
-        width: 20,
-        height: 20,
+        width: 24,
+        height: 24,
         content: 'X',
       },
       // Body area
@@ -555,7 +555,7 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
       {
         type: 'text',
         offsetX: 276,
-        offsetY: 24,
+        offsetY: 16,
         width: 16,
         height: 16,
         content: '>',

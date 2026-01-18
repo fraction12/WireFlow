@@ -36,7 +36,17 @@ export interface FrameDocumentation {
 }
 
 // Semantic tags for PM layer
-export type SemanticTag = 'button' | 'input' | 'section' | null;
+export type SemanticTag =
+  | 'button'
+  | 'input'
+  | 'section'
+  | 'heading'
+  | 'nav'
+  | 'link'
+  | 'listitem'
+  | 'dialog'
+  | 'table'
+  | null;
 
 // Text formatting types
 export type TextAlign = 'left' | 'center' | 'right';

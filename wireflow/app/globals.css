@@ -17,6 +17,10 @@
   --canvas-hover: #4b5563;
   --canvas-tagged: #10b981;
   --canvas-group: #8b5cf6;
+  --canvas-multi-select: #06b6d4;
+  --canvas-multi-select-bg: rgba(6, 182, 212, 0.08);
+  --canvas-element-group: #14b8a6;
+  --canvas-element-group-bg: rgba(20, 184, 166, 0.08);
   --canvas-marquee-fill: rgba(59, 130, 246, 0.1);
   --canvas-marquee-stroke: #3b82f6;
   --canvas-handle: #3b82f6;
@@ -43,6 +47,10 @@
   --canvas-hover: #9ca3af;
   --canvas-tagged: #34d399;
   --canvas-group: #a78bfa;
+  --canvas-multi-select: #22d3ee;
+  --canvas-multi-select-bg: rgba(34, 211, 238, 0.12);
+  --canvas-element-group: #2dd4bf;
+  --canvas-element-group-bg: rgba(45, 212, 191, 0.12);
   --canvas-marquee-fill: rgba(96, 165, 250, 0.15);
   --canvas-marquee-stroke: #60a5fa;
   --canvas-handle: #60a5fa;
@@ -63,6 +71,10 @@
     --canvas-hover: #9ca3af;
     --canvas-tagged: #34d399;
     --canvas-group: #a78bfa;
+    --canvas-multi-select: #22d3ee;
+    --canvas-multi-select-bg: rgba(34, 211, 238, 0.12);
+    --canvas-element-group: #2dd4bf;
+    --canvas-element-group-bg: rgba(45, 212, 191, 0.12);
     --canvas-marquee-fill: rgba(96, 165, 250, 0.15);
     --canvas-marquee-stroke: #60a5fa;
     --canvas-handle: #60a5fa;

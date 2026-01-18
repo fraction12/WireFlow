@@ -18,6 +18,7 @@ import {
   Edit2,
   MoreVertical,
   PackagePlus,
+  Type,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -189,11 +190,45 @@ export function ComponentPanel({
                   </button>
                 )}
                 {userComponents.length === 0 && !selectedElementGroupId ? (
-                  <div className="text-center py-6 text-zinc-500 dark:text-zinc-400">
-                    <Layers size={28} className="mx-auto mb-2 opacity-40" />
-                    <p className="text-xs">No custom components yet</p>
-                    <p className="text-xs mt-1 opacity-70">
-                      Select a group and press Ctrl+Shift+C
+                  <div className="text-center py-8 text-zinc-500 dark:text-zinc-400">
+                    {/* Empty state illustration - grouped shapes */}
+                    <svg
+                      width="64"
+                      height="64"
+                      viewBox="0 0 64 64"
+                      className="mx-auto mb-3 opacity-30"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      {/* Outer dashed group border */}
+                      <rect
+                        x="8"
+                        y="8"
+                        width="48"
+                        height="48"
+                        rx="4"
+                        strokeDasharray="4 3"
+                        className="opacity-50"
+                      />
+                      {/* Rectangle shape */}
+                      <rect x="14" y="14" width="16" height="12" rx="1" />
+                      {/* Circle shape */}
+                      <circle cx="44" cy="20" r="7" />
+                      {/* Diamond shape */}
+                      <path d="M24 44 L32 36 L40 44 L32 52 Z" />
+                      {/* Connecting dots */}
+                      <circle cx="22" cy="30" r="1.5" fill="currentColor" />
+                      <circle cx="37" cy="32" r="1.5" fill="currentColor" />
+                    </svg>
+                    <p className="text-sm font-medium mb-1">No components yet</p>
+                    <p className="text-xs opacity-70">
+                      Select elements and press{' '}
+                      <kbd className="px-1 py-0.5 text-[10px] bg-zinc-100 dark:bg-zinc-800 rounded border border-zinc-200 dark:border-zinc-700">
+                        Ctrl+Shift+C
+                      </kbd>
                     </p>
                   </div>
                 ) : userComponents.length === 0 ? (
@@ -520,10 +555,10 @@ function getComponentIcon(type: ComponentType): LucideIcon {
     'simple-form': FormInput,
     'action-footer': RectangleHorizontal,
     // Phase 1 - Core templates
-    'button': Square,
-    'text-input': FormInput,
-    'dropdown': FormInput,
-    'card': Square,
+    'button': RectangleHorizontal, // Horizontal rectangle is more button-like
+    'text-input': Type, // Type icon for text input
+    'dropdown': ChevronDown, // Down chevron for dropdown
+    'card': Square, // Square is appropriate for card
     'navigation-bar': RectangleHorizontal,
     'modal-dialog': AlertTriangle,
     'list-item': RectangleHorizontal,
