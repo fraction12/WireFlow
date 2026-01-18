@@ -1127,9 +1127,6 @@ export function Canvas() {
         const textEl = element as TextElement;
         const padding = TEXT_PADDING;
 
-        // Determine visual state for text element
-        const isHovered =
-          element.id === hoveredElementId && currentTool === "select";
         const isBeingEdited = element.id === editingElementId;
 
         // Skip rendering entirely when being edited - textarea overlay handles it
@@ -1198,20 +1195,8 @@ export function Canvas() {
             seed,
           );
           ctx.lineWidth = 1.5; // Reset line width
-        } else if (isHovered) {
-          // Hovered: subtle darker gray to indicate interactivity
-          ctx.strokeStyle = canvasTheme.hover;
-          ctx.lineWidth = 1.5;
-          drawSketchRect(
-            ctx,
-            element.x,
-            element.y,
-            element.width,
-            element.height,
-            seed,
-          );
         }
-        // No border for unselected/unhovered text elements
+        // No hover border for text elements - cursor change provides sufficient feedback
       } else if (element.type === "arrow") {
         const arrowEl = element as ArrowElement;
         // Draw sketch-style arrow line
