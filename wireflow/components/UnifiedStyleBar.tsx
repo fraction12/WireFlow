@@ -15,12 +15,18 @@ import {
   ChevronDown,
 } from 'lucide-react';
 
+/** Indicator for mixed values in multi-selection */
+const MIXED_VALUE = 'mixed';
+
 interface UnifiedStyleBarProps {
   // Color controls (always enabled)
-  strokeColor: string;
-  fillColor: string;
+  strokeColor: string | typeof MIXED_VALUE;
+  fillColor: string | typeof MIXED_VALUE;
   onStrokeColorChange: (color: string) => void;
   onFillColorChange: (color: string) => void;
+
+  // Multi-selection info
+  selectionCount: number; // 0 = no selection, 1 = single, >1 = multi
 
   // Text controls (enabled only when selectedTextElement is not null)
   selectedTextElement: TextElement | null;
@@ -31,6 +37,9 @@ interface UnifiedStyleBarProps {
   fillPickerOpen: boolean;
   onStrokePickerOpenChange: (open: boolean) => void;
   onFillPickerOpenChange: (open: boolean) => void;
+
+  // Optional: disabled state for locked elements
+  disabled?: boolean;
 }
 
 export function UnifiedStyleBar({
@@ -38,17 +47,27 @@ export function UnifiedStyleBar({
   fillColor,
   onStrokeColorChange,
   onFillColorChange,
+  selectionCount,
   selectedTextElement,
   onTextUpdate,
   strokePickerOpen,
   fillPickerOpen,
   onStrokePickerOpenChange,
   onFillPickerOpenChange,
+  disabled = false,
 }: UnifiedStyleBarProps) {
   const [showSizeDropdown, setShowSizeDropdown] = useState(false);
   const [focusedSizeIndex, setFocusedSizeIndex] = useState(-1);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const resetButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Check for mixed values in multi-selection
+  const isStrokeMixed = strokeColor === MIXED_VALUE;
+  const isFillMixed = fillColor === MIXED_VALUE;
+
+  // Get effective colors for display (use default for mixed)
+  const displayStrokeColor = isStrokeMixed ? DEFAULT_STROKE_COLOR : strokeColor;
+  const displayFillColor = isFillMixed ? DEFAULT_FILL_COLOR : fillColor;
 
   // Get current text values with defaults
   const fontSize = selectedTextElement?.fontSize || 16;
@@ -57,7 +76,8 @@ export function UnifiedStyleBar({
   const textAlign = selectedTextElement?.textAlign || 'left';
   const preset = selectedTextElement?.preset;
 
-  const textControlsDisabled = !selectedTextElement;
+  const textControlsDisabled = !selectedTextElement || disabled;
+  const colorControlsDisabled = disabled;
 
   // Close other picker when opening one
   const handleStrokePickerOpen = (open: boolean) => {
@@ -202,25 +222,53 @@ export function UnifiedStyleBar({
     opacity-50 pointer-events-none cursor-not-allowed
   `;
 
+  // Generate selection label for accessibility
+  const selectionLabel = selectionCount === 0
+    ? 'No selection'
+    : selectionCount === 1
+    ? '1 element selected'
+    : `${selectionCount} elements selected`;
+
   return (
     <div
       className="flex items-center gap-3 px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-sm animate-fade-in"
       role="toolbar"
-      aria-label="Element styling and text formatting"
+      aria-label={`Element styling and text formatting. ${selectionLabel}`}
     >
+      {/* Selection count indicator (visible only for multi-selection) */}
+      {selectionCount > 1 && (
+        <>
+          <span
+            className="text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded"
+            aria-live="polite"
+          >
+            {selectionCount} selected
+          </span>
+          <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700" aria-hidden="true" />
+        </>
+      )}
+
       {/* ============================================ */}
-      {/* COLOR CONTROLS (Always Enabled) */}
+      {/* COLOR CONTROLS (Always Enabled unless disabled) */}
       {/* ============================================ */}
       <div
-        className="flex items-center gap-2"
+        className={`flex items-center gap-2 ${colorControlsDisabled ? 'opacity-50 pointer-events-none' : ''}`}
         role="group"
         aria-label="Color controls"
+        aria-disabled={colorControlsDisabled}
       >
-        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400 min-w-[32px]">
-          Stroke
-        </span>
+        <div className="flex items-center gap-1">
+          <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400 min-w-[32px]">
+            Stroke
+          </span>
+          {isStrokeMixed && (
+            <span className="text-[10px] text-amber-600 dark:text-amber-400" title="Mixed values in selection">
+              (mixed)
+            </span>
+          )}
+        </div>
         <ColorPicker
-          selectedColor={strokeColor}
+          selectedColor={displayStrokeColor}
           onColorChange={onStrokeColorChange}
           label="Stroke"
           isOpen={strokePickerOpen}
@@ -228,12 +276,19 @@ export function UnifiedStyleBar({
         />
       </div>
 
-      <div className="flex items-center gap-2">
-        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400 min-w-[32px]">
-          Fill
-        </span>
+      <div className={`flex items-center gap-2 ${colorControlsDisabled ? 'opacity-50 pointer-events-none' : ''}`}>
+        <div className="flex items-center gap-1">
+          <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400 min-w-[32px]">
+            Fill
+          </span>
+          {isFillMixed && (
+            <span className="text-[10px] text-amber-600 dark:text-amber-400" title="Mixed values in selection">
+              (mixed)
+            </span>
+          )}
+        </div>
         <ColorPicker
-          selectedColor={fillColor}
+          selectedColor={displayFillColor}
           onColorChange={onFillColorChange}
           label="Fill"
           isOpen={fillPickerOpen}

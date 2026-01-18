@@ -176,13 +176,13 @@ export function ColorPicker({
                 className={`
                   w-7 h-7 rounded-md border-2 flex items-center justify-center
                   transition-all duration-150 ease-out
-                  focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500
+                  focus:outline-none
                   hover:scale-110 active:scale-95
                   ${isSelected
-                    ? 'border-blue-500 ring-2 ring-blue-200 dark:ring-blue-800'
+                    ? 'border-blue-500 shadow-[0_0_0_2px_rgba(59,130,246,0.3)]'
                     : isFocused
-                    ? 'border-blue-400 ring-2 ring-blue-100 dark:ring-blue-900'
-                    : 'border-zinc-200 dark:border-zinc-600 hover:border-zinc-400 dark:hover:border-zinc-400'
+                    ? 'border-blue-400 shadow-[0_0_0_2px_rgba(59,130,246,0.2)]'
+                    : 'border-transparent hover:border-zinc-300 dark:hover:border-zinc-500'
                   }
                 `}
                 style={{

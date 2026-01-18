@@ -377,9 +377,30 @@ export function Canvas() {
   // Alignment guides state (lines to show when elements align)
   const [alignmentGuides, setAlignmentGuides] = useState<{ type: 'h' | 'v'; pos: number }[]>([]);
 
-  // Right panel states (Phase 1)
+  // Right panel states (Phase 1) - only one panel can be open at a time
   const [componentPanelExpanded, setComponentPanelExpanded] = useState(true);
-  const [docPanelExpanded, setDocPanelExpanded] = useState(true);
+  const [docPanelExpanded, setDocPanelExpanded] = useState(false);
+
+  // Toggle handlers that ensure only one right panel is open at a time
+  const toggleComponentPanel = useCallback(() => {
+    setComponentPanelExpanded(prev => {
+      const newState = !prev;
+      if (newState) {
+        setDocPanelExpanded(false); // Close doc panel when opening component panel
+      }
+      return newState;
+    });
+  }, []);
+
+  const toggleDocPanel = useCallback(() => {
+    setDocPanelExpanded(prev => {
+      const newState = !prev;
+      if (newState) {
+        setComponentPanelExpanded(false); // Close component panel when opening doc panel
+      }
+      return newState;
+    });
+  }, []);
 
   // Colors state (Phase 1)
   const [currentStrokeColor, setCurrentStrokeColor] = useState(DEFAULT_STROKE_COLOR);
@@ -935,24 +956,21 @@ export function Canvas() {
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
 
-      // Highlight selected elements with theme selected color (single or multi-select)
+      // Determine if element is selected (single or multi-select)
       const isSelected =
         element.id === selectedElementId || selectedElementIds.has(element.id);
-      if (isSelected) {
-        ctx.strokeStyle = canvasTheme.selected;
-        ctx.fillStyle = canvasTheme.selected;
-      }
 
-      // Highlight semantically tagged elements with theme tagged color
+      // For selected elements, we keep the actual colors visible so style changes
+      // are reflected in real-time. Selection is indicated via a separate outline.
+      // Only override colors for semantically tagged elements.
       if (element.semanticTag) {
         ctx.strokeStyle = canvasTheme.tagged;
         ctx.fillStyle = canvasTheme.tagged;
       }
 
       // Store colors for shape fill (used for rectangle, ellipse, diamond)
-      const shapeFillColor = isSelected ? canvasTheme.selectedBg :
-                            element.semanticTag ? 'rgba(16, 185, 129, 0.08)' :
-                            elementFillColor;
+      // Selected elements show their actual fill color with a subtle selection overlay
+      const shapeFillColor = element.semanticTag ? 'rgba(16, 185, 129, 0.08)' : elementFillColor;
 
       // Use element ID as seed for deterministic randomness
       const seed = parseInt(element.id.split("_")[1]) || 0;
@@ -985,6 +1003,22 @@ export function Canvas() {
           element.height,
           seed,
         );
+        // Draw selection indicator for selected rectangle
+        if (isSelected) {
+          ctx.save();
+          ctx.strokeStyle = canvasTheme.selected;
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4, 4]);
+          const padding = 4;
+          ctx.strokeRect(
+            element.x - padding,
+            element.y - padding,
+            element.width + padding * 2,
+            element.height + padding * 2
+          );
+          ctx.setLineDash([]);
+          ctx.restore();
+        }
       } else if (element.type === "ellipse") {
         // Fill ellipse first if fill color is set
         if (shapeFillColor && shapeFillColor !== 'transparent') {
@@ -1008,6 +1042,25 @@ export function Canvas() {
           element.height,
           seed,
         );
+        // Draw selection indicator for selected ellipse
+        if (isSelected) {
+          ctx.save();
+          ctx.strokeStyle = canvasTheme.selected;
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4, 4]);
+          const padding = 4;
+          ctx.beginPath();
+          ctx.ellipse(
+            element.x + element.width / 2,
+            element.y + element.height / 2,
+            element.width / 2 + padding,
+            element.height / 2 + padding,
+            0, 0, Math.PI * 2
+          );
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.restore();
+        }
       } else if (element.type === "diamond") {
         // Fill diamond first if fill color is set
         if (shapeFillColor && shapeFillColor !== 'transparent') {
@@ -1031,6 +1084,25 @@ export function Canvas() {
           element.height,
           seed,
         );
+        // Draw selection indicator for selected diamond
+        if (isSelected) {
+          ctx.save();
+          ctx.strokeStyle = canvasTheme.selected;
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4, 4]);
+          const padding = 4;
+          const cx = element.x + element.width / 2;
+          const cy = element.y + element.height / 2;
+          ctx.beginPath();
+          ctx.moveTo(cx, element.y - padding);
+          ctx.lineTo(element.x + element.width + padding, cy);
+          ctx.lineTo(cx, element.y + element.height + padding);
+          ctx.lineTo(element.x - padding, cy);
+          ctx.closePath();
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.restore();
+        }
       } else if (element.type === "text") {
         const textEl = element as TextElement;
         const padding = TEXT_PADDING;
@@ -1066,9 +1138,10 @@ export function Canvas() {
         if (isSelected) {
           ctx.fillStyle = canvasTheme.selectedBg;
           ctx.fillRect(element.x, element.y, element.width, element.height);
-          // Restore fill style for text
-          ctx.fillStyle = canvasTheme.selected;
         }
+
+        // Use element's stroke color for text fill (so style changes are visible in real-time)
+        ctx.fillStyle = elementStrokeColor;
 
         // Calculate x position based on alignment
         let textX: number;
@@ -1162,6 +1235,19 @@ export function Canvas() {
           head2Y,
           seed + 11,
         );
+        // Draw selection indicator for selected arrow (highlight the line)
+        if (isSelected) {
+          ctx.save();
+          ctx.strokeStyle = canvasTheme.selected;
+          ctx.lineWidth = 3;
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          ctx.moveTo(arrowEl.startX, arrowEl.startY);
+          ctx.lineTo(arrowEl.endX, arrowEl.endY);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.restore();
+        }
       } else if (element.type === "line") {
         // Draw sketch-style line (like arrow but without arrowhead)
         const lineEl = element as LineElement;
@@ -1173,10 +1259,39 @@ export function Canvas() {
           lineEl.endY,
           seed,
         );
+        // Draw selection indicator for selected line
+        if (isSelected) {
+          ctx.save();
+          ctx.strokeStyle = canvasTheme.selected;
+          ctx.lineWidth = 3;
+          ctx.setLineDash([4, 4]);
+          ctx.beginPath();
+          ctx.moveTo(lineEl.startX, lineEl.startY);
+          ctx.lineTo(lineEl.endX, lineEl.endY);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.restore();
+        }
       } else if (element.type === "freedraw") {
         // Draw freehand path
         const freedrawEl = element as FreedrawElement;
         drawFreedraw(ctx, freedrawEl.points);
+        // Draw selection indicator for selected freedraw (bounding box)
+        if (isSelected) {
+          ctx.save();
+          ctx.strokeStyle = canvasTheme.selected;
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4, 4]);
+          const padding = 4;
+          ctx.strokeRect(
+            element.x - padding,
+            element.y - padding,
+            element.width + padding * 2,
+            element.height + padding * 2
+          );
+          ctx.setLineDash([]);
+          ctx.restore();
+        }
       }
 
       // Restore context if rotation was applied
@@ -3301,7 +3416,7 @@ export function Canvas() {
       // Ctrl/Cmd+\: Toggle documentation panel
       if ((e.ctrlKey || e.metaKey) && e.key === "\\") {
         e.preventDefault();
-        setDocPanelExpanded(prev => !prev);
+        toggleDocPanel();
         return;
       }
 
@@ -3739,6 +3854,7 @@ export function Canvas() {
     sendBackward,
     isPromoteDialogOpen,
     confirmDialog.isOpen,
+    toggleDocPanel,
   ]);
 
   // Frame management handlers
@@ -4583,14 +4699,87 @@ export function Canvas() {
     ? (elements.find(el => el.id === selectedElementId && el.type === 'text') as TextElement | undefined) || null
     : null;
 
-  // Handler for updating selected element's stroke color
+  // Calculate selection info for UnifiedStyleBar
+  const getSelectionInfo = () => {
+    // Gather all selected element IDs including group elements
+    const allSelectedIds = new Set<string>();
+    if (selectedElementId) allSelectedIds.add(selectedElementId);
+    selectedElementIds.forEach(id => allSelectedIds.add(id));
+
+    // Add elements from selected component group
+    if (selectedGroupId) {
+      const groupElements = getGroupElements(selectedGroupId);
+      groupElements.forEach(el => allSelectedIds.add(el.id));
+    }
+
+    // Add elements from selected element group
+    const selectedEl = selectedElementId ? elements.find(el => el.id === selectedElementId) : null;
+    if (selectedEl?.elementGroupId) {
+      const groupElements = getElementGroupElements(selectedEl.elementGroupId);
+      groupElements.forEach(el => allSelectedIds.add(el.id));
+    }
+
+    const count = allSelectedIds.size;
+    if (count === 0) {
+      // No selection - return current colors for new elements
+      return {
+        count: 0,
+        strokeColor: currentStrokeColor,
+        fillColor: currentFillColor,
+      };
+    }
+
+    // Get styles from all selected elements
+    const selectedElements = elements.filter(el => allSelectedIds.has(el.id));
+    const strokeColors = new Set<string>();
+    const fillColors = new Set<string>();
+
+    selectedElements.forEach(el => {
+      strokeColors.add(el.style?.strokeColor || DEFAULT_STROKE_COLOR);
+      fillColors.add(el.style?.fillColor || DEFAULT_FILL_COLOR);
+    });
+
+    return {
+      count,
+      strokeColor: strokeColors.size === 1 ? [...strokeColors][0] : 'mixed' as const,
+      fillColor: fillColors.size === 1 ? [...fillColors][0] : 'mixed' as const,
+    };
+  };
+
+  const selectionInfo = getSelectionInfo();
+
+  // Helper to gather all currently selected element IDs (includes group elements)
+  const getAllSelectedElementIds = (): Set<string> => {
+    const allSelectedIds = new Set<string>();
+    if (selectedElementId) allSelectedIds.add(selectedElementId);
+    selectedElementIds.forEach(id => allSelectedIds.add(id));
+
+    // Add elements from selected component group
+    if (selectedGroupId) {
+      const groupElements = getGroupElements(selectedGroupId);
+      groupElements.forEach(el => allSelectedIds.add(el.id));
+    }
+
+    // Add elements from selected element group
+    const selectedEl = selectedElementId ? elements.find(el => el.id === selectedElementId) : null;
+    if (selectedEl?.elementGroupId) {
+      const groupElements = getElementGroupElements(selectedEl.elementGroupId);
+      groupElements.forEach(el => allSelectedIds.add(el.id));
+    }
+
+    return allSelectedIds;
+  };
+
+  // Handler for updating selected element's stroke color (supports multi-selection and groups)
   const handleStrokeColorChange = (color: string) => {
     setCurrentStrokeColor(color);
-    // If an element is selected, update its stroke color
-    if (selectedElementId) {
+
+    const allSelectedIds = getAllSelectedElementIds();
+
+    if (allSelectedIds.size > 0) {
       recordSnapshot();
       setElements(elements.map(el => {
-        if (el.id === selectedElementId) {
+        if (allSelectedIds.has(el.id)) {
           return {
             ...el,
             style: {
@@ -4605,14 +4794,16 @@ export function Canvas() {
     }
   };
 
-  // Handler for updating selected element's fill color
+  // Handler for updating selected element's fill color (supports multi-selection and groups)
   const handleFillColorChange = (color: string) => {
     setCurrentFillColor(color);
-    // If an element is selected, update its fill color
-    if (selectedElementId) {
+
+    const allSelectedIds = getAllSelectedElementIds();
+
+    if (allSelectedIds.size > 0) {
       recordSnapshot();
       setElements(elements.map(el => {
-        if (el.id === selectedElementId) {
+        if (allSelectedIds.has(el.id)) {
           return {
             ...el,
             style: {
@@ -4742,14 +4933,9 @@ export function Canvas() {
         {/* Unified Style Bar - always visible, consolidates color and text formatting */}
         <div className="px-4 py-2 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50">
           <UnifiedStyleBar
-            strokeColor={selectedElementId
-              ? (elements.find(el => el.id === selectedElementId)?.style?.strokeColor || currentStrokeColor)
-              : currentStrokeColor
-            }
-            fillColor={selectedElementId
-              ? (elements.find(el => el.id === selectedElementId)?.style?.fillColor || currentFillColor)
-              : currentFillColor
-            }
+            strokeColor={selectionInfo.strokeColor}
+            fillColor={selectionInfo.fillColor}
+            selectionCount={selectionInfo.count}
             onStrokeColorChange={handleStrokeColorChange}
             onFillColorChange={handleFillColorChange}
             selectedTextElement={selectedTextElement}
@@ -4956,13 +5142,13 @@ export function Canvas() {
         onRenameUserComponent={renameUserComponent}
         getInstanceCount={countComponentInstances}
         isExpanded={componentPanelExpanded}
-        onToggle={() => setComponentPanelExpanded(prev => !prev)}
+        onToggle={toggleComponentPanel}
       />
 
       {/* Documentation Panel - Phase 1 */}
       <DocumentationPanel
         isExpanded={docPanelExpanded}
-        onToggle={() => setDocPanelExpanded(prev => !prev)}
+        onToggle={toggleDocPanel}
         frameName={activeFrame?.name || 'Untitled'}
         frameDocumentation={activeFrame?.documentation}
         onFrameNotesChange={handleFrameNotesChange}
@@ -4974,9 +5160,9 @@ export function Canvas() {
       {/* Right panel collapsed strip - shows toggle buttons when panels are collapsed */}
       <RightPanelStrip
         componentPanelExpanded={componentPanelExpanded}
-        onToggleComponentPanel={() => setComponentPanelExpanded(prev => !prev)}
+        onToggleComponentPanel={toggleComponentPanel}
         docPanelExpanded={docPanelExpanded}
-        onToggleDocPanel={() => setDocPanelExpanded(prev => !prev)}
+        onToggleDocPanel={toggleDocPanel}
       />
 
       {/* Confirm Dialog */}
