@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { ComponentTemplate, ComponentType, UserComponent } from '@/lib/types';
 import { COMPONENT_TEMPLATES } from '@/lib/componentTemplates';
 import {
@@ -18,6 +18,7 @@ import {
   Trash2,
   Edit2,
   MoreVertical,
+  FileText,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -28,6 +29,8 @@ interface ComponentPanelProps {
   onDeleteUserComponent?: (componentId: string) => void;
   onRenameUserComponent?: (componentId: string, newName: string) => void;
   getInstanceCount?: (componentId: string) => number;
+  docPanelExpanded?: boolean;
+  onToggleDocPanel?: () => void;
 }
 
 export function ComponentPanel({
@@ -37,6 +40,8 @@ export function ComponentPanel({
   onDeleteUserComponent,
   onRenameUserComponent,
   getInstanceCount,
+  docPanelExpanded,
+  onToggleDocPanel,
 }: ComponentPanelProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'my' | ComponentType>('all');
@@ -93,7 +98,7 @@ export function ComponentPanel({
 
   if (isCollapsed) {
     return (
-      <div className="w-12 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-700 flex flex-col items-center py-4">
+      <div className="w-12 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-700 flex flex-col items-center py-4 gap-2">
         <button
           onClick={() => setIsCollapsed(false)}
           className="w-10 h-10 flex items-center justify-center text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95"
@@ -103,6 +108,21 @@ export function ComponentPanel({
         >
           <Menu size={20} />
         </button>
+        {onToggleDocPanel && (
+          <button
+            onClick={onToggleDocPanel}
+            className={`w-10 h-10 flex items-center justify-center rounded-lg transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95 ${
+              docPanelExpanded
+                ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950'
+                : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+            }`}
+            title={docPanelExpanded ? "Hide Documentation (Ctrl+\\)" : "Show Documentation (Ctrl+\\)"}
+            aria-label={docPanelExpanded ? "Hide documentation panel" : "Show documentation panel"}
+            aria-expanded={docPanelExpanded}
+          >
+            <FileText size={20} />
+          </button>
+        )}
       </div>
     );
   }
@@ -112,15 +132,32 @@ export function ComponentPanel({
       {/* Header */}
       <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center">
         <h2 className="font-semibold text-zinc-900 dark:text-zinc-100">Components</h2>
-        <button
-          onClick={() => setIsCollapsed(true)}
-          className="w-8 h-8 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95"
-          title="Hide panel"
-          aria-label="Hide components panel"
-          aria-expanded="true"
-        >
-          <ChevronRight size={18} />
-        </button>
+        <div className="flex items-center gap-1">
+          {onToggleDocPanel && (
+            <button
+              onClick={onToggleDocPanel}
+              className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95 ${
+                docPanelExpanded
+                  ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950'
+                  : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+              }`}
+              title={docPanelExpanded ? "Hide Documentation (Ctrl+\\)" : "Show Documentation (Ctrl+\\)"}
+              aria-label={docPanelExpanded ? "Hide documentation panel" : "Show documentation panel"}
+              aria-expanded={docPanelExpanded}
+            >
+              <FileText size={18} />
+            </button>
+          )}
+          <button
+            onClick={() => setIsCollapsed(true)}
+            className="w-8 h-8 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95"
+            title="Hide panel"
+            aria-label="Hide components panel"
+            aria-expanded="true"
+          >
+            <ChevronRight size={18} />
+          </button>
+        </div>
       </div>
 
       {/* Category filter */}
@@ -153,7 +190,16 @@ export function ComponentPanel({
           <div className="border-b border-zinc-200 dark:border-zinc-700">
             <button
               onClick={() => setIsMyComponentsExpanded(!isMyComponentsExpanded)}
-              className="w-full px-4 py-2 flex items-center justify-between text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setIsMyComponentsExpanded(!isMyComponentsExpanded);
+                }
+              }}
+              className="w-full px-4 py-2 flex items-center justify-between text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
+              role="button"
+              aria-expanded={isMyComponentsExpanded}
+              aria-controls="my-components-list"
             >
               <span className="flex items-center gap-2">
                 <Layers size={16} />
@@ -168,7 +214,7 @@ export function ComponentPanel({
             </button>
 
             {isMyComponentsExpanded && (
-              <div className="p-4 space-y-3">
+              <div id="my-components-list" className="p-4 space-y-3">
                 {userComponents.length === 0 ? (
                   <div className="text-center py-6 text-zinc-500 dark:text-zinc-400">
                     <Layers size={28} className="mx-auto mb-2 opacity-40" />
@@ -207,7 +253,16 @@ export function ComponentPanel({
           <div>
             <button
               onClick={() => setIsTemplatesExpanded(!isTemplatesExpanded)}
-              className="w-full px-4 py-2 flex items-center justify-between text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setIsTemplatesExpanded(!isTemplatesExpanded);
+                }
+              }}
+              className="w-full px-4 py-2 flex items-center justify-between text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
+              role="button"
+              aria-expanded={isTemplatesExpanded}
+              aria-controls="templates-list"
             >
               <span className="flex items-center gap-2">
                 <Square size={16} />
@@ -217,7 +272,7 @@ export function ComponentPanel({
             </button>
 
             {isTemplatesExpanded && (
-              <div className="p-4 space-y-3">
+              <div id="templates-list" className="p-4 space-y-3">
                 {filteredTemplates.length === 0 ? (
                   <div className="text-center py-8 text-zinc-500 dark:text-zinc-400">
                     <CircleDashed size={32} className="mx-auto mb-2 opacity-50" />
@@ -277,8 +332,43 @@ function UserComponentCard({
   menuOpen,
   onMenuToggle,
 }: UserComponentCardProps) {
-  const handleClick = () => {
-    if (!isEditing && onInsert) {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close menu on click outside
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onMenuToggle(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [menuOpen, onMenuToggle]);
+
+  // Close menu on Escape
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onMenuToggle(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [menuOpen, onMenuToggle]);
+
+  const handleClick = (e: React.MouseEvent) => {
+    // Prevent click-through when editing
+    if (isEditing) {
+      e.stopPropagation();
+      return;
+    }
+    if (onInsert) {
       // Insert at canvas center (approximate)
       onInsert(component.id, 500, 400);
     }
@@ -289,10 +379,10 @@ function UserComponentCard({
       draggable={!isEditing}
       onDragStart={(e) => onDragStart(e, component.id)}
       onClick={handleClick}
-      className={`relative border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 transition-all duration-150 text-left group cursor-pointer ${
+      className={`relative border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 transition-all duration-150 text-left group ${
         isEditing
-          ? 'ring-2 ring-blue-500'
-          : 'hover:border-purple-400 dark:hover:border-purple-500 hover:bg-purple-50 dark:hover:bg-purple-950'
+          ? 'ring-2 ring-blue-500 cursor-default'
+          : 'hover:border-purple-400 dark:hover:border-purple-500 hover:bg-purple-50 dark:hover:bg-purple-950 cursor-grab active:cursor-grabbing'
       }`}
     >
       {/* Thumbnail */}
@@ -338,7 +428,7 @@ function UserComponentCard({
       )}
 
       {/* Metadata */}
-      <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-500">
+      <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
         <span>{component.masterElements.length} elements</span>
         <span>•</span>
         <span>{Math.round(component.width)}×{Math.round(component.height)}</span>
@@ -352,26 +442,34 @@ function UserComponentCard({
 
       {/* Menu button */}
       {!isEditing && (
-        <div className="absolute top-2 right-2">
+        <div ref={menuRef} className="absolute top-2 right-2">
           <button
             onClick={(e) => {
               e.stopPropagation();
               onMenuToggle(!menuOpen);
             }}
-            className="w-6 h-6 flex items-center justify-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+            className="w-6 h-6 flex items-center justify-center text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 rounded opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            aria-label="Component options"
+            aria-haspopup="true"
+            aria-expanded={menuOpen}
           >
             <MoreVertical size={14} />
           </button>
 
           {/* Dropdown menu */}
           {menuOpen && (
-            <div className="absolute right-0 top-7 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg py-1 z-10 min-w-[120px]">
+            <div
+              className="absolute right-0 top-7 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg py-1 z-10 min-w-[120px]"
+              role="menu"
+              aria-orientation="vertical"
+            >
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   onStartRename(component);
                 }}
-                className="w-full px-3 py-1.5 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-2"
+                className="w-full px-3 py-1.5 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-2 focus:outline-none focus-visible:bg-zinc-100 dark:focus-visible:bg-zinc-700"
+                role="menuitem"
               >
                 <Edit2 size={14} />
                 Rename
@@ -383,7 +481,8 @@ function UserComponentCard({
                     onDelete(component.id);
                     onMenuToggle(false);
                   }}
-                  className="w-full px-3 py-1.5 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 flex items-center gap-2"
+                  className="w-full px-3 py-1.5 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 flex items-center gap-2 focus:outline-none focus-visible:bg-red-50 dark:focus-visible:bg-red-950"
+                  role="menuitem"
                 >
                   <Trash2 size={14} />
                   Delete

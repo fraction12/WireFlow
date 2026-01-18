@@ -4944,6 +4944,8 @@ export function Canvas() {
         }}
         onRenameUserComponent={renameUserComponent}
         getInstanceCount={countComponentInstances}
+        docPanelExpanded={docPanelExpanded}
+        onToggleDocPanel={() => setDocPanelExpanded(prev => !prev)}
       />
 
       {/* Documentation Panel - Phase 1 */}

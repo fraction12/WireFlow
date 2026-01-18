@@ -54,8 +54,10 @@ export function FrameList({
       }
     };
 
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
+    if (isDropdownOpen) {
+      document.addEventListener('keydown', handleEscape);
+      return () => document.removeEventListener('keydown', handleEscape);
+    }
   }, [isDropdownOpen]);
 
   const handleDeleteClick = (e: React.MouseEvent, frame: Frame) => {
@@ -103,12 +105,16 @@ export function FrameList({
 
           {/* Dropdown menu */}
           {isDropdownOpen && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg overflow-hidden z-50 animate-slide-in-down">
+            <div
+              className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg overflow-hidden z-50 animate-slide-in-down"
+              role="menu"
+              aria-label="Frame types"
+            >
               {frameTypes.map((frameType) => (
                 <button
                   key={frameType.type}
                   onClick={() => handleCreateFrame(frameType.type)}
-                  className="w-full px-3 py-2.5 text-left hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors duration-150 focus:outline-none focus-visible:bg-blue-50 dark:focus-visible:bg-blue-950 group"
+                  className="w-full px-3 py-2.5 text-left hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors duration-150 focus:outline-none focus-visible:bg-blue-50 dark:focus-visible:bg-blue-950 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 group"
                   role="menuitem"
                 >
                   <div className="flex items-start gap-2">
@@ -129,7 +135,7 @@ export function FrameList({
       </div>
 
       {/* Frame list */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto" role="list" aria-label="Frame list">
         {frames.map((frame) => {
           const isActive = frame.id === activeFrameId;
           const isEditing = frame.id === editingFrameId;
@@ -137,20 +143,14 @@ export function FrameList({
           return (
             <div
               key={frame.id}
-              className={`px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 cursor-pointer transition-all duration-150 ${
+              className={`px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 transition-all duration-150 ${
                 isActive
                   ? 'bg-blue-50 dark:bg-blue-950 border-l-4 border-l-blue-500'
                   : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
               }`}
               onClick={() => !isEditing && onSwitchFrame(frame.id)}
-              role="button"
+              role="listitem"
               aria-current={isActive ? 'page' : undefined}
-              tabIndex={0}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !isEditing) {
-                  onSwitchFrame(frame.id);
-                }
-              }}
             >
               {/* Frame name (editable) */}
               <div className="mb-1">
@@ -167,25 +167,20 @@ export function FrameList({
                     onClick={(e) => e.stopPropagation()}
                     className="w-full font-medium text-sm px-2 py-1 border border-blue-500 rounded-lg bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                     autoFocus
+                    aria-label="Rename frame"
                   />
                 ) : (
-                  <div
-                    className="font-medium text-sm text-zinc-900 dark:text-zinc-100 cursor-text hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                  <button
+                    type="button"
+                    className="font-medium text-sm text-zinc-900 dark:text-zinc-100 hover:text-blue-600 dark:hover:text-blue-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 rounded px-1 -mx-1"
                     onClick={(e) => {
                       e.stopPropagation();
                       setEditingFrameId(frame.id);
                     }}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.stopPropagation();
-                        setEditingFrameId(frame.id);
-                      }
-                    }}
+                    aria-label={`Rename frame ${frame.name}`}
                   >
                     {frame.name}
-                  </div>
+                  </button>
                 )}
               </div>
 
@@ -201,17 +196,21 @@ export function FrameList({
                         ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300'
                         : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
                     }`}
+                    aria-label={`Frame type: ${frame.type}`}
                   >
                     {frame.type}
                   </span>
 
                   {/* Element count */}
-                  <span className="text-zinc-600 dark:text-zinc-400">{frame.elements.length} elements</span>
+                  <span className="text-zinc-600 dark:text-zinc-400" aria-label={`${frame.elements.length} elements in frame`}>
+                    {frame.elements.length} {frame.elements.length === 1 ? 'element' : 'elements'}
+                  </span>
                 </div>
 
                 {/* Delete button (only if not last frame) */}
                 {frames.length > 1 && (
                   <button
+                    type="button"
                     onClick={(e) => handleDeleteClick(e, frame)}
                     className="p-1.5 text-zinc-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 rounded-md transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 active:scale-95"
                     title="Delete frame"

@@ -59,21 +59,9 @@ export function DocumentationPanel({
   // Character count for notes
   const notesCharCount = notes.length;
 
-  // Collapsed state - just show icon strip
+  // Collapsed state - toggle button now lives in ComponentPanel
   if (!isExpanded) {
-    return (
-      <div className="w-12 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-700 flex flex-col items-center py-4">
-        <button
-          onClick={onToggle}
-          className="w-10 h-10 flex items-center justify-center text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95"
-          title="Show Documentation (Ctrl+\)"
-          aria-label="Show documentation panel"
-          aria-expanded="false"
-        >
-          <FileText size={20} />
-        </button>
-      </div>
-    );
+    return null;
   }
 
   // Expanded state
@@ -106,7 +94,7 @@ export function DocumentationPanel({
       <div className="px-4 py-2 border-b border-zinc-200 dark:border-zinc-700">
         <div className="flex gap-1">
           <button
-            className="px-3 py-1.5 text-sm font-medium rounded-md bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
+            className="px-3 py-1.5 text-sm font-medium rounded-md bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             aria-pressed="true"
           >
             Notes
@@ -118,15 +106,15 @@ export function DocumentationPanel({
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Frame-level notes */}
         <div>
-          <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
+          <label htmlFor="frame-notes" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
             Frame Notes
           </label>
           <textarea
+            id="frame-notes"
             value={notes}
             onChange={(e) => onFrameNotesChange(e.target.value)}
             placeholder="Add notes about this frame..."
             className="w-full h-40 px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-            aria-label="Frame notes"
           />
           <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400 text-right">
             {notesCharCount} characters
@@ -148,43 +136,43 @@ export function DocumentationPanel({
 
             {/* Description field */}
             <div className="mb-3">
-              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">
+              <label htmlFor="element-description" className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">
                 Description
               </label>
               <textarea
+                id="element-description"
                 value={annotation.description}
                 onChange={(e) => handleAnnotationChange('description', e.target.value)}
                 placeholder="What is this element for?"
                 className="w-full h-20 px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                aria-label="Element description"
               />
             </div>
 
             {/* Behavior field */}
             <div className="mb-3">
-              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">
+              <label htmlFor="element-behavior" className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">
                 Behavior
               </label>
               <textarea
+                id="element-behavior"
                 value={annotation.behavior}
                 onChange={(e) => handleAnnotationChange('behavior', e.target.value)}
                 placeholder="How should this element behave?"
                 className="w-full h-20 px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                aria-label="Element behavior"
               />
             </div>
 
             {/* Edge Cases field */}
             <div>
-              <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">
+              <label htmlFor="element-edge-cases" className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-1">
                 Edge Cases
               </label>
               <textarea
+                id="element-edge-cases"
                 value={annotation.edgeCases}
                 onChange={(e) => handleAnnotationChange('edgeCases', e.target.value)}
                 placeholder="What edge cases should be handled?"
                 className="w-full h-20 px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                aria-label="Element edge cases"
               />
             </div>
           </div>

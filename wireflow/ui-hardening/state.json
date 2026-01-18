@@ -1,0 +1,181 @@
+{
+  "iteration": 1,
+  "ui_surfaces": [
+    {
+      "id": "frame-navigation-panel",
+      "name": "Frame Navigation Panel",
+      "file": "components/FrameList.tsx",
+      "type": "major",
+      "description": "Left sidebar navigation showing all frames with create/edit/delete functionality"
+    },
+    {
+      "id": "drawing-toolbar",
+      "name": "Drawing Toolbar",
+      "file": "components/Toolbar.tsx",
+      "type": "major",
+      "description": "Vertical toolbar with shape/line/text drawing tools"
+    },
+    {
+      "id": "main-header-bar",
+      "name": "Main Header Bar",
+      "file": "components/Canvas.tsx",
+      "type": "major",
+      "description": "Top header with zoom controls, grid toggles, theme toggle, export buttons"
+    },
+    {
+      "id": "styling-toolbar",
+      "name": "Styling Toolbar",
+      "file": "components/StylingToolbar.tsx",
+      "type": "major",
+      "description": "Conditional toolbar for stroke/fill color selection"
+    },
+    {
+      "id": "color-picker",
+      "name": "Color Picker Dropdown",
+      "file": "components/ColorPicker.tsx",
+      "type": "minor",
+      "description": "4x4 color palette dropdown with transparency option"
+    },
+    {
+      "id": "canvas-editor",
+      "name": "Canvas Editor",
+      "file": "components/Canvas.tsx",
+      "type": "major",
+      "description": "Main drawing surface with element rendering, selection, and manipulation"
+    },
+    {
+      "id": "text-editing-overlay",
+      "name": "Text Editing Overlay",
+      "file": "components/Canvas.tsx",
+      "type": "major",
+      "description": "Inline WYSIWYG text editing textarea"
+    },
+    {
+      "id": "text-formatting-toolbar",
+      "name": "Text Formatting Toolbar",
+      "file": "components/TextToolbar.tsx",
+      "type": "major",
+      "description": "Floating toolbar for text presets, bold/italic, alignment, font size"
+    },
+    {
+      "id": "component-panel",
+      "name": "Component Library Panel",
+      "file": "components/ComponentPanel.tsx",
+      "type": "major",
+      "description": "Right sidebar with component library, templates, and drag-to-canvas"
+    },
+    {
+      "id": "documentation-panel",
+      "name": "Documentation Panel",
+      "file": "components/DocumentationPanel.tsx",
+      "type": "major",
+      "description": "Right sidebar for frame notes and element annotations"
+    },
+    {
+      "id": "confirm-dialog",
+      "name": "Confirm Deletion Dialog",
+      "file": "components/ui/ConfirmDialog.tsx",
+      "type": "major",
+      "description": "Modal for confirming destructive actions with focus trap"
+    },
+    {
+      "id": "promote-component-dialog",
+      "name": "Promote to Component Dialog",
+      "file": "components/Canvas.tsx",
+      "type": "major",
+      "description": "Modal for creating reusable components from selections"
+    },
+    {
+      "id": "toast-notifications",
+      "name": "Toast Notification System",
+      "file": "components/ui/Toast.tsx",
+      "type": "major",
+      "description": "Fixed bottom-right notification container with auto-dismiss"
+    },
+    {
+      "id": "error-boundary",
+      "name": "Error Boundary",
+      "file": "components/ErrorBoundary.tsx",
+      "type": "major",
+      "description": "Full-page error fallback with retry/reload options"
+    },
+    {
+      "id": "image-export-menu",
+      "name": "Image Export Menu",
+      "file": "components/ImageExport.tsx",
+      "type": "minor",
+      "description": "Dropdown for PNG/SVG export options"
+    },
+    {
+      "id": "theme-toggle",
+      "name": "Theme Toggle Button",
+      "file": "components/ThemeToggle.tsx",
+      "type": "minor",
+      "description": "Button cycling through light/dark/system themes"
+    },
+    {
+      "id": "frame-type-dropdown",
+      "name": "Frame Type Dropdown",
+      "file": "components/FrameList.tsx",
+      "type": "minor",
+      "description": "Menu for creating page/modal/flyout frame types"
+    },
+    {
+      "id": "font-size-dropdown",
+      "name": "Font Size Dropdown",
+      "file": "components/TextToolbar.tsx",
+      "type": "minor",
+      "description": "Scrollable list of font size presets"
+    }
+  ],
+  "clean_surfaces": [
+    {
+      "id": "frame-navigation-panel",
+      "cleaned_iteration": 1,
+      "fixes_applied": 10,
+      "summary": "Fixed semantic HTML, ARIA roles, event listener cleanup, focus states, screen reader labels"
+    },
+    {
+      "id": "drawing-toolbar",
+      "cleaned_iteration": 1,
+      "fixes_applied": 1,
+      "summary": "Added cursor-pointer for proper clickability feedback"
+    },
+    {
+      "id": "component-panel",
+      "cleaned_iteration": 1,
+      "fixes_applied": 11,
+      "summary": "Fixed ARIA attributes, keyboard navigation, click-outside menu handling, cursor semantics"
+    },
+    {
+      "id": "documentation-panel",
+      "cleaned_iteration": 1,
+      "fixes_applied": 2,
+      "summary": "Fixed form label accessibility and keyboard focus styles on tab button"
+    }
+  ],
+  "in_progress": {
+    "text-formatting-toolbar": { "agent": 1, "iteration": 2 },
+    "styling-toolbar": { "agent": 2, "iteration": 2 },
+    "toast-notifications": { "agent": 3, "iteration": 2 },
+    "error-boundary": { "agent": 4, "iteration": 2 }
+  },
+  "blocked": [],
+  "stop_reason": null,
+  "iteration_log": [
+    {
+      "iteration": 0,
+      "action": "discovery",
+      "surfaces_found": 18,
+      "timestamp": "2026-01-18"
+    },
+    {
+      "iteration": 1,
+      "action": "hardening",
+      "surfaces_assigned": ["frame-navigation-panel", "drawing-toolbar", "component-panel", "documentation-panel"],
+      "surfaces_cleaned": 4,
+      "total_fixes": 24,
+      "timestamp": "2026-01-18"
+    }
+  ]
+}

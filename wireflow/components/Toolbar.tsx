@@ -45,7 +45,7 @@ export function Toolbar({ currentTool, onToolChange }: ToolbarProps) {
             onClick={() => onToolChange(tool.name)}
             className={`
               w-12 h-12 flex items-center justify-center rounded-lg
-              transition-all duration-150 ease-out
+              transition-all duration-150 ease-out cursor-pointer
               focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2
               active:scale-95
               ${isActive
