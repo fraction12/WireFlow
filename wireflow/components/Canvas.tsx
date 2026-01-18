@@ -2190,6 +2190,102 @@ export function Canvas() {
     recordSnapshot,
   ]);
 
+  // Layer control functions
+  // Bring selected element(s) to front
+  const bringToFront = useCallback(() => {
+    if (!selectedElementId && selectedElementIds.size === 0) return;
+
+    recordSnapshot();
+    const idsToMove = selectedElementIds.size > 0
+      ? selectedElementIds
+      : new Set([selectedElementId!]);
+
+    setElements((prev) => {
+      const toMove = prev.filter((el) => idsToMove.has(el.id));
+      const remaining = prev.filter((el) => !idsToMove.has(el.id));
+      return [...remaining, ...toMove];
+    });
+  }, [selectedElementId, selectedElementIds, recordSnapshot]);
+
+  // Send selected element(s) to back
+  const sendToBack = useCallback(() => {
+    if (!selectedElementId && selectedElementIds.size === 0) return;
+
+    recordSnapshot();
+    const idsToMove = selectedElementIds.size > 0
+      ? selectedElementIds
+      : new Set([selectedElementId!]);
+
+    setElements((prev) => {
+      const toMove = prev.filter((el) => idsToMove.has(el.id));
+      const remaining = prev.filter((el) => !idsToMove.has(el.id));
+      return [...toMove, ...remaining];
+    });
+  }, [selectedElementId, selectedElementIds, recordSnapshot]);
+
+  // Bring selected element(s) forward by one position
+  const bringForward = useCallback(() => {
+    if (!selectedElementId && selectedElementIds.size === 0) return;
+
+    recordSnapshot();
+    const idsToMove = selectedElementIds.size > 0
+      ? selectedElementIds
+      : new Set([selectedElementId!]);
+
+    setElements((prev) => {
+      const newElements = [...prev];
+      // Find the highest index among selected elements
+      let maxIndex = -1;
+      for (let i = 0; i < newElements.length; i++) {
+        if (idsToMove.has(newElements[i].id)) {
+          maxIndex = i;
+        }
+      }
+      // If not already at front, swap with next element
+      if (maxIndex >= 0 && maxIndex < newElements.length - 1) {
+        // Move all selected elements forward
+        for (let i = newElements.length - 2; i >= 0; i--) {
+          if (idsToMove.has(newElements[i].id) && !idsToMove.has(newElements[i + 1].id)) {
+            [newElements[i], newElements[i + 1]] = [newElements[i + 1], newElements[i]];
+          }
+        }
+      }
+      return newElements;
+    });
+  }, [selectedElementId, selectedElementIds, recordSnapshot]);
+
+  // Send selected element(s) backward by one position
+  const sendBackward = useCallback(() => {
+    if (!selectedElementId && selectedElementIds.size === 0) return;
+
+    recordSnapshot();
+    const idsToMove = selectedElementIds.size > 0
+      ? selectedElementIds
+      : new Set([selectedElementId!]);
+
+    setElements((prev) => {
+      const newElements = [...prev];
+      // Find the lowest index among selected elements
+      let minIndex = newElements.length;
+      for (let i = 0; i < newElements.length; i++) {
+        if (idsToMove.has(newElements[i].id)) {
+          minIndex = i;
+          break;
+        }
+      }
+      // If not already at back, swap with previous element
+      if (minIndex > 0) {
+        // Move all selected elements backward
+        for (let i = 1; i < newElements.length; i++) {
+          if (idsToMove.has(newElements[i].id) && !idsToMove.has(newElements[i - 1].id)) {
+            [newElements[i - 1], newElements[i]] = [newElements[i], newElements[i - 1]];
+          }
+        }
+      }
+      return newElements;
+    });
+  }, [selectedElementId, selectedElementIds, recordSnapshot]);
+
   // Keyboard event handler for deletion, grouping, and ungrouping
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -2249,6 +2345,32 @@ export function Canvas() {
       if ((e.ctrlKey || e.metaKey) && e.key === "0") {
         e.preventDefault();
         resetZoom();
+        return;
+      }
+
+      // Layer controls
+      // Ctrl/Cmd+]: Bring forward
+      if ((e.ctrlKey || e.metaKey) && e.key === "]" && !e.shiftKey) {
+        e.preventDefault();
+        bringForward();
+        return;
+      }
+      // Ctrl/Cmd+[: Send backward
+      if ((e.ctrlKey || e.metaKey) && e.key === "[" && !e.shiftKey) {
+        e.preventDefault();
+        sendBackward();
+        return;
+      }
+      // Ctrl/Cmd+Shift+]: Bring to front
+      if ((e.ctrlKey || e.metaKey) && e.key === "}" && e.shiftKey) {
+        e.preventDefault();
+        bringToFront();
+        return;
+      }
+      // Ctrl/Cmd+Shift+[: Send to back
+      if ((e.ctrlKey || e.metaKey) && e.key === "{" && e.shiftKey) {
+        e.preventDefault();
+        sendToBack();
         return;
       }
 
@@ -2524,6 +2646,10 @@ export function Canvas() {
     zoomIn,
     zoomOut,
     resetZoom,
+    bringToFront,
+    sendToBack,
+    bringForward,
+    sendBackward,
   ]);
 
   // Frame management handlers
