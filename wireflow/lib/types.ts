@@ -211,6 +211,7 @@ export interface ComponentElementTemplate {
   semanticTag?: SemanticTag;
   description?: string;
   content?: string; // For text elements
+  textAlign?: TextAlign; // For text elements
   // Line/Arrow specific (relative to component origin)
   startX?: number;
   startY?: number;

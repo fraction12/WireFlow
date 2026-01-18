@@ -2329,7 +2329,8 @@ export function Canvas() {
     const lineCount = trimmedText.split("\n").length;
 
     // Calculate auto-width if enabled
-    let finalWidth = editingElement.width;
+    const oldWidth = editingElement.width;
+    let finalWidth = oldWidth;
     if (textEl.autoWidth !== false) {
       finalWidth = calculateAutoWidth(trimmedText, {
         fontSize,
@@ -2343,12 +2344,29 @@ export function Canvas() {
       lineHeight + TEXT_PADDING * 2,
     );
 
+    // For center/right-aligned text, adjust x position to keep text visually stable
+    // when width changes (e.g., due to trimming trailing spaces)
+    let finalX = editingElement.x;
+    const textAlign = textEl.textAlign || "left";
+    if (finalWidth !== oldWidth) {
+      const widthDiff = oldWidth - finalWidth;
+      if (textAlign === "center") {
+        // Keep center position stable: adjust x by half the width difference
+        finalX = editingElement.x + widthDiff / 2;
+      } else if (textAlign === "right") {
+        // Keep right edge stable: adjust x by full width difference
+        finalX = editingElement.x + widthDiff;
+      }
+      // For left-aligned, x stays the same (left edge stable)
+    }
+
     setElements(
       elements.map((el) =>
         el.id === editingElementId && el.type === "text"
           ? ({
               ...el,
               content: trimmedText,
+              x: finalX,
               width: finalWidth,
               height: finalHeight,
             } as TextElement)
@@ -4233,6 +4251,7 @@ export function Canvas() {
             ...baseProps,
             type: "text",
             content: tplEl.content || "Text",
+            textAlign: tplEl.textAlign,
           } as TextElement;
         } else if (tplEl.type === "rectangle") {
           return {
@@ -4292,6 +4311,99 @@ export function Canvas() {
     };
 
     setComponentGroups([...componentGroups, group]);
+
+    return group;
+  };
+
+  // Create template as ElementGroup (regular grouped elements, not component group)
+  // This spawns component templates without the purple "Component: X" styling
+  const createTemplateAsElementGroup = (
+    template: ComponentTemplate,
+    insertX: number,
+    insertY: number,
+  ): ElementGroup => {
+    const groupId = generateElementGroupId();
+    const elementIds: string[] = [];
+
+    // Create all elements with elementGroupId reference (NOT groupId/componentType)
+    const newElements: CanvasElement[] = template.elements
+      .map((tplEl) => {
+        const elId = generateId();
+        elementIds.push(elId);
+
+        const baseProps = {
+          id: elId,
+          x: insertX + tplEl.offsetX,
+          y: insertY + tplEl.offsetY,
+          width: tplEl.width,
+          height: tplEl.height,
+          semanticTag: tplEl.semanticTag,
+          description: tplEl.description,
+          elementGroupId: groupId, // Use elementGroupId instead of groupId
+          // DO NOT set componentType - we want regular group styling
+        };
+
+        if (tplEl.type === "text") {
+          return {
+            ...baseProps,
+            type: "text",
+            content: tplEl.content || "Text",
+            textAlign: tplEl.textAlign,
+          } as TextElement;
+        } else if (tplEl.type === "rectangle") {
+          return {
+            ...baseProps,
+            type: "rectangle",
+          } as RectangleElement;
+        } else if (tplEl.type === "arrow") {
+          return {
+            ...baseProps,
+            type: "arrow",
+            startX: insertX + tplEl.offsetX,
+            startY: insertY + tplEl.offsetY,
+            endX: insertX + tplEl.offsetX + tplEl.width,
+            endY: insertY + tplEl.offsetY + tplEl.height,
+          } as ArrowElement;
+        } else if (tplEl.type === "line") {
+          return {
+            ...baseProps,
+            type: "line",
+            startX: insertX + (tplEl.startX ?? tplEl.offsetX),
+            startY: insertY + (tplEl.startY ?? tplEl.offsetY),
+            endX: insertX + (tplEl.endX ?? tplEl.offsetX + tplEl.width),
+            endY: insertY + (tplEl.endY ?? tplEl.offsetY),
+          } as LineElement;
+        } else if (tplEl.type === "ellipse") {
+          return {
+            ...baseProps,
+            type: "ellipse",
+          } as EllipseElement;
+        }
+        return null;
+      })
+      .filter(
+        (
+          el,
+        ): el is
+          | RectangleElement
+          | EllipseElement
+          | TextElement
+          | ArrowElement
+          | LineElement => el !== null,
+      );
+
+    // Add elements to canvas
+    setElements([...elements, ...newElements]);
+
+    // Create ElementGroup (not ComponentGroup)
+    const group: ElementGroup = {
+      id: groupId,
+      elementIds,
+      frameId: activeFrameId,
+      createdAt: new Date().toISOString(),
+    };
+
+    setElementGroups([...elementGroups, group]);
 
     return group;
   };
@@ -5120,10 +5232,13 @@ export function Canvas() {
       insertY = (centerScreenY - pan.y) / zoom;
     }
 
-    const group = createComponentGroup(template, insertX, insertY);
+    // Spawn template as ElementGroup (teal "Group" styling, not purple "Component: X")
+    const group = createTemplateAsElementGroup(template, insertX, insertY);
 
-    // Select the newly created group
-    setSelectedGroupId(group.id);
+    // Select all elements in the newly created group
+    setSelectedElementIds(new Set(group.elementIds));
+    setSelectedElementId(null);
+    setSelectedGroupId(null); // Clear component group selection
 
     // Switch to select tool
     setCurrentTool("select");
@@ -5368,21 +5483,27 @@ export function Canvas() {
               const lineHeight =
                 textEl.lineHeight || Math.round(fontSize * 1.5);
 
+              // Calculate vertical offset to match canvas text rendering exactly
+              // Canvas draws baseline at element.y + fontSize
+              // Text top (ascenders) is approximately at element.y + fontSize * 0.2
+              // CSS textarea adds half-leading above text: (lineHeight - fontSize) / 2
+              // To align: textarea_top + halfLeading = element.y + fontSize * 0.2
+              // Therefore: textarea_top = element.y + fontSize * 0.2 - halfLeading
+              const halfLeading = (lineHeight - fontSize) / 2;
+              const verticalOffset = fontSize * 0.2 - halfLeading;
+
               // Calculate height based on line count (for auto-grow)
+              // Height needs only bottom padding since top is handled by position offset
               const lineCount = Math.max(1, editingText.split("\n").length);
               const calculatedHeight = Math.max(
-                lineHeight + TEXT_PADDING * 2,
-                lineCount * lineHeight + TEXT_PADDING * 2,
+                lineHeight + TEXT_PADDING,
+                lineCount * lineHeight + TEXT_PADDING,
               );
 
-              // Calculate auto-width in real-time
-              const currentWidth = textEl.autoWidth !== false
-                ? Math.max(MIN_TEXT_WIDTH, calculateAutoWidth(editingText || " ", {
-                    fontSize,
-                    fontWeight,
-                    fontStyle,
-                  }))
-                : editingElement.width;
+              // IMPORTANT: Use the stored element width to prevent position jump on edit entry
+              // The onChange handler updates element.width during typing for auto-width behavior
+              // This ensures the textarea matches the canvas-rendered position exactly
+              const currentWidth = editingElement.width;
 
               return (
                 <textarea
@@ -5432,20 +5553,22 @@ export function Canvas() {
                   className="absolute resize-none overflow-hidden focus:outline-2 focus:outline-offset-1 focus:outline-blue-400/30"
                   style={{
                     left: editingElement.x * zoom + pan.x,
-                    top: editingElement.y * zoom + pan.y,
+                    // Offset top to match canvas baseline rendering
+                    top: (editingElement.y + verticalOffset) * zoom + pan.y,
                     width: currentWidth * zoom,
                     minWidth: MIN_TEXT_WIDTH * zoom,
-                    height: calculatedHeight * zoom,
+                    height: (calculatedHeight - verticalOffset) * zoom,
                     fontFamily: "sans-serif",
                     fontSize: `${fontSize * zoom}px`,
                     fontWeight: fontWeight,
                     fontStyle: fontStyle,
                     textAlign: textAlign,
                     lineHeight: `${lineHeight * zoom}px`,
-                    // Internal text padding to match canvas rendering
+                    // Horizontal padding matches canvas TEXT_PADDING
+                    // Vertical padding set to 0 - positioning handled by top offset
                     paddingLeft: `${TEXT_PADDING * zoom}px`,
                     paddingRight: `${TEXT_PADDING * zoom}px`,
-                    paddingTop: `${TEXT_PADDING * zoom}px`,
+                    paddingTop: 0,
                     paddingBottom: `${TEXT_PADDING * zoom}px`,
                     // Fully transparent - WYSIWYG
                     background: "transparent",
