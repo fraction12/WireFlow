@@ -2126,6 +2126,35 @@ export function Canvas() {
           let newMovingX = movingCornerInitialX + dx;
           let newMovingY = movingCornerInitialY + dy;
 
+          // Shift key: maintain aspect ratio during resize
+          if (e.shiftKey && initialBounds.width > 0 && initialBounds.height > 0) {
+            const aspectRatio = initialBounds.width / initialBounds.height;
+            const currentWidth = Math.abs(newMovingX - anchorX);
+            const currentHeight = Math.abs(newMovingY - anchorY);
+
+            // Determine which dimension to constrain based on which changed more
+            const widthChange = Math.abs(dx);
+            const heightChange = Math.abs(dy);
+
+            if (widthChange >= heightChange) {
+              // Width is driving, adjust height to match ratio
+              const constrainedHeight = currentWidth / aspectRatio;
+              if (resizeHandle.includes("n")) {
+                newMovingY = anchorY - constrainedHeight;
+              } else {
+                newMovingY = anchorY + constrainedHeight;
+              }
+            } else {
+              // Height is driving, adjust width to match ratio
+              const constrainedWidth = currentHeight * aspectRatio;
+              if (resizeHandle.includes("w")) {
+                newMovingX = anchorX - constrainedWidth;
+              } else {
+                newMovingX = anchorX + constrainedWidth;
+              }
+            }
+          }
+
           // Clamp moving corner to enforce minimum size and prevent inversion.
           if (resizeHandle.includes("w")) {
             newMovingX = Math.min(newMovingX, anchorX - MIN_ELEMENT_SIZE);
