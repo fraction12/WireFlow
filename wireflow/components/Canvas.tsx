@@ -20,6 +20,9 @@ import type {
   ComponentInstance,
   ComponentElementDef,
   ComponentOverride,
+  FrameDocumentation,
+  ElementAnnotation,
+  ElementStyle,
 } from "@/lib/types";
 import { saveWorkspace, loadWorkspace } from "@/lib/persistence";
 import {
@@ -37,6 +40,9 @@ import { useToast } from "./ui/Toast";
 import { ThemeToggle } from "./ThemeToggle";
 import { TextToolbar } from "./TextToolbar";
 import { ImageExport } from "./ImageExport";
+import { DocumentationPanel } from "./DocumentationPanel";
+import { StylingToolbar } from "./StylingToolbar";
+import { DEFAULT_STROKE_COLOR, DEFAULT_FILL_COLOR } from "@/lib/colors";
 
 // Snapshot type for undo/redo history
 interface HistorySnapshot {
@@ -359,6 +365,15 @@ export function Canvas() {
 
   // Alignment guides state (lines to show when elements align)
   const [alignmentGuides, setAlignmentGuides] = useState<{ type: 'h' | 'v'; pos: number }[]>([]);
+
+  // Documentation panel state (Phase 1)
+  const [docPanelExpanded, setDocPanelExpanded] = useState(true);
+
+  // Colors state (Phase 1)
+  const [currentStrokeColor, setCurrentStrokeColor] = useState(DEFAULT_STROKE_COLOR);
+  const [currentFillColor, setCurrentFillColor] = useState(DEFAULT_FILL_COLOR);
+  const [strokePickerOpen, setStrokePickerOpen] = useState(false);
+  const [fillPickerOpen, setFillPickerOpen] = useState(false);
 
   // Zoom constraints
   const MIN_ZOOM = 0.1;
@@ -891,9 +906,12 @@ export function Canvas() {
 
     // Draw all elements
     elements.forEach((element) => {
-      // Use theme colors for sketch style
-      ctx.strokeStyle = canvasTheme.sketch;
-      ctx.fillStyle = canvasTheme.sketch;
+      // Use element's custom colors or fall back to theme sketch color
+      const elementStrokeColor = element.style?.strokeColor || canvasTheme.sketch;
+      const elementFillColor = element.style?.fillColor || 'transparent';
+
+      ctx.strokeStyle = elementStrokeColor;
+      ctx.fillStyle = elementStrokeColor; // For text and other fills that use stroke color
       ctx.lineWidth = 1.5;
       ctx.font = "16px sans-serif";
       ctx.lineCap = "round";
@@ -913,6 +931,11 @@ export function Canvas() {
         ctx.fillStyle = canvasTheme.tagged;
       }
 
+      // Store colors for shape fill (used for rectangle, ellipse, diamond)
+      const shapeFillColor = isSelected ? canvasTheme.selectedBg :
+                            element.semanticTag ? 'rgba(16, 185, 129, 0.08)' :
+                            elementFillColor;
+
       // Use element ID as seed for deterministic randomness
       const seed = parseInt(element.id.split("_")[1]) || 0;
 
@@ -930,6 +953,12 @@ export function Canvas() {
       }
 
       if (element.type === "rectangle") {
+        // Fill rectangle first if fill color is set
+        if (shapeFillColor && shapeFillColor !== 'transparent') {
+          ctx.fillStyle = shapeFillColor;
+          ctx.fillRect(element.x, element.y, element.width, element.height);
+        }
+        // Then draw the stroke
         drawSketchRect(
           ctx,
           element.x,
@@ -939,6 +968,20 @@ export function Canvas() {
           seed,
         );
       } else if (element.type === "ellipse") {
+        // Fill ellipse first if fill color is set
+        if (shapeFillColor && shapeFillColor !== 'transparent') {
+          ctx.fillStyle = shapeFillColor;
+          ctx.beginPath();
+          ctx.ellipse(
+            element.x + element.width / 2,
+            element.y + element.height / 2,
+            element.width / 2,
+            element.height / 2,
+            0, 0, Math.PI * 2
+          );
+          ctx.fill();
+        }
+        // Then draw the stroke
         drawSketchEllipse(
           ctx,
           element.x,
@@ -948,6 +991,20 @@ export function Canvas() {
           seed,
         );
       } else if (element.type === "diamond") {
+        // Fill diamond first if fill color is set
+        if (shapeFillColor && shapeFillColor !== 'transparent') {
+          ctx.fillStyle = shapeFillColor;
+          const cx = element.x + element.width / 2;
+          const cy = element.y + element.height / 2;
+          ctx.beginPath();
+          ctx.moveTo(cx, element.y); // Top
+          ctx.lineTo(element.x + element.width, cy); // Right
+          ctx.lineTo(cx, element.y + element.height); // Bottom
+          ctx.lineTo(element.x, cy); // Left
+          ctx.closePath();
+          ctx.fill();
+        }
+        // Then draw the stroke
         drawSketchDiamond(
           ctx,
           element.x,
@@ -2757,6 +2814,7 @@ export function Canvas() {
             y: height > 0 ? startPoint.y : startPoint.y + height,
             width: Math.abs(width),
             height: Math.abs(height),
+            style: { strokeColor: currentStrokeColor, fillColor: currentFillColor },
           };
           setElements([...elements, newElement]);
           setSelectedElementId(newElement.id);
@@ -2772,6 +2830,7 @@ export function Canvas() {
             y: height > 0 ? startPoint.y : startPoint.y + height,
             width: Math.abs(width),
             height: Math.abs(height),
+            style: { strokeColor: currentStrokeColor, fillColor: currentFillColor },
           };
           setElements([...elements, newElement]);
           setSelectedElementId(newElement.id);
@@ -2787,6 +2846,7 @@ export function Canvas() {
             y: height > 0 ? startPoint.y : startPoint.y + height,
             width: Math.abs(width),
             height: Math.abs(height),
+            style: { strokeColor: currentStrokeColor, fillColor: currentFillColor },
           };
           setElements([...elements, newElement]);
           setSelectedElementId(newElement.id);
@@ -2821,6 +2881,7 @@ export function Canvas() {
           startY: finalStartY,
           endX: finalEndX,
           endY: finalEndY,
+          style: { strokeColor: currentStrokeColor, fillColor: currentFillColor },
         };
         setElements([...elements, newElement]);
         setSelectedElementId(newElement.id);
@@ -2854,6 +2915,7 @@ export function Canvas() {
           startY: finalStartY,
           endX: finalEndX,
           endY: finalEndY,
+          style: { strokeColor: currentStrokeColor, fillColor: currentFillColor },
         };
         setElements([...elements, newElement]);
         setSelectedElementId(newElement.id);
@@ -2879,6 +2941,7 @@ export function Canvas() {
           width: Math.max(maxX - minX, 1),
           height: Math.max(maxY - minY, 1),
           points: allPoints,
+          style: { strokeColor: currentStrokeColor, fillColor: currentFillColor },
         };
         setElements([...elements, newElement]);
         setSelectedElementId(newElement.id);
@@ -3217,6 +3280,13 @@ export function Canvas() {
         return;
       }
 
+      // Ctrl/Cmd+\: Toggle documentation panel
+      if ((e.ctrlKey || e.metaKey) && e.key === "\\") {
+        e.preventDefault();
+        setDocPanelExpanded(prev => !prev);
+        return;
+      }
+
       // Tool shortcuts (single letter without modifiers)
       if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
         switch (e.key.toLowerCase()) {
@@ -3243,6 +3313,17 @@ export function Canvas() {
             return;
           case "t":
             setCurrentTool("text");
+            return;
+          // Color shortcuts (Phase 1)
+          case "s":
+            // Open stroke color picker
+            setStrokePickerOpen(true);
+            setFillPickerOpen(false);
+            return;
+          case "g":
+            // Open fill color picker
+            setFillPickerOpen(true);
+            setStrokePickerOpen(false);
             return;
         }
       }
@@ -4463,6 +4544,105 @@ export function Canvas() {
     return undefined;
   })();
 
+  // ============================================================================
+  // Documentation Panel Handlers (Phase 1)
+  // ============================================================================
+
+  // Handler for changing frame notes
+  const handleFrameNotesChange = (notes: string) => {
+    setFrames(frames.map(frame => {
+      if (frame.id === activeFrameId) {
+        return {
+          ...frame,
+          documentation: {
+            ...frame.documentation,
+            notes,
+            elementAnnotations: frame.documentation?.elementAnnotations || {},
+          },
+        };
+      }
+      return frame;
+    }));
+  };
+
+  // Handler for changing element annotation
+  const handleElementAnnotationChange = (annotation: ElementAnnotation) => {
+    if (!selectedElementId) return;
+
+    setFrames(frames.map(frame => {
+      if (frame.id === activeFrameId) {
+        return {
+          ...frame,
+          documentation: {
+            notes: frame.documentation?.notes || '',
+            elementAnnotations: {
+              ...frame.documentation?.elementAnnotations,
+              [selectedElementId]: annotation,
+            },
+          },
+        };
+      }
+      return frame;
+    }));
+  };
+
+  // Get current element annotation
+  const currentElementAnnotation = selectedElementId
+    ? activeFrame?.documentation?.elementAnnotations?.[selectedElementId]
+    : undefined;
+
+  // Check if styling toolbar should be visible
+  const shouldShowStylingToolbar =
+    currentTool === 'rectangle' ||
+    currentTool === 'ellipse' ||
+    currentTool === 'diamond' ||
+    currentTool === 'arrow' ||
+    currentTool === 'line' ||
+    (selectedElementId && elements.find(el => el.id === selectedElementId)?.type !== 'text');
+
+  // Handler for updating selected element's stroke color
+  const handleStrokeColorChange = (color: string) => {
+    setCurrentStrokeColor(color);
+    // If an element is selected, update its stroke color
+    if (selectedElementId) {
+      recordSnapshot();
+      setElements(elements.map(el => {
+        if (el.id === selectedElementId) {
+          return {
+            ...el,
+            style: {
+              ...el.style,
+              strokeColor: color,
+              fillColor: el.style?.fillColor || DEFAULT_FILL_COLOR,
+            },
+          };
+        }
+        return el;
+      }));
+    }
+  };
+
+  // Handler for updating selected element's fill color
+  const handleFillColorChange = (color: string) => {
+    setCurrentFillColor(color);
+    // If an element is selected, update its fill color
+    if (selectedElementId) {
+      recordSnapshot();
+      setElements(elements.map(el => {
+        if (el.id === selectedElementId) {
+          return {
+            ...el,
+            style: {
+              strokeColor: el.style?.strokeColor || DEFAULT_STROKE_COLOR,
+              fillColor: color,
+            },
+          };
+        }
+        return el;
+      }));
+    }
+  };
+
   // Component insertion handler
   const handleInsertComponent = (template: ComponentTemplate) => {
     // Insert at canvas center
@@ -4552,6 +4732,25 @@ export function Canvas() {
             <ExportButton frames={frames} />
           </div>
         </div>
+
+        {/* Styling Toolbar - shown when shape tool active or element selected */}
+        {shouldShowStylingToolbar && (
+          <div className="px-4 py-2 border-b border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50">
+            <StylingToolbar
+              strokeColor={selectedElementId
+                ? (elements.find(el => el.id === selectedElementId)?.style?.strokeColor || currentStrokeColor)
+                : currentStrokeColor
+              }
+              fillColor={selectedElementId
+                ? (elements.find(el => el.id === selectedElementId)?.style?.fillColor || currentFillColor)
+                : currentFillColor
+              }
+              onStrokeColorChange={handleStrokeColorChange}
+              onFillColorChange={handleFillColorChange}
+              isVisible={true}
+            />
+          </div>
+        )}
 
         <div
           ref={canvasContainerRef}
@@ -4745,6 +4944,18 @@ export function Canvas() {
         }}
         onRenameUserComponent={renameUserComponent}
         getInstanceCount={countComponentInstances}
+      />
+
+      {/* Documentation Panel - Phase 1 */}
+      <DocumentationPanel
+        isExpanded={docPanelExpanded}
+        onToggle={() => setDocPanelExpanded(prev => !prev)}
+        frameName={activeFrame?.name || 'Untitled'}
+        frameDocumentation={activeFrame?.documentation}
+        onFrameNotesChange={handleFrameNotesChange}
+        selectedElementId={selectedElementId}
+        elementAnnotation={currentElementAnnotation}
+        onElementAnnotationChange={handleElementAnnotationChange}
       />
 
       {/* Confirm Dialog */}

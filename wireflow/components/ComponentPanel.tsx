@@ -445,6 +445,16 @@ function getComponentIcon(type: ComponentType): LucideIcon {
     'confirmation-modal': AlertTriangle,
     'simple-form': FormInput,
     'action-footer': RectangleHorizontal,
+    // Phase 1 - Core templates
+    'button': Square,
+    'text-input': FormInput,
+    'dropdown': FormInput,
+    'card': Square,
+    'navigation-bar': RectangleHorizontal,
+    'modal-dialog': AlertTriangle,
+    'list-item': RectangleHorizontal,
+    'header': RectangleHorizontal,
+    'footer': RectangleHorizontal,
   };
   return icons[type] || Square;
 }

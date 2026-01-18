@@ -1,6 +1,40 @@
 // Core element types for the canvas
 export type ElementType = 'rectangle' | 'ellipse' | 'diamond' | 'text' | 'arrow' | 'line' | 'freedraw';
 
+// ============================================================================
+// Element Style Types (Phase 1 - Colors)
+// ============================================================================
+
+/** Style properties for stroke and fill colors */
+export interface ElementStyle {
+  /** Stroke/outline color (default: '#6b7280') */
+  strokeColor: string;
+  /** Fill/background color (default: 'transparent') */
+  fillColor: string;
+}
+
+// ============================================================================
+// Documentation Types (Phase 1 - Documentation Panel)
+// ============================================================================
+
+/** Annotation for a specific element within a frame */
+export interface ElementAnnotation {
+  /** Brief description of the element's purpose */
+  description: string;
+  /** Expected behavior/interactions */
+  behavior: string;
+  /** Edge cases and special handling notes */
+  edgeCases: string;
+}
+
+/** Frame-level documentation with element annotations */
+export interface FrameDocumentation {
+  /** General notes about the frame */
+  notes: string;
+  /** Element-specific annotations keyed by element ID */
+  elementAnnotations: Record<string, ElementAnnotation>;
+}
+
 // Semantic tags for PM layer
 export type SemanticTag = 'button' | 'input' | 'section' | null;
 
@@ -17,7 +51,17 @@ export type ComponentType =
   | 'empty-state'
   | 'confirmation-modal'
   | 'simple-form'
-  | 'action-footer';
+  | 'action-footer'
+  // Phase 1 - Core templates
+  | 'button'
+  | 'text-input'
+  | 'dropdown'
+  | 'card'
+  | 'navigation-bar'
+  | 'modal-dialog'
+  | 'list-item'
+  | 'header'
+  | 'footer';
 
 // Base properties for all canvas elements
 export interface BaseElement {
@@ -29,6 +73,8 @@ export interface BaseElement {
   height: number;
   // Rotation angle in radians (0 = no rotation)
   rotation?: number;
+  // Element styling (stroke and fill colors)
+  style?: ElementStyle;
   // PM Layer - optional semantic information
   semanticTag?: SemanticTag;
   description?: string;
@@ -109,6 +155,8 @@ export interface Frame {
   type: FrameType;
   elements: CanvasElement[];
   createdAt: string;
+  // Frame documentation (notes and element annotations)
+  documentation?: FrameDocumentation;
 }
 
 // Export format for tagged elements only
@@ -153,6 +201,11 @@ export interface ComponentElementTemplate {
   semanticTag?: SemanticTag;
   description?: string;
   content?: string; // For text elements
+  // Line/Arrow specific (relative to component origin)
+  startX?: number;
+  startY?: number;
+  endX?: number;
+  endY?: number;
 }
 
 export interface ComponentTemplate {
