@@ -6,6 +6,7 @@ import type {
   Tool,
   RectangleElement,
   EllipseElement,
+  DiamondElement,
   TextElement,
   ArrowElement,
   LineElement,
@@ -695,6 +696,32 @@ export function Canvas() {
     ctx.stroke();
   };
 
+  // Draw a diamond (rhombus) shape with sketch-style wobble
+  const drawSketchDiamond = (
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    seed: number = 0,
+  ) => {
+    // Diamond points: top, right, bottom, left (center-aligned)
+    const topX = x + width / 2;
+    const topY = y;
+    const rightX = x + width;
+    const rightY = y + height / 2;
+    const bottomX = x + width / 2;
+    const bottomY = y + height;
+    const leftX = x;
+    const leftY = y + height / 2;
+
+    // Draw the four sides with sketch-style wobble
+    drawSketchLine(ctx, topX, topY, rightX, rightY, seed); // Top-right edge
+    drawSketchLine(ctx, rightX, rightY, bottomX, bottomY, seed + 1); // Bottom-right edge
+    drawSketchLine(ctx, bottomX, bottomY, leftX, leftY, seed + 2); // Bottom-left edge
+    drawSketchLine(ctx, leftX, leftY, topX, topY, seed + 3); // Top-left edge
+  };
+
   // Wrap text to fit within a given width, returning an array of lines
   // Handles both explicit newlines and word-wrapping
   const wrapText = (
@@ -788,6 +815,15 @@ export function Canvas() {
         );
       } else if (element.type === "ellipse") {
         drawSketchEllipse(
+          ctx,
+          element.x,
+          element.y,
+          element.width,
+          element.height,
+          seed,
+        );
+      } else if (element.type === "diamond") {
+        drawSketchDiamond(
           ctx,
           element.x,
           element.y,
@@ -1814,6 +1850,7 @@ export function Canvas() {
       startPoint &&
       (currentTool === "rectangle" ||
         currentTool === "ellipse" ||
+        currentTool === "diamond" ||
         currentTool === "arrow" ||
         currentTool === "line")
     ) {
@@ -1852,6 +1889,17 @@ export function Canvas() {
           startPoint.y,
           width,
           height,
+          previewSeed,
+        );
+      } else if (currentTool === "diamond") {
+        const width = x - startPoint.x;
+        const height = y - startPoint.y;
+        drawSketchDiamond(
+          ctx,
+          width > 0 ? startPoint.x : x,
+          height > 0 ? startPoint.y : y,
+          Math.abs(width),
+          Math.abs(height),
           previewSeed,
         );
       } else if (currentTool === "arrow" || currentTool === "line") {
@@ -1939,6 +1987,21 @@ export function Canvas() {
           const newElement: EllipseElement = {
             id: generateId(),
             type: "ellipse",
+            x: width > 0 ? startPoint.x : x,
+            y: height > 0 ? startPoint.y : y,
+            width: Math.abs(width),
+            height: Math.abs(height),
+          };
+          setElements([...elements, newElement]);
+          setSelectedElementId(newElement.id);
+          setCurrentTool("select");
+        }
+      } else if (currentTool === "diamond") {
+        if (Math.abs(width) > 5 && Math.abs(height) > 5) {
+          recordSnapshot(); // Record for undo
+          const newElement: DiamondElement = {
+            id: generateId(),
+            type: "diamond",
             x: width > 0 ? startPoint.x : x,
             y: height > 0 ? startPoint.y : y,
             width: Math.abs(width),
@@ -2292,6 +2355,33 @@ export function Canvas() {
       // Disable canvas keyboard shortcuts during text editing
       // (text input handles its own keyboard events)
       if (editingElementId) return;
+
+      // Tool shortcuts (single letter without modifiers)
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        switch (e.key.toLowerCase()) {
+          case "v":
+            setCurrentTool("select");
+            return;
+          case "r":
+            setCurrentTool("rectangle");
+            return;
+          case "o":
+            setCurrentTool("ellipse");
+            return;
+          case "d":
+            setCurrentTool("diamond");
+            return;
+          case "a":
+            setCurrentTool("arrow");
+            return;
+          case "l":
+            setCurrentTool("line");
+            return;
+          case "t":
+            setCurrentTool("text");
+            return;
+        }
+      }
 
       // Ctrl/Cmd+Z: Undo
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
