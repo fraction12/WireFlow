@@ -1,13 +1,17 @@
 @import "tailwindcss";
 
+/* Enable class-based dark mode instead of just system preference */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   /* Background and foreground */
   --background: #ffffff;
   --foreground: #171717;
 
-  /* Canvas colors */
-  --canvas-background: #ffffff;
+  /* Canvas drawing colors - FIXED (do not change with theme) */
   --canvas-sketch: #6b7280;
+
+  /* Canvas UI colors - respond to theme (selection, handles, marquee) */
   --canvas-selected: #3b82f6;
   --canvas-tagged: #10b981;
   --canvas-group: #8b5cf6;
@@ -29,9 +33,9 @@
   --background: #0a0a0a;
   --foreground: #ededed;
 
-  /* Canvas colors for dark mode */
-  --canvas-background: #0a0a0a;
-  --canvas-sketch: #9ca3af;
+  /* Canvas drawing colors remain FIXED - do NOT override --canvas-sketch */
+
+  /* Canvas UI colors for dark mode (selection, handles, marquee) */
   --canvas-selected: #60a5fa;
   --canvas-tagged: #34d399;
   --canvas-group: #a78bfa;
@@ -47,9 +51,9 @@
     --background: #0a0a0a;
     --foreground: #ededed;
 
-    /* Canvas colors for dark mode */
-    --canvas-background: #0a0a0a;
-    --canvas-sketch: #9ca3af;
+    /* Canvas drawing colors remain FIXED - do NOT override --canvas-sketch */
+
+    /* Canvas UI colors for dark mode (selection, handles, marquee) */
     --canvas-selected: #60a5fa;
     --canvas-tagged: #34d399;
     --canvas-group: #a78bfa;
