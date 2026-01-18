@@ -325,6 +325,9 @@ export function Canvas() {
   const [snapToGrid, setSnapToGrid] = useState(false);
   const GRID_SIZE = 20; // Grid cell size in pixels
 
+  // Alignment guides state (lines to show when elements align)
+  const [alignmentGuides, setAlignmentGuides] = useState<{ type: 'h' | 'v'; pos: number }[]>([]);
+
   // Zoom constraints
   const MIN_ZOOM = 0.1;
   const MAX_ZOOM = 5;
@@ -1300,6 +1303,32 @@ export function Canvas() {
       ctx.setLineDash([]);
     }
 
+    // Draw alignment guides
+    if (alignmentGuides.length > 0) {
+      ctx.strokeStyle = "#ff6b6b"; // Red/pink color for guides
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+
+      const visibleLeft = -pan.x / zoom;
+      const visibleTop = -pan.y / zoom;
+      const visibleRight = (canvas.width - pan.x) / zoom;
+      const visibleBottom = (canvas.height - pan.y) / zoom;
+
+      alignmentGuides.forEach((guide) => {
+        ctx.beginPath();
+        if (guide.type === 'v') {
+          ctx.moveTo(guide.pos, visibleTop);
+          ctx.lineTo(guide.pos, visibleBottom);
+        } else {
+          ctx.moveTo(visibleLeft, guide.pos);
+          ctx.lineTo(visibleRight, guide.pos);
+        }
+        ctx.stroke();
+      });
+
+      ctx.setLineDash([]);
+    }
+
     // Restore canvas state (undo zoom/pan transform)
     ctx.restore();
   }, [
@@ -1320,6 +1349,9 @@ export function Canvas() {
     canvasTheme,
     zoom,
     pan,
+    alignmentGuides,
+    showGrid,
+    GRID_SIZE,
   ]);
 
   useEffect(() => {
@@ -1481,6 +1513,77 @@ export function Canvas() {
   const snapToGridCoord = (value: number): number => {
     if (!snapToGrid) return value;
     return Math.round(value / GRID_SIZE) * GRID_SIZE;
+  };
+
+  // Find alignment guides when moving an element
+  const ALIGNMENT_TOLERANCE = 5;
+
+  const findAlignmentGuides = (
+    movingElement: CanvasElement,
+    newX: number,
+    newY: number
+  ): { guides: { type: 'h' | 'v'; pos: number }[]; snapX: number; snapY: number } => {
+    const guides: { type: 'h' | 'v'; pos: number }[] = [];
+    let snapX = newX;
+    let snapY = newY;
+
+    // Key positions for the moving element
+    const movingLeft = newX;
+    const movingRight = newX + movingElement.width;
+    const movingCenterX = newX + movingElement.width / 2;
+    const movingTop = newY;
+    const movingBottom = newY + movingElement.height;
+    const movingCenterY = newY + movingElement.height / 2;
+
+    elements.forEach((el) => {
+      if (el.id === movingElement.id) return;
+      if (el.type === "arrow" || el.type === "line" || el.type === "freedraw") return;
+
+      const elLeft = el.x;
+      const elRight = el.x + el.width;
+      const elCenterX = el.x + el.width / 2;
+      const elTop = el.y;
+      const elBottom = el.y + el.height;
+      const elCenterY = el.y + el.height / 2;
+
+      // Check vertical alignment (left, center, right edges)
+      if (Math.abs(movingLeft - elLeft) < ALIGNMENT_TOLERANCE) {
+        guides.push({ type: 'v', pos: elLeft });
+        snapX = elLeft;
+      } else if (Math.abs(movingLeft - elRight) < ALIGNMENT_TOLERANCE) {
+        guides.push({ type: 'v', pos: elRight });
+        snapX = elRight;
+      } else if (Math.abs(movingRight - elLeft) < ALIGNMENT_TOLERANCE) {
+        guides.push({ type: 'v', pos: elLeft });
+        snapX = elLeft - movingElement.width;
+      } else if (Math.abs(movingRight - elRight) < ALIGNMENT_TOLERANCE) {
+        guides.push({ type: 'v', pos: elRight });
+        snapX = elRight - movingElement.width;
+      } else if (Math.abs(movingCenterX - elCenterX) < ALIGNMENT_TOLERANCE) {
+        guides.push({ type: 'v', pos: elCenterX });
+        snapX = elCenterX - movingElement.width / 2;
+      }
+
+      // Check horizontal alignment (top, center, bottom edges)
+      if (Math.abs(movingTop - elTop) < ALIGNMENT_TOLERANCE) {
+        guides.push({ type: 'h', pos: elTop });
+        snapY = elTop;
+      } else if (Math.abs(movingTop - elBottom) < ALIGNMENT_TOLERANCE) {
+        guides.push({ type: 'h', pos: elBottom });
+        snapY = elBottom;
+      } else if (Math.abs(movingBottom - elTop) < ALIGNMENT_TOLERANCE) {
+        guides.push({ type: 'h', pos: elTop });
+        snapY = elTop - movingElement.height;
+      } else if (Math.abs(movingBottom - elBottom) < ALIGNMENT_TOLERANCE) {
+        guides.push({ type: 'h', pos: elBottom });
+        snapY = elBottom - movingElement.height;
+      } else if (Math.abs(movingCenterY - elCenterY) < ALIGNMENT_TOLERANCE) {
+        guides.push({ type: 'h', pos: elCenterY });
+        snapY = elCenterY - movingElement.height / 2;
+      }
+    });
+
+    return { guides, snapX, snapY };
   };
 
   // Connector snap points - find nearby element connection points
@@ -2072,13 +2175,25 @@ export function Canvas() {
           // Move multiple selected elements (not in a group)
           moveSelectedElements(dx, dy);
         } else {
-          // Move single element with optional grid snap
+          // Move single element with optional grid snap and alignment guides
           const rawX = x - dragOffset.x;
           const rawY = y - dragOffset.y;
-          const newX = snapToGridCoord(rawX);
-          const newY = snapToGridCoord(rawY);
-          const snapDx = newX - element.x;
-          const snapDy = newY - element.y;
+
+          // Check for alignment guides (only if not snapping to grid)
+          let finalX = snapToGridCoord(rawX);
+          let finalY = snapToGridCoord(rawY);
+
+          if (!snapToGrid) {
+            const { guides, snapX, snapY } = findAlignmentGuides(element, rawX, rawY);
+            setAlignmentGuides(guides);
+            finalX = snapX;
+            finalY = snapY;
+          } else {
+            setAlignmentGuides([]);
+          }
+
+          const snapDx = finalX - element.x;
+          const snapDy = finalY - element.y;
 
           setElements(
             elements.map((el) => {
@@ -2088,15 +2203,15 @@ export function Canvas() {
                   const lineEl = el as ArrowElement | LineElement;
                   return {
                     ...lineEl,
-                    x: newX,
-                    y: newY,
+                    x: finalX,
+                    y: finalY,
                     startX: lineEl.startX + snapDx,
                     startY: lineEl.startY + snapDy,
                     endX: lineEl.endX + snapDx,
                     endY: lineEl.endY + snapDy,
                   };
                 }
-                return { ...el, x: newX, y: newY };
+                return { ...el, x: finalX, y: finalY };
               }
               return el;
             }),
@@ -2401,6 +2516,7 @@ export function Canvas() {
     setStartPoint(null);
     setFreedrawPoints([]);
     setDragOffset(null);
+    setAlignmentGuides([]); // Clear alignment guides when drag ends
     setResizeHandle(null);
     setResizeSnapshot(null); // Clear resize snapshot on pointer up
     setIsRotating(false);
