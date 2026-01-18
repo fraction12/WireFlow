@@ -2293,8 +2293,14 @@ export function Canvas() {
       const previewSeed = Date.now() % 1000;
 
       if (currentTool === "rectangle") {
-        const width = x - startPoint.x;
-        const height = y - startPoint.y;
+        let width = x - startPoint.x;
+        let height = y - startPoint.y;
+        // Shift key: constrain to square
+        if (e.shiftKey) {
+          const size = Math.max(Math.abs(width), Math.abs(height));
+          width = width >= 0 ? size : -size;
+          height = height >= 0 ? size : -size;
+        }
         drawSketchRect(
           ctx,
           startPoint.x,
@@ -2304,8 +2310,14 @@ export function Canvas() {
           previewSeed,
         );
       } else if (currentTool === "ellipse") {
-        const width = x - startPoint.x;
-        const height = y - startPoint.y;
+        let width = x - startPoint.x;
+        let height = y - startPoint.y;
+        // Shift key: constrain to circle
+        if (e.shiftKey) {
+          const size = Math.max(Math.abs(width), Math.abs(height));
+          width = width >= 0 ? size : -size;
+          height = height >= 0 ? size : -size;
+        }
         drawSketchEllipse(
           ctx,
           startPoint.x,
@@ -2315,12 +2327,18 @@ export function Canvas() {
           previewSeed,
         );
       } else if (currentTool === "diamond") {
-        const width = x - startPoint.x;
-        const height = y - startPoint.y;
+        let width = x - startPoint.x;
+        let height = y - startPoint.y;
+        // Shift key: constrain to square diamond
+        if (e.shiftKey) {
+          const size = Math.max(Math.abs(width), Math.abs(height));
+          width = width >= 0 ? size : -size;
+          height = height >= 0 ? size : -size;
+        }
         drawSketchDiamond(
           ctx,
-          width > 0 ? startPoint.x : x,
-          height > 0 ? startPoint.y : y,
+          width > 0 ? startPoint.x : startPoint.x + width,
+          height > 0 ? startPoint.y : startPoint.y + height,
           Math.abs(width),
           Math.abs(height),
           previewSeed,
@@ -2446,8 +2464,15 @@ export function Canvas() {
     const y = canvasCoords.y;
 
     if (startPoint && currentTool !== "select" && currentTool !== "text") {
-      const width = x - startPoint.x;
-      const height = y - startPoint.y;
+      let width = x - startPoint.x;
+      let height = y - startPoint.y;
+
+      // Shift key: constrain to square/circle for shapes
+      if (e.shiftKey && (currentTool === "rectangle" || currentTool === "ellipse" || currentTool === "diamond")) {
+        const size = Math.max(Math.abs(width), Math.abs(height));
+        width = width >= 0 ? size : -size;
+        height = height >= 0 ? size : -size;
+      }
 
       if (currentTool === "rectangle") {
         if (Math.abs(width) > 5 && Math.abs(height) > 5) {
@@ -2455,8 +2480,8 @@ export function Canvas() {
           const newElement: RectangleElement = {
             id: generateId(),
             type: "rectangle",
-            x: width > 0 ? startPoint.x : x,
-            y: height > 0 ? startPoint.y : y,
+            x: width > 0 ? startPoint.x : startPoint.x + width,
+            y: height > 0 ? startPoint.y : startPoint.y + height,
             width: Math.abs(width),
             height: Math.abs(height),
           };
@@ -2470,8 +2495,8 @@ export function Canvas() {
           const newElement: EllipseElement = {
             id: generateId(),
             type: "ellipse",
-            x: width > 0 ? startPoint.x : x,
-            y: height > 0 ? startPoint.y : y,
+            x: width > 0 ? startPoint.x : startPoint.x + width,
+            y: height > 0 ? startPoint.y : startPoint.y + height,
             width: Math.abs(width),
             height: Math.abs(height),
           };
@@ -2485,8 +2510,8 @@ export function Canvas() {
           const newElement: DiamondElement = {
             id: generateId(),
             type: "diamond",
-            x: width > 0 ? startPoint.x : x,
-            y: height > 0 ? startPoint.y : y,
+            x: width > 0 ? startPoint.x : startPoint.x + width,
+            y: height > 0 ? startPoint.y : startPoint.y + height,
             width: Math.abs(width),
             height: Math.abs(height),
           };
@@ -2900,6 +2925,16 @@ export function Canvas() {
       // Disable canvas keyboard shortcuts during text editing
       // (text input handles its own keyboard events)
       if (editingElementId) return;
+
+      // Escape: deselect all and switch to select tool
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setSelectedElementId(null);
+        setSelectedElementIds(new Set());
+        setSelectedGroupId(null);
+        setCurrentTool("select");
+        return;
+      }
 
       // Tool shortcuts (single letter without modifiers)
       if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
