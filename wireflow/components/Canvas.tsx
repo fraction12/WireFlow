@@ -142,6 +142,7 @@ export function Canvas() {
   const HANDLE_SIZE = 8;
   const HANDLE_TOLERANCE = 5;
   const MIN_ELEMENT_SIZE = 20;
+  const ROTATION_HANDLE_OFFSET = 25; // Distance above element for rotation handle
 
   // Generate unique IDs (using substring instead of deprecated substr)
   const generateId = () =>
@@ -196,6 +197,13 @@ export function Canvas() {
     null,
   );
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
+  const [isRotating, setIsRotating] = useState(false);
+  const [rotationStart, setRotationStart] = useState<{
+    initialAngle: number;
+    elementCenterX: number;
+    elementCenterY: number;
+    startMouseAngle: number;
+  } | null>(null);
 
   // Resize snapshot: captures initial element bounds and pointer origin at resize start.
   // This prevents cumulative drift by computing new bounds from a fixed reference point.
@@ -834,6 +842,19 @@ export function Canvas() {
       // Use element ID as seed for deterministic randomness
       const seed = parseInt(element.id.split("_")[1]) || 0;
 
+      // Apply rotation transform for rotatable elements
+      const rotation = element.rotation || 0;
+      const hasRotation = rotation !== 0 && element.type !== "arrow" && element.type !== "line" && element.type !== "freedraw" && element.type !== "text";
+
+      if (hasRotation) {
+        const centerX = element.x + element.width / 2;
+        const centerY = element.y + element.height / 2;
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(rotation);
+        ctx.translate(-centerX, -centerY);
+      }
+
       if (element.type === "rectangle") {
         drawSketchRect(
           ctx,
@@ -1021,6 +1042,11 @@ export function Canvas() {
         drawFreedraw(ctx, freedrawEl.points);
       }
 
+      // Restore context if rotation was applied
+      if (hasRotation) {
+        ctx.restore();
+      }
+
       // Draw resize handles for selected element (only if not grouped and single selection)
       const isInGroup = element.groupId || element.elementGroupId;
       const isSingleSelection =
@@ -1043,35 +1069,58 @@ export function Canvas() {
             ctx.arc(handle.x, handle.y, HANDLE_SIZE / 2, 0, Math.PI * 2);
             ctx.fill();
           });
-        } else if (element.type !== "text") {
-          // Corner handles for rectangles and ellipses (not text - text uses auto-width)
-          const handles = [
-            { x: element.x - HANDLE_SIZE / 2, y: element.y - HANDLE_SIZE / 2 }, // NW
-            {
-              x: element.x + element.width - HANDLE_SIZE / 2,
-              y: element.y - HANDLE_SIZE / 2,
-            }, // NE
-            {
-              x: element.x - HANDLE_SIZE / 2,
-              y: element.y + element.height - HANDLE_SIZE / 2,
-            }, // SW
-            {
-              x: element.x + element.width - HANDLE_SIZE / 2,
-              y: element.y + element.height - HANDLE_SIZE / 2,
-            }, // SE
+        } else if (element.type !== "text" && element.type !== "freedraw") {
+          // Corner handles for rectangles, ellipses, and diamonds
+          const centerX = element.x + element.width / 2;
+          const centerY = element.y + element.height / 2;
+          const elemRotation = element.rotation || 0;
+
+          // Transform corner handles based on element rotation
+          const corners = [
+            { dx: -element.width / 2, dy: -element.height / 2 }, // NW
+            { dx: element.width / 2, dy: -element.height / 2 }, // NE
+            { dx: -element.width / 2, dy: element.height / 2 }, // SW
+            { dx: element.width / 2, dy: element.height / 2 }, // SE
           ];
 
-          handles.forEach((handle) => {
+          corners.forEach((corner) => {
+            // Apply rotation to corner offset
+            const rotatedX = corner.dx * Math.cos(elemRotation) - corner.dy * Math.sin(elemRotation);
+            const rotatedY = corner.dx * Math.sin(elemRotation) + corner.dy * Math.cos(elemRotation);
+            const handleX = centerX + rotatedX;
+            const handleY = centerY + rotatedY;
+
             ctx.beginPath();
-            ctx.arc(
-              handle.x + HANDLE_SIZE / 2,
-              handle.y + HANDLE_SIZE / 2,
-              HANDLE_SIZE / 2,
-              0,
-              Math.PI * 2,
-            );
+            ctx.arc(handleX, handleY, HANDLE_SIZE / 2, 0, Math.PI * 2);
             ctx.fill();
           });
+
+          // Draw rotation handle (above the element, with connector line)
+          const rotHandleDistFromCenter = element.height / 2 + ROTATION_HANDLE_OFFSET;
+          const rotHandleX = centerX + Math.sin(elemRotation) * rotHandleDistFromCenter;
+          const rotHandleY = centerY - Math.cos(elemRotation) * rotHandleDistFromCenter;
+
+          // Draw connector line from top edge to rotation handle
+          const topEdgeY = centerY - element.height / 2;
+          const topEdgeX = centerX;
+          const rotatedTopX = centerX + (topEdgeX - centerX) * Math.cos(elemRotation) - (topEdgeY - centerY) * Math.sin(elemRotation);
+          const rotatedTopY = centerY + (topEdgeX - centerX) * Math.sin(elemRotation) + (topEdgeY - centerY) * Math.cos(elemRotation);
+
+          ctx.beginPath();
+          ctx.moveTo(rotatedTopX, rotatedTopY);
+          ctx.lineTo(rotHandleX, rotHandleY);
+          ctx.strokeStyle = canvasTheme.handle;
+          ctx.lineWidth = 1;
+          ctx.stroke();
+
+          // Draw rotation handle circle
+          ctx.beginPath();
+          ctx.arc(rotHandleX, rotHandleY, HANDLE_SIZE / 2 + 1, 0, Math.PI * 2);
+          ctx.fillStyle = canvasTheme.handleFill;
+          ctx.fill();
+          ctx.strokeStyle = canvasTheme.handle;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
         }
       }
     });
@@ -1366,6 +1415,33 @@ export function Canvas() {
     return null;
   };
 
+  // Check if click is on the rotation handle (above the element)
+  const isOnRotationHandle = (
+    x: number,
+    y: number,
+    element: CanvasElement,
+  ): boolean => {
+    // Text, arrow, and line elements don't have rotation handles
+    if (element.type === "text" || element.type === "arrow" || element.type === "line" || element.type === "freedraw") {
+      return false;
+    }
+
+    // Calculate element center and rotation handle position
+    const centerX = element.x + element.width / 2;
+    const centerY = element.y + element.height / 2;
+    const rotation = element.rotation || 0;
+
+    // Rotation handle is above the element, rotated with the element
+    const handleDistFromCenter = element.height / 2 + ROTATION_HANDLE_OFFSET;
+    const handleX = centerX + Math.sin(rotation) * handleDistFromCenter;
+    const handleY = centerY - Math.cos(rotation) * handleDistFromCenter;
+
+    return (
+      Math.abs(x - handleX) <= HANDLE_SIZE + HANDLE_TOLERANCE &&
+      Math.abs(y - handleY) <= HANDLE_SIZE + HANDLE_TOLERANCE
+    );
+  };
+
   // Text editing helpers
   const enterEditMode = (element: TextElement) => {
     setEditingElementId(element.id);
@@ -1582,7 +1658,27 @@ export function Canvas() {
 
         // Check if click is on a resize handle (only for non-grouped elements)
         const isInAnyGroup = groupId || clickedElement.elementGroupId;
-        const handle = !isInAnyGroup
+
+        // Check rotation handle first (only for rotatable elements)
+        const onRotationHandle = !isInAnyGroup && isOnRotationHandle(x, y, clickedElement);
+
+        if (onRotationHandle) {
+          // Enter rotation mode
+          recordSnapshot(); // Record for undo before rotation
+          const centerX = clickedElement.x + clickedElement.width / 2;
+          const centerY = clickedElement.y + clickedElement.height / 2;
+          const mouseAngle = Math.atan2(y - centerY, x - centerX);
+          setIsRotating(true);
+          setRotationStart({
+            initialAngle: clickedElement.rotation || 0,
+            elementCenterX: centerX,
+            elementCenterY: centerY,
+            startMouseAngle: mouseAngle,
+          });
+          setIsDrawing(true);
+        }
+
+        const handle = !isInAnyGroup && !onRotationHandle
           ? getResizeHandle(x, y, clickedElement)
           : null;
 
@@ -1615,7 +1711,7 @@ export function Canvas() {
           }
           setResizeSnapshot(snapshot);
           setIsDrawing(true);
-        } else {
+        } else if (!onRotationHandle) {
           // Start dragging
           recordSnapshot(); // Record for undo before drag
           setDragOffset({ x: x - clickedElement.x, y: y - clickedElement.y });
@@ -1724,6 +1820,26 @@ export function Canvas() {
     if (currentTool === "select" && selectedElementId) {
       const element = elements.find((el) => el.id === selectedElementId);
       if (!element) return;
+
+      // Handle rotation mode
+      if (isRotating && rotationStart) {
+        const { initialAngle, elementCenterX, elementCenterY, startMouseAngle } = rotationStart;
+        const currentMouseAngle = Math.atan2(y - elementCenterY, x - elementCenterX);
+        let newAngle = initialAngle + (currentMouseAngle - startMouseAngle);
+
+        // Snap to 15-degree increments when holding Shift
+        if (e.shiftKey) {
+          const snapAngle = Math.PI / 12; // 15 degrees
+          newAngle = Math.round(newAngle / snapAngle) * snapAngle;
+        }
+
+        setElements(
+          elements.map((el) =>
+            el.id === selectedElementId ? { ...el, rotation: newAngle } : el
+          )
+        );
+        return;
+      }
 
       if (resizeHandle && resizeSnapshot) {
         const { initialBounds, pointerOrigin, arrowEndpoints } = resizeSnapshot;
@@ -2143,6 +2259,8 @@ export function Canvas() {
     setDragOffset(null);
     setResizeHandle(null);
     setResizeSnapshot(null); // Clear resize snapshot on pointer up
+    setIsRotating(false);
+    setRotationStart(null);
   };
 
   // Wheel handler for zooming

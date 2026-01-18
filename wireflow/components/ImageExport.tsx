@@ -200,13 +200,32 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
       const x = element.x - offsetX;
       const y = element.y - offsetY;
 
+      // Apply rotation for rotatable elements
+      const rotation = element.rotation || 0;
+      const hasRotation = rotation !== 0 && element.type !== 'arrow' && element.type !== 'line' && element.type !== 'freedraw' && element.type !== 'text';
+
+      if (hasRotation) {
+        const centerX = x + element.width / 2;
+        const centerY = y + element.height / 2;
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(rotation);
+        ctx.translate(-centerX, -centerY);
+      }
+
       if (element.type === 'rectangle') {
         drawSketchRect(ctx, x, y, element.width, element.height, seed);
       } else if (element.type === 'ellipse') {
         drawSketchEllipse(ctx, x, y, element.width, element.height, seed);
       } else if (element.type === 'diamond') {
         drawSketchDiamond(ctx, x, y, element.width, element.height, seed);
-      } else if (element.type === 'text') {
+      }
+
+      if (hasRotation) {
+        ctx.restore();
+      }
+
+      if (element.type === 'text') {
         const textEl = element as TextElement;
         const fontSize = textEl.fontSize || 16;
         const fontWeight = textEl.fontWeight || 'normal';
@@ -333,14 +352,22 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
       const x = element.x - bounds.x;
       const y = element.y - bounds.y;
 
+      // Calculate rotation transform for SVG
+      const rotation = element.rotation || 0;
+      const rotationDegrees = (rotation * 180) / Math.PI;
+      const hasRotation = rotation !== 0 && element.type !== 'arrow' && element.type !== 'line' && element.type !== 'freedraw' && element.type !== 'text';
+      const centerX = x + element.width / 2;
+      const centerY = y + element.height / 2;
+      const rotateAttr = hasRotation ? ` transform="rotate(${rotationDegrees.toFixed(2)} ${centerX.toFixed(2)} ${centerY.toFixed(2)})"` : '';
+
       if (element.type === 'rectangle') {
-        svgContent += `    <rect x="${x}" y="${y}" width="${element.width}" height="${element.height}"/>\n`;
+        svgContent += `    <rect x="${x}" y="${y}" width="${element.width}" height="${element.height}"${rotateAttr}/>\n`;
       } else if (element.type === 'ellipse') {
         const cx = x + element.width / 2;
         const cy = y + element.height / 2;
         const rx = element.width / 2;
         const ry = element.height / 2;
-        svgContent += `    <ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}"/>\n`;
+        svgContent += `    <ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}"${rotateAttr}/>\n`;
       } else if (element.type === 'diamond') {
         const topX = x + element.width / 2;
         const topY = y;
@@ -350,7 +377,7 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
         const bottomY = y + element.height;
         const leftX = x;
         const leftY = y + element.height / 2;
-        svgContent += `    <polygon points="${topX},${topY} ${rightX},${rightY} ${bottomX},${bottomY} ${leftX},${leftY}"/>\n`;
+        svgContent += `    <polygon points="${topX},${topY} ${rightX},${rightY} ${bottomX},${bottomY} ${leftX},${leftY}"${rotateAttr}/>\n`;
       } else if (element.type === 'text') {
         const textEl = element as TextElement;
         const fontSize = textEl.fontSize || 16;

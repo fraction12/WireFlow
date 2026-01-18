@@ -27,6 +27,8 @@ export interface BaseElement {
   y: number;
   width: number;
   height: number;
+  // Rotation angle in radians (0 = no rotation)
+  rotation?: number;
   // PM Layer - optional semantic information
   semanticTag?: SemanticTag;
   description?: string;
