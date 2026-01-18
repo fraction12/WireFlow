@@ -1442,6 +1442,53 @@ export function Canvas() {
     );
   };
 
+  // Connector snap points - find nearby element connection points
+  const SNAP_DISTANCE = 15;
+
+  // Get connection points for an element (center and edge midpoints)
+  const getElementSnapPoints = (element: CanvasElement): { x: number; y: number; type: string }[] => {
+    // Skip arrows, lines, freedraw, and text for snap targets
+    if (element.type === "arrow" || element.type === "line" || element.type === "freedraw" || element.type === "text") {
+      return [];
+    }
+
+    const centerX = element.x + element.width / 2;
+    const centerY = element.y + element.height / 2;
+
+    return [
+      { x: centerX, y: centerY, type: "center" },
+      { x: centerX, y: element.y, type: "top" },
+      { x: centerX, y: element.y + element.height, type: "bottom" },
+      { x: element.x, y: centerY, type: "left" },
+      { x: element.x + element.width, y: centerY, type: "right" },
+    ];
+  };
+
+  // Find the nearest snap point within snap distance
+  const findNearestSnapPoint = (
+    x: number,
+    y: number,
+    excludeElementId?: string
+  ): { x: number; y: number; elementId: string } | null => {
+    let nearestPoint: { x: number; y: number; elementId: string } | null = null;
+    let minDistance = SNAP_DISTANCE;
+
+    elements.forEach((element) => {
+      if (element.id === excludeElementId) return;
+
+      const snapPoints = getElementSnapPoints(element);
+      snapPoints.forEach((point) => {
+        const distance = Math.sqrt((x - point.x) ** 2 + (y - point.y) ** 2);
+        if (distance < minDistance) {
+          minDistance = distance;
+          nearestPoint = { x: point.x, y: point.y, elementId: element.id };
+        }
+      });
+    });
+
+    return nearestPoint;
+  };
+
   // Text editing helpers
   const enterEditMode = (element: TextElement) => {
     setEditingElementId(element.id);
@@ -1863,11 +1910,19 @@ export function Canvas() {
           let newEndY = arrowEndpoints.endY;
 
           if (resizeHandle === "start") {
-            newStartX = arrowEndpoints.startX + dx;
-            newStartY = arrowEndpoints.startY + dy;
+            const rawX = arrowEndpoints.startX + dx;
+            const rawY = arrowEndpoints.startY + dy;
+            // Snap to nearby elements
+            const snap = findNearestSnapPoint(rawX, rawY, selectedElementId || undefined);
+            newStartX = snap ? snap.x : rawX;
+            newStartY = snap ? snap.y : rawY;
           } else if (resizeHandle === "end") {
-            newEndX = arrowEndpoints.endX + dx;
-            newEndY = arrowEndpoints.endY + dy;
+            const rawX = arrowEndpoints.endX + dx;
+            const rawY = arrowEndpoints.endY + dy;
+            // Snap to nearby elements
+            const snap = findNearestSnapPoint(rawX, rawY, selectedElementId || undefined);
+            newEndX = snap ? snap.x : rawX;
+            newEndY = snap ? snap.y : rawY;
           }
 
           // Update bounding box to contain both endpoints
@@ -2057,7 +2112,32 @@ export function Canvas() {
           previewSeed,
         );
       } else if (currentTool === "arrow" || currentTool === "line") {
-        drawSketchLine(ctx, startPoint.x, startPoint.y, x, y, previewSeed);
+        // Find snap points for preview
+        const startSnap = findNearestSnapPoint(startPoint.x, startPoint.y);
+        const endSnap = findNearestSnapPoint(x, y);
+        const previewStartX = startSnap ? startSnap.x : startPoint.x;
+        const previewStartY = startSnap ? startSnap.y : startPoint.y;
+        const previewEndX = endSnap ? endSnap.x : x;
+        const previewEndY = endSnap ? endSnap.y : y;
+
+        drawSketchLine(ctx, previewStartX, previewStartY, previewEndX, previewEndY, previewSeed);
+
+        // Draw snap indicators
+        ctx.setLineDash([]);
+        if (startSnap) {
+          ctx.beginPath();
+          ctx.arc(startSnap.x, startSnap.y, 6, 0, Math.PI * 2);
+          ctx.strokeStyle = canvasTheme.selected;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+        if (endSnap) {
+          ctx.beginPath();
+          ctx.arc(endSnap.x, endSnap.y, 6, 0, Math.PI * 2);
+          ctx.strokeStyle = canvasTheme.selected;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
       }
 
       ctx.setLineDash([]);
@@ -2192,34 +2272,50 @@ export function Canvas() {
         }
       } else if (currentTool === "arrow") {
         recordSnapshot(); // Record for undo
+        // Snap start and end points to nearby elements
+        const startSnap = findNearestSnapPoint(startPoint.x, startPoint.y);
+        const endSnap = findNearestSnapPoint(x, y);
+        const finalStartX = startSnap ? startSnap.x : startPoint.x;
+        const finalStartY = startSnap ? startSnap.y : startPoint.y;
+        const finalEndX = endSnap ? endSnap.x : x;
+        const finalEndY = endSnap ? endSnap.y : y;
+
         const newElement: ArrowElement = {
           id: generateId(),
           type: "arrow",
-          x: Math.min(startPoint.x, x),
-          y: Math.min(startPoint.y, y),
-          width: Math.abs(x - startPoint.x) || 1,
-          height: Math.abs(y - startPoint.y) || 1,
-          startX: startPoint.x,
-          startY: startPoint.y,
-          endX: x,
-          endY: y,
+          x: Math.min(finalStartX, finalEndX),
+          y: Math.min(finalStartY, finalEndY),
+          width: Math.abs(finalEndX - finalStartX) || 1,
+          height: Math.abs(finalEndY - finalStartY) || 1,
+          startX: finalStartX,
+          startY: finalStartY,
+          endX: finalEndX,
+          endY: finalEndY,
         };
         setElements([...elements, newElement]);
         setSelectedElementId(newElement.id);
         setCurrentTool("select");
       } else if (currentTool === "line") {
         recordSnapshot(); // Record for undo
+        // Snap start and end points to nearby elements
+        const startSnap = findNearestSnapPoint(startPoint.x, startPoint.y);
+        const endSnap = findNearestSnapPoint(x, y);
+        const finalStartX = startSnap ? startSnap.x : startPoint.x;
+        const finalStartY = startSnap ? startSnap.y : startPoint.y;
+        const finalEndX = endSnap ? endSnap.x : x;
+        const finalEndY = endSnap ? endSnap.y : y;
+
         const newElement: LineElement = {
           id: generateId(),
           type: "line",
-          x: Math.min(startPoint.x, x),
-          y: Math.min(startPoint.y, y),
-          width: Math.abs(x - startPoint.x) || 1,
-          height: Math.abs(y - startPoint.y) || 1,
-          startX: startPoint.x,
-          startY: startPoint.y,
-          endX: x,
-          endY: y,
+          x: Math.min(finalStartX, finalEndX),
+          y: Math.min(finalStartY, finalEndY),
+          width: Math.abs(finalEndX - finalStartX) || 1,
+          height: Math.abs(finalEndY - finalStartY) || 1,
+          startX: finalStartX,
+          startY: finalStartY,
+          endX: finalEndX,
+          endY: finalEndY,
         };
         setElements([...elements, newElement]);
         setSelectedElementId(newElement.id);
