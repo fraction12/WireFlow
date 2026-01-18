@@ -3,12 +3,27 @@ import type { WorkspaceState, Frame, ComponentGroup, ElementGroup, UserComponent
 const STORAGE_KEY = 'wireflow-workspace';
 const CURRENT_VERSION = 1;
 
+/** Result type for save operations with detailed error information */
+export type SaveResult =
+  | { success: true }
+  | { success: false; error: 'quota_exceeded' | 'storage_unavailable' | 'unknown'; message: string };
+
+/** Result type for load operations with detailed error information */
+export type LoadResult =
+  | { success: true; data: WorkspaceState }
+  | { success: false; error: 'no_data' | 'invalid_json' | 'invalid_schema' | 'storage_unavailable' | 'unknown'; message: string };
+
 /**
  * Save workspace state to localStorage with debouncing handled by caller.
- * Returns true on success, false on failure (e.g., storage quota exceeded).
+ * Returns detailed result with error information for UI notification.
  */
-export function saveWorkspace(state: WorkspaceState): boolean {
+export function saveWorkspace(state: WorkspaceState): SaveResult {
   try {
+    // Check if localStorage is available
+    if (typeof localStorage === 'undefined') {
+      return { success: false, error: 'storage_unavailable', message: 'localStorage is not available' };
+    }
+
     const data: WorkspaceState = {
       version: CURRENT_VERSION,
       frames: state.frames,
@@ -19,11 +34,80 @@ export function saveWorkspace(state: WorkspaceState): boolean {
       activeFrameId: state.activeFrameId,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    return true;
+    return { success: true };
   } catch (error) {
-    // Storage quota exceeded or other localStorage errors
+    // Detect quota exceeded errors
+    if (error instanceof DOMException) {
+      if (error.name === 'QuotaExceededError' || error.code === 22) {
+        return {
+          success: false,
+          error: 'quota_exceeded',
+          message: 'Storage quota exceeded. Try deleting some frames or elements to free up space.'
+        };
+      }
+      if (error.name === 'SecurityError') {
+        return {
+          success: false,
+          error: 'storage_unavailable',
+          message: 'Storage access denied. Check browser privacy settings.'
+        };
+      }
+    }
     console.warn('Failed to save workspace:', error);
-    return false;
+    return {
+      success: false,
+      error: 'unknown',
+      message: 'Failed to save workspace. Changes may not persist.'
+    };
+  }
+}
+
+/**
+ * Legacy wrapper for backward compatibility - returns boolean
+ */
+export function saveWorkspaceSimple(state: WorkspaceState): boolean {
+  return saveWorkspace(state).success;
+}
+
+/**
+ * Load workspace state from localStorage with detailed error reporting.
+ * Returns result object with data on success or error details on failure.
+ */
+export function loadWorkspaceWithResult(): LoadResult {
+  try {
+    // Check if localStorage is available
+    if (typeof localStorage === 'undefined') {
+      return { success: false, error: 'storage_unavailable', message: 'localStorage is not available' };
+    }
+
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) {
+      return { success: false, error: 'no_data', message: 'No saved workspace found' };
+    }
+
+    let data: unknown;
+    try {
+      data = JSON.parse(stored);
+    } catch {
+      return { success: false, error: 'invalid_json', message: 'Saved data is corrupted and cannot be parsed' };
+    }
+
+    // Validate basic structure
+    if (!isValidWorkspaceState(data)) {
+      return { success: false, error: 'invalid_schema', message: 'Saved data has invalid structure. Starting fresh.' };
+    }
+
+    // Ensure all arrays exist (backward compatibility)
+    const result: WorkspaceState = {
+      ...data,
+      elementGroups: data.elementGroups || [],
+      userComponents: data.userComponents || [],
+      componentInstances: data.componentInstances || [],
+    };
+    return { success: true, data: result };
+  } catch (error) {
+    console.warn('Failed to load workspace:', error);
+    return { success: false, error: 'unknown', message: 'Failed to load workspace' };
   }
 }
 
@@ -33,32 +117,8 @@ export function saveWorkspace(state: WorkspaceState): boolean {
  * The app should fall back to default state when null is returned.
  */
 export function loadWorkspace(): WorkspaceState | null {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (!stored) {
-      return null;
-    }
-
-    const data = JSON.parse(stored);
-
-    // Validate basic structure
-    if (!isValidWorkspaceState(data)) {
-      console.warn('Invalid workspace state in storage, ignoring');
-      return null;
-    }
-
-    // Ensure all arrays exist (backward compatibility)
-    return {
-      ...data,
-      elementGroups: data.elementGroups || [],
-      userComponents: data.userComponents || [],
-      componentInstances: data.componentInstances || [],
-    };
-  } catch (error) {
-    // JSON parse error or other issues
-    console.warn('Failed to load workspace:', error);
-    return null;
-  }
+  const result = loadWorkspaceWithResult();
+  return result.success ? result.data : null;
 }
 
 /**

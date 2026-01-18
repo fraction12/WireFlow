@@ -197,9 +197,9 @@ export function UnifiedStyleBar({
     { key: 'caption', label: 'Cap' },
   ];
 
-  // Shared button styles
+  // Shared button styles - standardized to 32px height
   const buttonBase = `
-    h-7 px-2 flex items-center justify-center rounded
+    h-8 px-2 flex items-center justify-center rounded
     transition-all duration-150 ease-out
     focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1
     active:scale-95
@@ -492,7 +492,7 @@ export function UnifiedStyleBar({
       <button
         ref={resetButtonRef}
         onClick={handleResetColors}
-        className="w-7 h-7 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 active:scale-95 cursor-pointer"
+        className="w-8 h-8 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 active:scale-95 cursor-pointer"
         title="Reset colors to defaults"
         aria-label="Reset colors to defaults"
       >

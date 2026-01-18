@@ -140,6 +140,8 @@ export interface HistoryManager<T> {
   redo: (currentState: T) => T | null;
   canUndo: boolean;
   canRedo: boolean;
+  undoCount: number;
+  redoCount: number;
   clear: () => void;
 }
 
@@ -200,6 +202,8 @@ export function useHistoryManager<T>(
     redo,
     canUndo: past.length > 0,
     canRedo: future.length > 0,
+    undoCount: past.length,
+    redoCount: future.length,
     clear,
   };
 }

@@ -24,7 +24,7 @@ import type {
   ElementAnnotation,
   ElementStyle,
 } from "@/lib/types";
-import { saveWorkspace, loadWorkspace } from "@/lib/persistence";
+import { saveWorkspace, loadWorkspace, type SaveResult } from "@/lib/persistence";
 import {
   MIN_TEXT_WIDTH,
   TEXT_PADDING,
@@ -42,6 +42,8 @@ import { ImageExport } from "./ImageExport";
 import { DocumentationPanel } from "./DocumentationPanel";
 import { RightPanelStrip } from "./RightPanelStrip";
 import { UnifiedStyleBar } from "./UnifiedStyleBar";
+import { KeyboardShortcutsPanel } from "./ui/KeyboardShortcutsPanel";
+import { WelcomeModal } from "./ui/WelcomeModal";
 import { DEFAULT_STROKE_COLOR, DEFAULT_FILL_COLOR } from "@/lib/colors";
 
 // Snapshot type for undo/redo history
@@ -112,6 +114,10 @@ export function Canvas() {
   const [canvasRect, setCanvasRect] = useState<DOMRect | null>(null);
   const [canvasTheme, setCanvasTheme] = useState<CanvasTheme>(getCanvasTheme);
   const { addToast } = useToast();
+
+  // Animation frame request ref for throttling redraws
+  const rafIdRef = useRef<number | null>(null);
+  const needsRedrawRef = useRef(false);
 
   // Confirm dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -308,8 +314,18 @@ export function Canvas() {
       setSelectedElementIds(new Set());
       setSelectedGroupId(null);
       setSelectedInstanceId(null);
+      // Show toast with remaining steps
+      const remaining = historyManager.undoCount;
+      addToast({
+        type: 'info',
+        title: 'Undo',
+        message: remaining > 0 ? `${remaining} step${remaining === 1 ? '' : 's'} remaining` : 'Nothing more to undo',
+        duration: 2000,
+      });
+    } else {
+      addToast({ type: 'info', title: 'Nothing to undo', duration: 2000 });
     }
-  }, [frames, componentGroups, elementGroups, userComponents, componentInstances, historyManager]);
+  }, [frames, componentGroups, elementGroups, userComponents, componentInstances, historyManager, addToast]);
 
   // Perform redo
   const performRedo = useCallback(() => {
@@ -332,8 +348,18 @@ export function Canvas() {
       setSelectedElementIds(new Set());
       setSelectedGroupId(null);
       setSelectedInstanceId(null);
+      // Show toast with remaining steps
+      const remaining = historyManager.redoCount;
+      addToast({
+        type: 'info',
+        title: 'Redo',
+        message: remaining > 0 ? `${remaining} step${remaining === 1 ? '' : 's'} remaining` : 'Nothing more to redo',
+        duration: 2000,
+      });
+    } else {
+      addToast({ type: 'info', title: 'Nothing to redo', duration: 2000 });
     }
-  }, [frames, componentGroups, elementGroups, userComponents, componentInstances, historyManager]);
+  }, [frames, componentGroups, elementGroups, userComponents, componentInstances, historyManager, addToast]);
 
   // Multi-selection state: holds IDs of all currently selected elements
   const [selectedElementIds, setSelectedElementIds] = useState<Set<string>>(
@@ -383,6 +409,25 @@ export function Canvas() {
   const [showGrid, setShowGrid] = useState(false);
   const [snapToGrid, setSnapToGrid] = useState(false);
   const GRID_SIZE = 20; // Grid cell size in pixels
+
+  // Save status for user feedback
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const saveStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Screen reader announcements for canvas operations
+  const [screenReaderAnnouncement, setScreenReaderAnnouncement] = useState<string>('');
+
+  // Helper function to announce to screen readers
+  const announce = useCallback((message: string) => {
+    setScreenReaderAnnouncement(''); // Clear first to ensure re-announcement of same text
+    requestAnimationFrame(() => {
+      setScreenReaderAnnouncement(message);
+    });
+  }, []);
+
+  // Keyboard shortcuts help panel state
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
 
   // Alignment guides state (lines to show when elements align)
   const [alignmentGuides, setAlignmentGuides] = useState<{ type: 'h' | 'v'; pos: number }[]>([]);
@@ -563,8 +608,16 @@ export function Canvas() {
     // Skip saving until initial load completes
     if (!hasLoadedRef.current) return;
 
+    // Show saving indicator
+    setSaveStatus('saving');
+
+    // Clear any pending status timeout
+    if (saveStatusTimeoutRef.current) {
+      clearTimeout(saveStatusTimeoutRef.current);
+    }
+
     const timeoutId = setTimeout(() => {
-      saveWorkspace({
+      const result = saveWorkspace({
         version: 1,
         frames,
         componentGroups,
@@ -573,6 +626,22 @@ export function Canvas() {
         componentInstances,
         activeFrameId,
       });
+
+      if (result.success) {
+        setSaveStatus('saved');
+        setSaveError(null);
+        // Clear saved indicator after 2 seconds
+        saveStatusTimeoutRef.current = setTimeout(() => {
+          setSaveStatus(null);
+        }, 2000);
+      } else {
+        setSaveStatus('error');
+        setSaveError(result.message);
+        // Show error toast for quota exceeded
+        if (result.error === 'quota_exceeded') {
+          addToast({ type: 'error', title: 'Save Failed', message: result.message });
+        }
+      }
     }, 500); // 500ms debounce
 
     return () => clearTimeout(timeoutId);
@@ -1735,8 +1804,31 @@ export function Canvas() {
     GRID_SIZE,
   ]);
 
+  // Throttled redraw using requestAnimationFrame
+  // Prevents multiple redraws in the same frame for better performance
   useEffect(() => {
-    redraw();
+    needsRedrawRef.current = true;
+
+    const scheduleRedraw = () => {
+      if (needsRedrawRef.current && !rafIdRef.current) {
+        rafIdRef.current = requestAnimationFrame(() => {
+          rafIdRef.current = null;
+          if (needsRedrawRef.current) {
+            needsRedrawRef.current = false;
+            redraw();
+          }
+        });
+      }
+    };
+
+    scheduleRedraw();
+
+    return () => {
+      if (rafIdRef.current) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+    };
   }, [redraw]);
 
   // Find element at point
@@ -3021,6 +3113,7 @@ export function Canvas() {
           setElements([...elements, newElement]);
           setSelectedElementId(newElement.id);
           setCurrentTool("select");
+          announce('Created rectangle');
         }
       } else if (currentTool === "ellipse") {
         if (Math.abs(width) > 5 && Math.abs(height) > 5) {
@@ -3037,6 +3130,7 @@ export function Canvas() {
           setElements([...elements, newElement]);
           setSelectedElementId(newElement.id);
           setCurrentTool("select");
+          announce('Created ellipse');
         }
       } else if (currentTool === "diamond") {
         if (Math.abs(width) > 5 && Math.abs(height) > 5) {
@@ -3053,6 +3147,7 @@ export function Canvas() {
           setElements([...elements, newElement]);
           setSelectedElementId(newElement.id);
           setCurrentTool("select");
+          announce('Created diamond');
         }
       } else if (currentTool === "arrow") {
         recordSnapshot(); // Record for undo
@@ -3088,6 +3183,7 @@ export function Canvas() {
         setElements([...elements, newElement]);
         setSelectedElementId(newElement.id);
         setCurrentTool("select");
+        announce('Created arrow');
       } else if (currentTool === "line") {
         recordSnapshot(); // Record for undo
         // Handle Shift key for angle constraint
@@ -3122,6 +3218,7 @@ export function Canvas() {
         setElements([...elements, newElement]);
         setSelectedElementId(newElement.id);
         setCurrentTool("select");
+        announce('Created line');
       } else if (currentTool === "freedraw" && freedrawPoints.length >= 2) {
         recordSnapshot(); // Record for undo
         // Calculate bounding box from points
@@ -3149,6 +3246,7 @@ export function Canvas() {
         setSelectedElementId(newElement.id);
         setCurrentTool("select");
         setFreedrawPoints([]);
+        announce('Created freedraw');
       }
     }
 
@@ -3530,6 +3628,13 @@ export function Canvas() {
         }
       }
 
+      // "?" key (Shift + /) to show keyboard shortcuts
+      if (e.key === "?" && e.shiftKey) {
+        e.preventDefault();
+        setShortcutsOpen(true);
+        return;
+      }
+
       // Ctrl/Cmd+A: Select all elements
       if ((e.ctrlKey || e.metaKey) && e.key === "a") {
         e.preventDefault();
@@ -3867,17 +3972,21 @@ export function Canvas() {
         // If multiple elements are selected (not in a group), delete all selected
         else if (selectedElementIds.size > 1) {
           recordSnapshot(); // Record for undo
+          const count = selectedElementIds.size;
           setElements(elements.filter((el) => !selectedElementIds.has(el.id)));
           setSelectedElementIds(new Set());
           setSelectedElementId(null);
           setSelectedByClick(false);
+          announce(`Deleted ${count} elements`);
         }
         // Remove single element from state
         else {
           recordSnapshot(); // Record for undo
+          const elementType = element.type;
           setElements(elements.filter((el) => el.id !== selectedElementId));
           setSelectedElementId(null);
           setSelectedByClick(false);
+          announce(`Deleted ${elementType}`);
         }
       }
 
@@ -4902,9 +5011,21 @@ export function Canvas() {
 
   // Component insertion handler
   const handleInsertComponent = (template: ComponentTemplate) => {
-    // Insert at canvas center
-    const insertX = 500;
-    const insertY = 400;
+    // Insert at visible canvas center (accounting for zoom and pan)
+    const canvas = canvasRef.current;
+    const container = canvasContainerRef.current;
+    let insertX = 500;
+    let insertY = 400;
+
+    if (canvas && container) {
+      // Calculate the center of the visible area in canvas coordinates
+      const containerRect = container.getBoundingClientRect();
+      const centerScreenX = containerRect.width / 2;
+      const centerScreenY = containerRect.height / 2;
+      // Convert screen center to canvas coordinates using zoom and pan
+      insertX = (centerScreenX - pan.x) / zoom;
+      insertY = (centerScreenY - pan.y) / zoom;
+    }
 
     const group = createComponentGroup(template, insertX, insertY);
 
@@ -4917,6 +5038,24 @@ export function Canvas() {
 
   return (
     <div className="flex h-screen bg-zinc-50 dark:bg-zinc-950 min-w-[900px]">
+      {/* Screen reader announcements for canvas operations */}
+      <div
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        className="sr-only"
+      >
+        {screenReaderAnnouncement}
+      </div>
+
+      {/* Skip link for keyboard users to bypass navigation */}
+      <a
+        href="#main-canvas"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white focus:rounded-lg focus:shadow-lg focus:outline-none"
+      >
+        Skip to canvas
+      </a>
+
       <FrameList
         frames={frames}
         activeFrameId={activeFrameId}
@@ -4980,7 +5119,11 @@ export function Canvas() {
                 Grid
               </button>
               <button
-                onClick={() => setSnapToGrid(!snapToGrid)}
+                onClick={() => {
+                  const newValue = !snapToGrid;
+                  setSnapToGrid(newValue);
+                  announce(newValue ? 'Snap to grid enabled' : 'Snap to grid disabled');
+                }}
                 className={`px-2 py-1 text-xs rounded transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${
                   snapToGrid
                     ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
@@ -4990,9 +5133,44 @@ export function Canvas() {
                 aria-label="Toggle snap to grid"
                 aria-pressed={snapToGrid}
               >
-                Snap
+                Snap{snapToGrid && ' ✓'}
               </button>
             </div>
+            {/* Save status indicator */}
+            {saveStatus && (
+              <div
+                className={`flex items-center gap-1.5 px-2 py-1 text-xs rounded transition-all duration-300 ${
+                  saveStatus === 'saved'
+                    ? 'text-green-600 dark:text-green-400'
+                    : saveStatus === 'saving'
+                      ? 'text-zinc-500 dark:text-zinc-400'
+                      : 'text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20'
+                }`}
+                role="status"
+                aria-live="polite"
+                title={saveStatus === 'error' ? saveError || 'Save failed' : undefined}
+              >
+                {saveStatus === 'saving' && (
+                  <svg className="w-3 h-3 animate-spin" viewBox="0 0 16 16" fill="none">
+                    <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeOpacity="0.3" />
+                    <path d="M14 8a6 6 0 00-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                )}
+                {saveStatus === 'saved' && (
+                  <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M13.78 4.22a.75.75 0 010 1.06l-7.25 7.25a.75.75 0 01-1.06 0L2.22 9.28a.75.75 0 111.06-1.06L6 10.94l6.72-6.72a.75.75 0 011.06 0z" />
+                  </svg>
+                )}
+                {saveStatus === 'error' && (
+                  <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M8 1a7 7 0 100 14A7 7 0 008 1zM7.25 4.5a.75.75 0 011.5 0v3.25a.75.75 0 01-1.5 0V4.5zm.75 7.25a1 1 0 100-2 1 1 0 000 2z" />
+                  </svg>
+                )}
+                <span>
+                  {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : 'Save failed'}
+                </span>
+              </div>
+            )}
             <ThemeToggle />
             <ImageExport elements={elements} frameName={activeFrame?.name || 'wireflow'} />
             <ExportButton frames={frames} />
@@ -5021,6 +5199,7 @@ export function Canvas() {
           className="flex-1 overflow-hidden relative bg-white dark:bg-zinc-900"
         >
           <canvas
+            id="main-canvas"
             ref={canvasRef}
             width={2000}
             height={2000}
@@ -5142,6 +5321,12 @@ export function Canvas() {
                     } else if (e.key === "Escape") {
                       e.preventDefault();
                       commitTextEdit(); // Escape now commits (Excalidraw behavior)
+                    } else if (e.key === "Tab") {
+                      // Tab exits text editing and moves focus
+                      e.preventDefault();
+                      commitTextEdit();
+                      // Return focus to canvas for continued navigation
+                      canvasRef.current?.focus();
                     }
                     e.stopPropagation(); // Prevent canvas keyboard handlers
                   }}
@@ -5256,6 +5441,15 @@ export function Canvas() {
         }}
         onCancel={closeConfirmDialog}
       />
+
+      {/* Keyboard Shortcuts Panel */}
+      <KeyboardShortcutsPanel
+        isOpen={shortcutsOpen}
+        onClose={() => setShortcutsOpen(false)}
+      />
+
+      {/* Welcome Modal for first-time users */}
+      <WelcomeModal />
 
       {/* Promote to Component Dialog */}
       {isPromoteDialogOpen && (

@@ -21,7 +21,8 @@
       "Bash(cmd //c \"taskkill /PID 29944 /F\")",
       "Bash(dir:*)",
       "Skill(ralph-loop:help)",
-      "Skill(ralph-loop:help:*)"
+      "Skill(ralph-loop:help:*)",
+      "Bash(pnpm lint:*)"
     ]
   }
 }
