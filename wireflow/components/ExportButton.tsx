@@ -107,9 +107,11 @@ export function ExportButton({ frames }: ExportButtonProps) {
   return (
     <button
       onClick={handleExport}
-      className="px-4 py-2 bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-sm font-medium rounded-lg hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-all duration-150 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 active:scale-[0.98]"
+      className="px-3 py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-sm font-medium rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-all duration-150 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 active:scale-[0.98]"
       disabled={totalTagged === 0 || isExporting}
       aria-busy={isExporting}
+      aria-label={isExporting ? 'Exporting JSON' : `Export JSON with ${totalTagged} tagged element${totalTagged !== 1 ? 's' : ''}`}
+      title={isExporting ? 'Exporting...' : `Export ${totalTagged} tagged element${totalTagged !== 1 ? 's' : ''} as JSON`}
     >
       {isExporting ? (
         <Loader2 size={16} className="animate-spin" />
@@ -118,7 +120,7 @@ export function ExportButton({ frames }: ExportButtonProps) {
       )}
       <span>{isExporting ? 'Exporting...' : 'Export JSON'}</span>
       {totalTagged > 0 && !isExporting && (
-        <span className="bg-zinc-700 dark:bg-zinc-300 px-2 py-0.5 rounded text-xs">
+        <span className="bg-zinc-300 dark:bg-zinc-600 px-2 py-0.5 rounded text-xs" aria-label={`${totalTagged} tagged element${totalTagged !== 1 ? 's' : ''}`}>
           {totalTagged}
         </span>
       )}

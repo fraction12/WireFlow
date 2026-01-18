@@ -14,7 +14,8 @@
       "Bash(npx tsc:*)",
       "mcp__ide__getDiagnostics",
       "Bash(node -e:*)",
-      "Bash(tasklist:*)"
+      "Bash(tasklist:*)",
+      "Bash(npm run lint:*)"
     ]
   }
 }
