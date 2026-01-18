@@ -32,6 +32,7 @@ import { ConfirmDialog } from "./ui/ConfirmDialog";
 import { useToast } from "./ui/Toast";
 import { ThemeToggle } from "./ThemeToggle";
 import { TextToolbar } from "./TextToolbar";
+import { ImageExport } from "./ImageExport";
 
 // Snapshot type for undo/redo history
 interface HistorySnapshot {
@@ -3275,6 +3276,7 @@ export function Canvas() {
               </button>
             </div>
             <ThemeToggle />
+            <ImageExport elements={elements} frameName={activeFrame?.name || 'wireflow'} />
             <ExportButton frames={frames} />
           </div>
         </div>
