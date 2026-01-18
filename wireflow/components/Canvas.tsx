@@ -168,7 +168,7 @@ export function Canvas() {
   const SEGMENT_DISTANCE = 20;
   const ARROW_HEAD_LENGTH = 15;
   const HANDLE_SIZE = 8;
-  const HANDLE_TOLERANCE = 5;
+  const HANDLE_TOLERANCE = 10;
   const MIN_ELEMENT_SIZE = 20;
   const ROTATION_HANDLE_OFFSET = 25; // Distance above element for rotation handle
 
@@ -226,6 +226,7 @@ export function Canvas() {
     null,
   );
   const [hoveredElementId, setHoveredElementId] = useState<string | null>(null);
+  const [hoveredHandle, setHoveredHandle] = useState<string | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(
     null,
@@ -1341,16 +1342,20 @@ export function Canvas() {
           });
         } else if (element.type !== "text" && element.type !== "freedraw") {
           // Corner handles for rectangles, ellipses, and diamonds
+          // Position handles at the selection border corners (outside the element)
           const centerX = element.x + element.width / 2;
           const centerY = element.y + element.height / 2;
           const elemRotation = element.rotation || 0;
 
           // Transform corner handles based on element rotation
+          // Add SELECTION_PADDING to position handles at selection border
+          const halfWidth = element.width / 2 + SELECTION_PADDING;
+          const halfHeight = element.height / 2 + SELECTION_PADDING;
           const corners = [
-            { dx: -element.width / 2, dy: -element.height / 2 }, // NW
-            { dx: element.width / 2, dy: -element.height / 2 }, // NE
-            { dx: -element.width / 2, dy: element.height / 2 }, // SW
-            { dx: element.width / 2, dy: element.height / 2 }, // SE
+            { dx: -halfWidth, dy: -halfHeight }, // NW
+            { dx: halfWidth, dy: -halfHeight }, // NE
+            { dx: -halfWidth, dy: halfHeight }, // SW
+            { dx: halfWidth, dy: halfHeight }, // SE
           ];
 
           corners.forEach((corner) => {
@@ -1365,16 +1370,15 @@ export function Canvas() {
             ctx.fill();
           });
 
-          // Draw rotation handle (above the element, with connector line)
-          const rotHandleDistFromCenter = element.height / 2 + ROTATION_HANDLE_OFFSET;
+          // Draw rotation handle (above the selection border, with connector line)
+          const rotHandleDistFromCenter = halfHeight + ROTATION_HANDLE_OFFSET;
           const rotHandleX = centerX + Math.sin(elemRotation) * rotHandleDistFromCenter;
           const rotHandleY = centerY - Math.cos(elemRotation) * rotHandleDistFromCenter;
 
-          // Draw connector line from top edge to rotation handle
-          const topEdgeY = centerY - element.height / 2;
-          const topEdgeX = centerX;
-          const rotatedTopX = centerX + (topEdgeX - centerX) * Math.cos(elemRotation) - (topEdgeY - centerY) * Math.sin(elemRotation);
-          const rotatedTopY = centerY + (topEdgeX - centerX) * Math.sin(elemRotation) + (topEdgeY - centerY) * Math.cos(elemRotation);
+          // Draw connector line from top edge of selection border to rotation handle
+          const topEdgeDistFromCenter = halfHeight;
+          const rotatedTopX = centerX + Math.sin(elemRotation) * topEdgeDistFromCenter;
+          const rotatedTopY = centerY - Math.cos(elemRotation) * topEdgeDistFromCenter;
 
           ctx.beginPath();
           ctx.moveTo(rotatedTopX, rotatedTopY);
@@ -1882,20 +1886,36 @@ export function Canvas() {
       return null;
     }
 
-    // Corner handles for rectangles and ellipses
-    const handles = {
-      nw: { x: element.x, y: element.y },
-      ne: { x: element.x + element.width, y: element.y },
-      sw: { x: element.x, y: element.y + element.height },
-      se: { x: element.x + element.width, y: element.y + element.height },
-    };
+    // Corner handles for rectangles, ellipses, and diamonds
+    // Account for element rotation when calculating handle positions
+    // Handles are positioned at the selection border (with SELECTION_PADDING offset)
+    const centerX = element.x + element.width / 2;
+    const centerY = element.y + element.height / 2;
+    const rotation = element.rotation || 0;
 
-    for (const [key, pos] of Object.entries(handles)) {
+    // Corner offsets from center (before rotation)
+    // Add SELECTION_PADDING to match visual handle positions at selection border
+    const halfWidth = element.width / 2 + SELECTION_PADDING;
+    const halfHeight = element.height / 2 + SELECTION_PADDING;
+    const corners = [
+      { key: "nw", dx: -halfWidth, dy: -halfHeight },
+      { key: "ne", dx: halfWidth, dy: -halfHeight },
+      { key: "sw", dx: -halfWidth, dy: halfHeight },
+      { key: "se", dx: halfWidth, dy: halfHeight },
+    ];
+
+    for (const corner of corners) {
+      // Apply rotation transformation to get actual handle position
+      const rotatedX = corner.dx * Math.cos(rotation) - corner.dy * Math.sin(rotation);
+      const rotatedY = corner.dx * Math.sin(rotation) + corner.dy * Math.cos(rotation);
+      const handleX = centerX + rotatedX;
+      const handleY = centerY + rotatedY;
+
       if (
-        Math.abs(x - pos.x) <= HANDLE_SIZE + HANDLE_TOLERANCE &&
-        Math.abs(y - pos.y) <= HANDLE_SIZE + HANDLE_TOLERANCE
+        Math.abs(x - handleX) <= HANDLE_SIZE + HANDLE_TOLERANCE &&
+        Math.abs(y - handleY) <= HANDLE_SIZE + HANDLE_TOLERANCE
       ) {
-        return key;
+        return corner.key;
       }
     }
     return null;
@@ -1917,8 +1937,8 @@ export function Canvas() {
     const centerY = element.y + element.height / 2;
     const rotation = element.rotation || 0;
 
-    // Rotation handle is above the element, rotated with the element
-    const handleDistFromCenter = element.height / 2 + ROTATION_HANDLE_OFFSET;
+    // Rotation handle is above the selection border, rotated with the element
+    const handleDistFromCenter = element.height / 2 + SELECTION_PADDING + ROTATION_HANDLE_OFFSET;
     const handleX = centerX + Math.sin(rotation) * handleDistFromCenter;
     const handleY = centerY - Math.cos(rotation) * handleDistFromCenter;
 
@@ -1926,6 +1946,26 @@ export function Canvas() {
       Math.abs(x - handleX) <= HANDLE_SIZE + HANDLE_TOLERANCE &&
       Math.abs(y - handleY) <= HANDLE_SIZE + HANDLE_TOLERANCE
     );
+  };
+
+  // Get cursor style for a given handle type
+  const getHandleCursor = (handle: string | null): string => {
+    if (!handle) return "cursor-move";
+    switch (handle) {
+      case "nw":
+      case "se":
+        return "cursor-nwse-resize";
+      case "ne":
+      case "sw":
+        return "cursor-nesw-resize";
+      case "start":
+      case "end":
+        return "cursor-crosshair";
+      case "rotation":
+        return "cursor-grab";
+      default:
+        return "cursor-move";
+    }
   };
 
   // Snap coordinate to grid
@@ -2228,7 +2268,62 @@ export function Canvas() {
     const y = canvasCoords.y;
 
     if (currentTool === "select") {
-      // First, check if clicking on a component instance (they render on top)
+      // FIRST: Check if clicking on resize/rotation handles of the currently selected element
+      // This must happen before findElementAtPoint because handles are outside element bounds
+      if (selectedElementId && selectedElementIds.size <= 1) {
+        const selectedElement = elements.find((el) => el.id === selectedElementId);
+        if (selectedElement) {
+          const isInGroup = selectedElement.groupId || selectedElement.elementGroupId;
+          if (!isInGroup) {
+            // Check rotation handle first
+            if (isOnRotationHandle(x, y, selectedElement)) {
+              recordSnapshot();
+              const centerX = selectedElement.x + selectedElement.width / 2;
+              const centerY = selectedElement.y + selectedElement.height / 2;
+              const mouseAngle = Math.atan2(y - centerY, x - centerX);
+              setIsRotating(true);
+              setRotationStart({
+                initialAngle: selectedElement.rotation || 0,
+                elementCenterX: centerX,
+                elementCenterY: centerY,
+                startMouseAngle: mouseAngle,
+              });
+              setIsDrawing(true);
+              return;
+            }
+
+            // Check resize handles
+            const handle = getResizeHandle(x, y, selectedElement);
+            if (handle) {
+              recordSnapshot();
+              setResizeHandle(handle);
+              const snapshot: typeof resizeSnapshot = {
+                initialBounds: {
+                  x: selectedElement.x,
+                  y: selectedElement.y,
+                  width: selectedElement.width,
+                  height: selectedElement.height,
+                },
+                pointerOrigin: { x, y },
+              };
+              if (selectedElement.type === "arrow" || selectedElement.type === "line") {
+                const lineEl = selectedElement as ArrowElement | LineElement;
+                snapshot.arrowEndpoints = {
+                  startX: lineEl.startX,
+                  startY: lineEl.startY,
+                  endX: lineEl.endX,
+                  endY: lineEl.endY,
+                };
+              }
+              setResizeSnapshot(snapshot);
+              setIsDrawing(true);
+              return;
+            }
+          }
+        }
+      }
+
+      // Next, check if clicking on a component instance (they render on top)
       const clickedInstance = findInstanceAtPoint(x, y);
 
       if (clickedInstance) {
@@ -2309,67 +2404,11 @@ export function Canvas() {
           setSelectedGroupId(null);
         }
 
-        // Check if click is on a resize handle (only for non-grouped elements)
-        const isInAnyGroup = groupId || clickedElement.elementGroupId;
-
-        // Check rotation handle first (only for rotatable elements)
-        const onRotationHandle = !isInAnyGroup && isOnRotationHandle(x, y, clickedElement);
-
-        if (onRotationHandle) {
-          // Enter rotation mode
-          recordSnapshot(); // Record for undo before rotation
-          const centerX = clickedElement.x + clickedElement.width / 2;
-          const centerY = clickedElement.y + clickedElement.height / 2;
-          const mouseAngle = Math.atan2(y - centerY, x - centerX);
-          setIsRotating(true);
-          setRotationStart({
-            initialAngle: clickedElement.rotation || 0,
-            elementCenterX: centerX,
-            elementCenterY: centerY,
-            startMouseAngle: mouseAngle,
-          });
-          setIsDrawing(true);
-        }
-
-        const handle = !isInAnyGroup && !onRotationHandle
-          ? getResizeHandle(x, y, clickedElement)
-          : null;
-
-        if (handle) {
-          // Enter resize mode: capture snapshot of initial bounds and pointer position.
-          // This snapshot is the single source of truth for resize calculations.
-          recordSnapshot(); // Record for undo before resize
-          setResizeHandle(handle);
-          const snapshot: typeof resizeSnapshot = {
-            initialBounds: {
-              x: clickedElement.x,
-              y: clickedElement.y,
-              width: clickedElement.width,
-              height: clickedElement.height,
-            },
-            pointerOrigin: { x, y },
-          };
-          // For arrows and lines, also capture initial endpoints
-          if (
-            clickedElement.type === "arrow" ||
-            clickedElement.type === "line"
-          ) {
-            const lineEl = clickedElement as ArrowElement | LineElement;
-            snapshot.arrowEndpoints = {
-              startX: lineEl.startX,
-              startY: lineEl.startY,
-              endX: lineEl.endX,
-              endY: lineEl.endY,
-            };
-          }
-          setResizeSnapshot(snapshot);
-          setIsDrawing(true);
-        } else if (!onRotationHandle) {
-          // Start dragging
-          recordSnapshot(); // Record for undo before drag
-          setDragOffset({ x: x - clickedElement.x, y: y - clickedElement.y });
-          setIsDrawing(true);
-        }
+        // Start dragging the clicked element
+        // (Handle checks for selected element are done earlier, before findElementAtPoint)
+        recordSnapshot();
+        setDragOffset({ x: x - clickedElement.x, y: y - clickedElement.y });
+        setIsDrawing(true);
       } else {
         // Clicked on empty space - start marquee selection
         // Clear previous selections unless Shift is held (to add to selection)
@@ -2459,6 +2498,32 @@ export function Canvas() {
 
     // Track hover state when in select mode and not actively drawing
     if (currentTool === "select" && !isDrawing) {
+      // Check for resize/rotation handle hover on selected element first
+      // Only show handles for single selection (not multi-selection)
+      const isSingleSelection = selectedElementIds.size <= 1;
+      if (selectedElementId && isSingleSelection) {
+        const selectedElement = elements.find((el) => el.id === selectedElementId);
+        if (selectedElement) {
+          const isInGroup = selectedElement.groupId || selectedElement.elementGroupId;
+          if (!isInGroup) {
+            // Check rotation handle first
+            if (isOnRotationHandle(x, y, selectedElement)) {
+              setHoveredHandle("rotation");
+              setHoveredElementId(selectedElementId);
+              return;
+            }
+            // Check resize handles
+            const handle = getResizeHandle(x, y, selectedElement);
+            if (handle) {
+              setHoveredHandle(handle);
+              setHoveredElementId(selectedElementId);
+              return;
+            }
+          }
+        }
+      }
+      // No handle hovered, check for element hover
+      setHoveredHandle(null);
       const { element: hoveredElement } = findElementAtPoint(x, y);
       if (hoveredElement) {
         setHoveredElementId(hoveredElement.id);
@@ -4978,9 +5043,11 @@ export function Canvas() {
               isPanning
                 ? "absolute inset-0 cursor-grabbing"
                 : currentTool === "select"
-                  ? hoveredElementId
-                    ? "absolute inset-0 cursor-move"
-                    : "absolute inset-0 cursor-default"
+                  ? hoveredHandle
+                    ? `absolute inset-0 ${getHandleCursor(hoveredHandle)}`
+                    : hoveredElementId
+                      ? "absolute inset-0 cursor-move"
+                      : "absolute inset-0 cursor-default"
                   : "absolute inset-0 cursor-crosshair"
             }
             onMouseDown={handleMouseDown}
@@ -5014,6 +5081,7 @@ export function Canvas() {
             }}
             onMouseLeave={() => {
               setHoveredElementId(null);
+              setHoveredHandle(null);
               if (isPanning) {
                 setIsPanning(false);
                 setLastPanPoint(null);
@@ -5162,6 +5230,12 @@ export function Canvas() {
         getInstanceCount={countComponentInstances}
         isExpanded={componentPanelExpanded}
         onToggle={toggleComponentPanel}
+        selectedElementGroupId={
+          selectedElementId
+            ? elements.find((el) => el.id === selectedElementId)?.elementGroupId
+            : null
+        }
+        onConvertGroupToComponent={startPromoteGroupToComponent}
       />
 
       {/* Documentation Panel - Phase 1 */}

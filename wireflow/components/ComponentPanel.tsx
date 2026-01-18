@@ -17,6 +17,7 @@ import {
   Trash2,
   Edit2,
   MoreVertical,
+  PackagePlus,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -31,6 +32,10 @@ interface ComponentPanelProps {
   isExpanded: boolean;
   /** Callback when component panel is toggled */
   onToggle: () => void;
+  /** The ID of the currently selected element group (if any) */
+  selectedElementGroupId?: string | null;
+  /** Callback to convert the selected group to a component */
+  onConvertGroupToComponent?: (elementGroupId: string) => void;
 }
 
 export function ComponentPanel({
@@ -42,6 +47,8 @@ export function ComponentPanel({
   getInstanceCount,
   isExpanded,
   onToggle,
+  selectedElementGroupId,
+  onConvertGroupToComponent,
 }: ComponentPanelProps) {
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'my' | ComponentType>('all');
   const [isMyComponentsExpanded, setIsMyComponentsExpanded] = useState(true);
@@ -171,7 +178,17 @@ export function ComponentPanel({
 
             {isMyComponentsExpanded && (
               <div id="my-components-list" className="p-4 space-y-3">
-                {userComponents.length === 0 ? (
+                {/* Convert Group to Component button */}
+                {selectedElementGroupId && onConvertGroupToComponent && (
+                  <button
+                    onClick={() => onConvertGroupToComponent(selectedElementGroupId)}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800 rounded-lg text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900 hover:border-purple-300 dark:hover:border-purple-700 transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
+                  >
+                    <PackagePlus size={18} className="flex-shrink-0" />
+                    <span className="text-sm font-medium">Convert Group to Component</span>
+                  </button>
+                )}
+                {userComponents.length === 0 && !selectedElementGroupId ? (
                   <div className="text-center py-6 text-zinc-500 dark:text-zinc-400">
                     <Layers size={28} className="mx-auto mb-2 opacity-40" />
                     <p className="text-xs">No custom components yet</p>
@@ -179,6 +196,8 @@ export function ComponentPanel({
                       Select a group and press Ctrl+Shift+C
                     </p>
                   </div>
+                ) : userComponents.length === 0 ? (
+                  null
                 ) : (
                   userComponents.map(component => (
                     <UserComponentCard
