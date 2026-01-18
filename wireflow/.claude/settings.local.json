@@ -24,7 +24,10 @@
       "Skill(ralph-loop:help:*)",
       "Bash(pnpm lint:*)",
       "Bash(pnpm dev:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(while read f)",
+      "Bash(find:*)",
+      "Bash(git mv:*)"
     ]
   }
 }

@@ -24,7 +24,7 @@ Only semantically tagged elements are exported to JSON for engineering handoff.
 
 ### State Management
 
-**Canvas.tsx (~2000 lines) owns ALL state** - no Redux, Context, or global state. Children receive props and emit changes via callbacks.
+**Canvas.tsx owns ALL state** - no Redux, Context, or global state. Children receive props and emit changes via callbacks.
 
 Key state:
 - `frames[]`, `activeFrameId` - Multi-page support
@@ -32,12 +32,56 @@ Key state:
 - `currentTool`, `selectedElementId` - Interaction state
 - `componentGroups`, `userComponents` - Component system
 
+### Project Structure
+
+```
+components/
+├── Canvas.tsx              # Core component - state orchestration
+├── canvas-core/            # Extracted canvas utilities
+│   ├── index.ts           # Re-exports all canvas utilities
+│   ├── constants.ts       # Rendering & interaction constants
+│   ├── renderers.ts       # Sketch-style drawing functions
+│   └── utils.ts           # ID generation, bound text helpers
+├── panels/                 # Sidebar panel components
+│   ├── ComponentPanel.tsx # Component library browser
+│   ├── DocumentationPanel.tsx # Element annotations
+│   ├── FrameList.tsx      # Frame/page management
+│   ├── RightPanelStrip.tsx # Right sidebar toggle
+│   └── UnifiedStyleBar.tsx # Style controls
+├── dialogs/                # Modal & dialog components
+│   ├── ConfirmDialog.tsx  # Yes/no confirmation
+│   ├── ImageExport.tsx    # PNG/SVG export
+│   ├── KeyboardShortcutsPanel.tsx # Help panel
+│   └── WelcomeModal.tsx   # First-time user guide
+├── theme/                  # Theme system
+│   ├── ThemeProvider.tsx  # Dark/light mode context
+│   └── ThemeToggle.tsx    # Theme switcher
+├── ui/                     # Reusable UI components
+│   ├── ColorPicker.tsx    # Color selection
+│   ├── Divider.tsx        # Visual separator
+│   ├── Toast.tsx          # Notification system
+│   └── Toolbar.tsx        # Tool selection buttons
+├── ErrorBoundary.tsx       # Error handling
+├── ExportButton.tsx        # JSON export
+└── Providers.tsx           # App provider wrapper
+
+lib/
+├── types.ts               # ALL type definitions (single source of truth)
+├── componentTemplates.ts  # Built-in component templates
+├── persistence.ts         # localStorage save/load
+├── colors.ts              # Color palette and utilities
+├── textMeasurement.ts     # Text width calculation + cache
+├── textPresets.ts         # Font presets
+└── useHistory.ts          # Undo/redo hook
+```
+
 ### Key Files
 
 | File | Purpose |
 |------|---------|
 | `lib/types.ts` | All type definitions (single source of truth) |
 | `components/Canvas.tsx` | Core component - state, drawing, interaction |
+| `components/canvas-core/` | Extracted constants, renderers, utilities |
 | `lib/componentTemplates.ts` | Built-in component templates |
 | `lib/persistence.ts` | localStorage save/load |
 | `lib/colors.ts` | Color palette and utilities |
@@ -69,17 +113,22 @@ All types defined in `lib/types.ts`. New types MUST go there.
 
 **New Tool:**
 1. Add type to `Tool` in `lib/types.ts`
-2. Add to `Toolbar.tsx`
+2. Add to `components/ui/Toolbar.tsx`
 3. Handle in `Canvas.tsx` mouse handlers + `redraw()`
 
 **New Element Type:**
 1. Define interface extending `BaseElement` in `lib/types.ts`
 2. Add to `CanvasElement` union
-3. Add rendering in `Canvas.tsx` `redraw()`
+3. Add rendering function to `components/canvas-core/renderers.ts`
+4. Use in `Canvas.tsx` `redraw()`
 
 **New Component Template:**
 1. Add to `lib/componentTemplates.ts`
 2. Add type to `ComponentType` in `lib/types.ts`
+
+**New Panel/Dialog:**
+1. Create component in `components/panels/` or `components/dialogs/`
+2. Import and use in `Canvas.tsx`
 
 ## Additional Documentation
 

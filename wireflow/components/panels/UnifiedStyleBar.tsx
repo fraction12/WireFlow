@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { ColorPicker } from './ColorPicker';
-import { Divider } from '@/components/ui/Divider';
+import { ColorPicker } from '../ui/ColorPicker';
+import { Divider } from '../ui/Divider';
 import { DEFAULT_STROKE_COLOR, DEFAULT_FILL_COLOR } from '@/lib/colors';
 import { TEXT_PRESETS, FONT_SIZES } from '@/lib/textPresets';
 import type { TextElement, TextAlign, FontWeight, FontStyle, TextPreset } from '@/lib/types';

@@ -32,20 +32,57 @@ import {
   calculateAutoWidth,
 } from "@/lib/textMeasurement";
 import { useHistoryManager } from "@/lib/useHistory";
-import { Toolbar } from "./Toolbar";
+import { Toolbar } from "./ui/Toolbar";
 import { ExportButton } from "./ExportButton";
-import { FrameList } from "./FrameList";
-import { ComponentPanel } from "./ComponentPanel";
-import { ConfirmDialog } from "./ui/ConfirmDialog";
+import { FrameList } from "./panels/FrameList";
+import { ComponentPanel } from "./panels/ComponentPanel";
+import { ConfirmDialog } from "./dialogs/ConfirmDialog";
 import { useToast } from "./ui/Toast";
-import { ThemeToggle } from "./ThemeToggle";
-import { ImageExport } from "./ImageExport";
-import { DocumentationPanel } from "./DocumentationPanel";
-import { RightPanelStrip } from "./RightPanelStrip";
-import { UnifiedStyleBar } from "./UnifiedStyleBar";
-import { KeyboardShortcutsPanel } from "./ui/KeyboardShortcutsPanel";
-import { WelcomeModal } from "./ui/WelcomeModal";
+import { ThemeToggle } from "./theme/ThemeToggle";
+import { ImageExport } from "./dialogs/ImageExport";
+import { DocumentationPanel } from "./panels/DocumentationPanel";
+import { RightPanelStrip } from "./panels/RightPanelStrip";
+import { UnifiedStyleBar } from "./panels/UnifiedStyleBar";
+import { KeyboardShortcutsPanel } from "./dialogs/KeyboardShortcutsPanel";
+import { WelcomeModal } from "./dialogs/WelcomeModal";
 import { DEFAULT_STROKE_COLOR, DEFAULT_FILL_COLOR } from "@/lib/colors";
+import {
+  // Constants
+  ARROW_HEAD_LENGTH,
+  HANDLE_SIZE,
+  HANDLE_TOLERANCE,
+  MIN_ELEMENT_SIZE,
+  ROTATION_HANDLE_OFFSET,
+  SELECTION_PADDING,
+  GROUP_SELECTION_PADDING,
+  MULTI_SELECT_PADDING,
+  SELECTION_DASH_PATTERN,
+  GROUP_DASH_PATTERN,
+  MULTI_SELECT_DASH_PATTERN,
+  ELEMENT_GROUP_DASH_PATTERN,
+  SELECTION_LINE_WIDTH,
+  GROUP_LINE_WIDTH,
+  MULTI_SELECT_LINE_WIDTH,
+  ELEMENT_GROUP_LINE_WIDTH,
+  getCanvasTheme,
+  type CanvasTheme,
+  // Renderers
+  getRandomOffset,
+  drawSketchLine,
+  drawSketchRect,
+  drawSketchEllipse,
+  drawSketchDiamond,
+  drawFreedraw,
+  wrapText,
+  // Utilities
+  generateId,
+  generateFrameId,
+  isContainerElement,
+  getBoundTextElement,
+  calculateTextBoundsForContainer,
+  syncBoundTextPosition,
+  createBoundTextElement,
+} from "./canvas-core";
 
 // Snapshot type for undo/redo history
 interface HistorySnapshot {
@@ -54,77 +91,6 @@ interface HistorySnapshot {
   elementGroups: ElementGroup[];
   userComponents: UserComponent[];
   componentInstances: ComponentInstance[];
-}
-
-// Canvas color theme interface
-interface CanvasTheme {
-  sketch: string;
-  selected: string;
-  selectedBg: string;
-  hover: string;
-  tagged: string;
-  group: string;
-  multiSelect: string;
-  multiSelectBg: string;
-  elementGroup: string;
-  elementGroupBg: string;
-  marqueeFill: string;
-  marqueeStroke: string;
-  handle: string;
-  handleFill: string;
-}
-
-// Get canvas colors from CSS variables
-function getCanvasTheme(): CanvasTheme {
-  if (typeof window === "undefined") {
-    // Default light theme for SSR
-    return {
-      sketch: "#6b7280",
-      selected: "#3b82f6",
-      selectedBg: "rgba(59, 130, 246, 0.08)",
-      hover: "#4b5563",
-      tagged: "#10b981",
-      group: "#8b5cf6",
-      multiSelect: "#06b6d4", // Cyan for multi-selection
-      multiSelectBg: "rgba(6, 182, 212, 0.08)",
-      elementGroup: "#14b8a6", // Teal for user element groups
-      elementGroupBg: "rgba(20, 184, 166, 0.08)",
-      marqueeFill: "rgba(59, 130, 246, 0.1)",
-      marqueeStroke: "#3b82f6",
-      handle: "#3b82f6",
-      handleFill: "#ffffff",
-    };
-  }
-
-  const styles = getComputedStyle(document.documentElement);
-  return {
-    sketch: styles.getPropertyValue("--canvas-sketch").trim() || "#6b7280",
-    selected: styles.getPropertyValue("--canvas-selected").trim() || "#3b82f6",
-    selectedBg:
-      styles.getPropertyValue("--canvas-selected-bg").trim() ||
-      "rgba(59, 130, 246, 0.08)",
-    hover: styles.getPropertyValue("--canvas-hover").trim() || "#4b5563",
-    tagged: styles.getPropertyValue("--canvas-tagged").trim() || "#10b981",
-    group: styles.getPropertyValue("--canvas-group").trim() || "#8b5cf6",
-    multiSelect:
-      styles.getPropertyValue("--canvas-multi-select").trim() || "#06b6d4",
-    multiSelectBg:
-      styles.getPropertyValue("--canvas-multi-select-bg").trim() ||
-      "rgba(6, 182, 212, 0.08)",
-    elementGroup:
-      styles.getPropertyValue("--canvas-element-group").trim() || "#14b8a6",
-    elementGroupBg:
-      styles.getPropertyValue("--canvas-element-group-bg").trim() ||
-      "rgba(20, 184, 166, 0.08)",
-    marqueeFill:
-      styles.getPropertyValue("--canvas-marquee-fill").trim() ||
-      "rgba(59, 130, 246, 0.1)",
-    marqueeStroke:
-      styles.getPropertyValue("--canvas-marquee-stroke").trim() || "#3b82f6",
-    handle: styles.getPropertyValue("--canvas-handle").trim() || "#3b82f6",
-    handleFill:
-      styles.getPropertyValue("--canvas-handle-fill").trim() || "#ffffff",
-  };
 }
 
 export function Canvas() {
@@ -188,175 +154,7 @@ export function Canvas() {
     }
   }, [isPromoteDialogOpen]);
 
-  // Constants for sketch rendering and interaction
-  const SKETCH_AMPLITUDE = 1.5;
-  const SEGMENT_DISTANCE = 20;
-  const ARROW_HEAD_LENGTH = 15;
-  const HANDLE_SIZE = 8;
-  const HANDLE_TOLERANCE = 10;
-  const MIN_ELEMENT_SIZE = 20;
-  const ROTATION_HANDLE_OFFSET = 25; // Distance above element for rotation handle
-
-  // Selection visual constants
-  const SELECTION_PADDING = 4;
-  const GROUP_SELECTION_PADDING = 6;
-  const MULTI_SELECT_PADDING = 5;
-  const SELECTION_DASH_PATTERN: [number, number] = [4, 4];
-  const GROUP_DASH_PATTERN: [number, number] = [6, 4];
-  const MULTI_SELECT_DASH_PATTERN: [number, number] = [2, 3]; // Dotted pattern for multi-selection
-  const ELEMENT_GROUP_DASH_PATTERN: [number, number] = [8, 3]; // Long dash for element groups
-  const SELECTION_LINE_WIDTH = 2;
-  const GROUP_LINE_WIDTH = 1.5;
-  const MULTI_SELECT_LINE_WIDTH = 1.5;
-  const ELEMENT_GROUP_LINE_WIDTH = 2;
-
-  // Generate unique IDs (using substring instead of deprecated substr)
-  const generateId = () =>
-    `el_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-  const generateFrameId = () =>
-    `frame_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
-
-  // ============================================================================
-  // Bound Text Helpers (Excalidraw-style text inside shapes)
-  // ============================================================================
-
-  // Container types that can have bound text
-  type ContainerElement = RectangleElement | EllipseElement | DiamondElement;
-
-  // Check if an element is a container that can hold bound text
-  const isContainerElement = (element: CanvasElement): element is ContainerElement => {
-    return element.type === 'rectangle' || element.type === 'ellipse' || element.type === 'diamond';
-  };
-
-  // Get the bound text element for a container
-  const getBoundTextElement = (container: CanvasElement, allElements: CanvasElement[]): TextElement | null => {
-    if (!container.boundElements || container.boundElements.length === 0) {
-      return null;
-    }
-    const boundTextRef = container.boundElements.find(be => be.type === 'text');
-    if (!boundTextRef) return null;
-
-    const textElement = allElements.find(el => el.id === boundTextRef.id);
-    return textElement?.type === 'text' ? textElement as TextElement : null;
-  };
-
-  // Calculate the text bounds for centering text inside a container
-  const calculateTextBoundsForContainer = (
-    container: CanvasElement,
-    textContent: string,
-    ctx: CanvasRenderingContext2D | null,
-    fontSize: number = 16
-  ): { x: number; y: number; width: number; height: number } => {
-    // Container padding for text
-    const containerPadding = 8;
-
-    // Calculate available width inside container
-    const availableWidth = container.width - containerPadding * 2;
-
-    // Estimate text height based on number of lines
-    let textHeight = fontSize * 1.5; // Default single line height
-    if (ctx && textContent) {
-      ctx.font = `${fontSize}px sans-serif`;
-      const words = textContent.split(' ');
-      let lines = 1;
-      let currentLine = '';
-
-      for (const word of words) {
-        const testLine = currentLine ? `${currentLine} ${word}` : word;
-        const metrics = ctx.measureText(testLine);
-        if (metrics.width > availableWidth && currentLine) {
-          lines++;
-          currentLine = word;
-        } else {
-          currentLine = testLine;
-        }
-      }
-      textHeight = lines * fontSize * 1.5;
-    }
-
-    // Center text within container
-    const textWidth = Math.max(availableWidth, MIN_TEXT_WIDTH);
-    const textX = container.x + containerPadding;
-    const textY = container.y + (container.height - textHeight) / 2;
-
-    return {
-      x: textX,
-      y: textY,
-      width: textWidth,
-      height: textHeight
-    };
-  };
-
-  // Sync bound text position when container moves or resizes
-  const syncBoundTextPosition = (
-    containerId: string,
-    allElements: CanvasElement[]
-  ): CanvasElement[] => {
-    const container = allElements.find(el => el.id === containerId);
-    if (!container || !isContainerElement(container)) {
-      return allElements;
-    }
-
-    const boundText = getBoundTextElement(container, allElements);
-    if (!boundText) {
-      return allElements;
-    }
-
-    // Calculate new position for bound text
-    const containerPadding = 8;
-    const textWidth = container.width - containerPadding * 2;
-    const textX = container.x + containerPadding;
-
-    // Center vertically based on text height
-    const fontSize = boundText.fontSize || 16;
-    const lineHeight = boundText.lineHeight || Math.round(fontSize * 1.5);
-    const lines = (boundText.content || '').split('\n').length;
-    const textHeight = lines * lineHeight;
-    const textY = container.y + (container.height - textHeight) / 2;
-
-    return allElements.map(el => {
-      if (el.id === boundText.id) {
-        return {
-          ...el,
-          x: textX,
-          y: Math.max(container.y + containerPadding, textY),
-          width: Math.max(textWidth, MIN_TEXT_WIDTH)
-        };
-      }
-      return el;
-    });
-  };
-
-  // Create a new bound text element for a container
-  const createBoundTextElement = (
-    container: CanvasElement,
-    initialContent: string = ''
-  ): TextElement => {
-    const containerPadding = 8;
-    const fontSize = 16;
-    const lineHeight = Math.round(fontSize * 1.5);
-
-    const textWidth = container.width - containerPadding * 2;
-    const textHeight = lineHeight;
-    const textX = container.x + containerPadding;
-    const textY = container.y + (container.height - textHeight) / 2;
-
-    return {
-      id: generateId(),
-      type: 'text',
-      x: textX,
-      y: textY,
-      width: Math.max(textWidth, MIN_TEXT_WIDTH),
-      height: textHeight,
-      content: initialContent,
-      fontSize,
-      lineHeight,
-      textAlign: 'center',
-      autoWidth: false, // Bound text should not auto-expand
-      containerId: container.id,
-      verticalAlign: 'middle'
-    };
-  };
+  // Constants, renderers, and utilities are imported from ./canvas-core
 
   // Initialize with default frame
   const defaultFrame: Frame = {
@@ -966,240 +764,7 @@ export function Canvas() {
     elementIntersectsRect,
   ]);
 
-  // Sketch-style rendering helpers
-  const getRandomOffset = (
-    base: number,
-    seed: number,
-    amplitude: number = SKETCH_AMPLITUDE,
-  ): number => {
-    // Use seed for deterministic randomness based on position
-    const pseudo = Math.sin(seed * 12.9898 + base * 78.233) * 43758.5453;
-    return (pseudo - Math.floor(pseudo)) * amplitude - amplitude / 2;
-  };
-
-  const drawSketchLine = (
-    ctx: CanvasRenderingContext2D,
-    x1: number,
-    y1: number,
-    x2: number,
-    y2: number,
-    seed: number = 0,
-  ) => {
-    const distance = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-
-    // Safety: Skip drawing degenerate (zero-length) lines
-    if (distance < 1) return;
-
-    const segments = Math.max(3, Math.floor(distance / SEGMENT_DISTANCE));
-
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-
-    for (let i = 1; i <= segments; i++) {
-      const t = i / segments;
-      const x = x1 + (x2 - x1) * t;
-      const y = y1 + (y2 - y1) * t;
-
-      // Add controlled wobble perpendicular to the line direction
-      const dx = x2 - x1;
-      const dy = y2 - y1;
-      const perpX = -dy / distance;
-      const perpY = dx / distance;
-
-      const wobble = getRandomOffset(i, seed + i * 7);
-      const wobbledX = x + perpX * wobble;
-      const wobbledY = y + perpY * wobble;
-
-      ctx.lineTo(wobbledX, wobbledY);
-    }
-
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-  };
-
-  const drawSketchRect = (
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    seed: number = 0,
-  ) => {
-    // Draw four sides with slight variations
-    drawSketchLine(ctx, x, y, x + width, y, seed); // Top
-    drawSketchLine(ctx, x + width, y, x + width, y + height, seed + 1); // Right
-    drawSketchLine(ctx, x + width, y + height, x, y + height, seed + 2); // Bottom
-    drawSketchLine(ctx, x, y + height, x, y, seed + 3); // Left
-  };
-
-  const drawSketchEllipse = (
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    seed: number = 0,
-  ) => {
-    // Draw ellipse with sketch-style wobble
-    const centerX = x + width / 2;
-    const centerY = y + height / 2;
-    const radiusX = width / 2;
-    const radiusY = height / 2;
-    const segments = Math.max(24, Math.floor((radiusX + radiusY) / 4));
-
-    ctx.beginPath();
-    for (let i = 0; i <= segments; i++) {
-      const angle = (i / segments) * Math.PI * 2;
-      const baseX = centerX + radiusX * Math.cos(angle);
-      const baseY = centerY + radiusY * Math.sin(angle);
-
-      // Add wobble perpendicular to the ellipse curve
-      const wobble = getRandomOffset(i, seed + i * 7);
-      const wobbledX = baseX + wobble * Math.cos(angle);
-      const wobbledY = baseY + wobble * Math.sin(angle);
-
-      if (i === 0) {
-        ctx.moveTo(wobbledX, wobbledY);
-      } else {
-        ctx.lineTo(wobbledX, wobbledY);
-      }
-    }
-    ctx.closePath();
-    ctx.stroke();
-  };
-
-  // Draw a diamond (rhombus) shape with sketch-style wobble
-  const drawSketchDiamond = (
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    seed: number = 0,
-  ) => {
-    // Diamond points: top, right, bottom, left (center-aligned)
-    const topX = x + width / 2;
-    const topY = y;
-    const rightX = x + width;
-    const rightY = y + height / 2;
-    const bottomX = x + width / 2;
-    const bottomY = y + height;
-    const leftX = x;
-    const leftY = y + height / 2;
-
-    // Draw the four sides with sketch-style wobble
-    drawSketchLine(ctx, topX, topY, rightX, rightY, seed); // Top-right edge
-    drawSketchLine(ctx, rightX, rightY, bottomX, bottomY, seed + 1); // Bottom-right edge
-    drawSketchLine(ctx, bottomX, bottomY, leftX, leftY, seed + 2); // Bottom-left edge
-    drawSketchLine(ctx, leftX, leftY, topX, topY, seed + 3); // Top-left edge
-  };
-
-  // Draw a freehand path with smooth curves
-  const drawFreedraw = (
-    ctx: CanvasRenderingContext2D,
-    points: { x: number; y: number }[],
-  ) => {
-    if (points.length < 2) return;
-
-    ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
-
-    // Use quadratic curves for smooth rendering
-    for (let i = 1; i < points.length - 1; i++) {
-      const xc = (points[i].x + points[i + 1].x) / 2;
-      const yc = (points[i].y + points[i + 1].y) / 2;
-      ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
-    }
-
-    // Draw to the last point
-    if (points.length > 1) {
-      ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
-    }
-
-    ctx.stroke();
-  };
-
-  // Wrap text to fit within a given width, returning an array of lines
-  // Handles both explicit newlines, word-wrapping, and character-level breaks for very long words
-  const wrapText = (
-    ctx: CanvasRenderingContext2D,
-    text: string,
-    maxWidth: number,
-  ): string[] => {
-    const paragraphs = text.split("\n");
-    const lines: string[] = [];
-
-    // Helper to break a long word character-by-character
-    const breakLongWord = (word: string): string[] => {
-      const brokenParts: string[] = [];
-      let currentPart = "";
-
-      for (const char of word) {
-        const testPart = currentPart + char;
-        const metrics = ctx.measureText(testPart);
-
-        if (metrics.width > maxWidth && currentPart) {
-          brokenParts.push(currentPart);
-          currentPart = char;
-        } else {
-          currentPart = testPart;
-        }
-      }
-
-      if (currentPart) {
-        brokenParts.push(currentPart);
-      }
-
-      return brokenParts;
-    };
-
-    for (const paragraph of paragraphs) {
-      if (paragraph === "") {
-        lines.push("");
-        continue;
-      }
-
-      const words = paragraph.split(" ");
-      let currentLine = "";
-
-      for (const word of words) {
-        // Check if the word itself is too long to fit on a line
-        const wordMetrics = ctx.measureText(word);
-        if (wordMetrics.width > maxWidth) {
-          // Push current line if any
-          if (currentLine) {
-            lines.push(currentLine);
-            currentLine = "";
-          }
-          // Break the long word into parts
-          const wordParts = breakLongWord(word);
-          // Add all parts except the last as separate lines
-          for (let i = 0; i < wordParts.length - 1; i++) {
-            lines.push(wordParts[i]);
-          }
-          // The last part becomes the current line (may be combined with next word)
-          currentLine = wordParts[wordParts.length - 1] || "";
-          continue;
-        }
-
-        const testLine = currentLine ? `${currentLine} ${word}` : word;
-        const metrics = ctx.measureText(testLine);
-
-        if (metrics.width > maxWidth && currentLine) {
-          lines.push(currentLine);
-          currentLine = word;
-        } else {
-          currentLine = testLine;
-        }
-      }
-
-      if (currentLine) {
-        lines.push(currentLine);
-      }
-    }
-
-    return lines.length > 0 ? lines : [""];
-  };
+  // Sketch-style rendering helpers are imported from ./canvas-core
 
   // Draw all elements on canvas
   const redraw = useCallback(() => {

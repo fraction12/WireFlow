@@ -2,7 +2,7 @@
 
 import { ToastProvider } from './ui/Toast';
 import { ErrorBoundary } from './ErrorBoundary';
-import { ThemeProvider } from './ThemeProvider';
+import { ThemeProvider } from './theme/ThemeProvider';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (

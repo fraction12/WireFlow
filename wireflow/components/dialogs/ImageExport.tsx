@@ -9,7 +9,7 @@ import type {
   LineElement,
   FreedrawElement,
 } from '@/lib/types';
-import { useToast } from './ui/Toast';
+import { useToast } from '../ui/Toast';
 
 interface ImageExportProps {
   elements: CanvasElement[];
