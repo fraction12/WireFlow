@@ -3,7 +3,11 @@
     "allow": [
       "Bash(npm run dev:*)",
       "Bash(findstr:*)",
-      "Bash(npx prettier:*)"
+      "Bash(npx prettier:*)",
+      "Skill(ralph-loop:ralph-loop)",
+      "Bash(npm run build:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

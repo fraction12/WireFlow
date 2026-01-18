@@ -21,6 +21,7 @@ import {
   TEXT_PADDING,
   calculateAutoWidth,
 } from "@/lib/textMeasurement";
+import { useHistoryManager } from "@/lib/useHistory";
 import { Toolbar } from "./Toolbar";
 import { ExportButton } from "./ExportButton";
 import { FrameList } from "./FrameList";
@@ -29,6 +30,13 @@ import { ConfirmDialog } from "./ui/ConfirmDialog";
 import { useToast } from "./ui/Toast";
 import { ThemeToggle } from "./ThemeToggle";
 import { TextToolbar } from "./TextToolbar";
+
+// Snapshot type for undo/redo history
+interface HistorySnapshot {
+  frames: Frame[];
+  componentGroups: ComponentGroup[];
+  elementGroups: ElementGroup[];
+}
 
 // Canvas color theme interface
 interface CanvasTheme {
@@ -207,6 +215,56 @@ export function Canvas() {
   // User-created element groups state
   const [elementGroups, setElementGroups] = useState<ElementGroup[]>([]);
 
+  // Undo/Redo history manager
+  const historyManager = useHistoryManager<HistorySnapshot>(100);
+
+  // Record a snapshot for undo (call before making changes)
+  const recordSnapshot = useCallback(() => {
+    historyManager.recordSnapshot({
+      frames: JSON.parse(JSON.stringify(frames)),
+      componentGroups: JSON.parse(JSON.stringify(componentGroups)),
+      elementGroups: JSON.parse(JSON.stringify(elementGroups)),
+    });
+  }, [frames, componentGroups, elementGroups, historyManager]);
+
+  // Perform undo
+  const performUndo = useCallback(() => {
+    const currentState: HistorySnapshot = {
+      frames: JSON.parse(JSON.stringify(frames)),
+      componentGroups: JSON.parse(JSON.stringify(componentGroups)),
+      elementGroups: JSON.parse(JSON.stringify(elementGroups)),
+    };
+    const previousState = historyManager.undo(currentState);
+    if (previousState) {
+      setFrames(previousState.frames);
+      setComponentGroups(previousState.componentGroups);
+      setElementGroups(previousState.elementGroups);
+      // Clear selections after undo for safety
+      setSelectedElementId(null);
+      setSelectedElementIds(new Set());
+      setSelectedGroupId(null);
+    }
+  }, [frames, componentGroups, elementGroups, historyManager]);
+
+  // Perform redo
+  const performRedo = useCallback(() => {
+    const currentState: HistorySnapshot = {
+      frames: JSON.parse(JSON.stringify(frames)),
+      componentGroups: JSON.parse(JSON.stringify(componentGroups)),
+      elementGroups: JSON.parse(JSON.stringify(elementGroups)),
+    };
+    const nextState = historyManager.redo(currentState);
+    if (nextState) {
+      setFrames(nextState.frames);
+      setComponentGroups(nextState.componentGroups);
+      setElementGroups(nextState.elementGroups);
+      // Clear selections after redo for safety
+      setSelectedElementId(null);
+      setSelectedElementIds(new Set());
+      setSelectedGroupId(null);
+    }
+  }, [frames, componentGroups, elementGroups, historyManager]);
+
   // Multi-selection state: holds IDs of all currently selected elements
   const [selectedElementIds, setSelectedElementIds] = useState<Set<string>>(
     new Set(),
@@ -238,6 +296,9 @@ export function Canvas() {
   const [marqueeEnd, setMarqueeEnd] = useState<{ x: number; y: number } | null>(
     null,
   );
+
+  // Clipboard state for copy/paste
+  const [clipboard, setClipboard] = useState<CanvasElement[]>([]);
 
   // Persistence: track if initial load has completed
   const hasLoadedRef = useRef(false);
@@ -1185,6 +1246,7 @@ export function Canvas() {
 
     // If empty, delete the element (no placeholder)
     if (!trimmedText) {
+      recordSnapshot(); // Record for undo
       setElements(elements.filter((el) => el.id !== editingElementId));
       setSelectedElementId(null);
       exitEditMode();
@@ -1251,6 +1313,7 @@ export function Canvas() {
       enterEditMode(clickedElement as TextElement);
     } else if (!clickedElement) {
       // Double-click on empty canvas: create new text element (Excalidraw behavior)
+      recordSnapshot(); // Record for undo
       const newElement: TextElement = {
         id: generateId(),
         type: "text",
@@ -1361,6 +1424,7 @@ export function Canvas() {
         if (handle) {
           // Enter resize mode: capture snapshot of initial bounds and pointer position.
           // This snapshot is the single source of truth for resize calculations.
+          recordSnapshot(); // Record for undo before resize
           setResizeHandle(handle);
           const snapshot: typeof resizeSnapshot = {
             initialBounds: {
@@ -1388,6 +1452,7 @@ export function Canvas() {
           setIsDrawing(true);
         } else {
           // Start dragging
+          recordSnapshot(); // Record for undo before drag
           setDragOffset({ x: x - clickedElement.x, y: y - clickedElement.y });
           setIsDrawing(true);
         }
@@ -1411,6 +1476,7 @@ export function Canvas() {
 
       // Text tool: click-to-place and immediately enter edit mode
       if (currentTool === "text") {
+        recordSnapshot(); // Record for undo
         const newElement: TextElement = {
           id: generateId(),
           type: "text",
@@ -1735,6 +1801,7 @@ export function Canvas() {
 
       if (currentTool === "rectangle") {
         if (Math.abs(width) > 5 && Math.abs(height) > 5) {
+          recordSnapshot(); // Record for undo
           const newElement: RectangleElement = {
             id: generateId(),
             type: "rectangle",
@@ -1749,6 +1816,7 @@ export function Canvas() {
         }
       } else if (currentTool === "ellipse") {
         if (Math.abs(width) > 5 && Math.abs(height) > 5) {
+          recordSnapshot(); // Record for undo
           const newElement: EllipseElement = {
             id: generateId(),
             type: "ellipse",
@@ -1762,6 +1830,7 @@ export function Canvas() {
           setCurrentTool("select");
         }
       } else if (currentTool === "arrow") {
+        recordSnapshot(); // Record for undo
         const newElement: ArrowElement = {
           id: generateId(),
           type: "arrow",
@@ -1778,6 +1847,7 @@ export function Canvas() {
         setSelectedElementId(newElement.id);
         setCurrentTool("select");
       } else if (currentTool === "line") {
+        recordSnapshot(); // Record for undo
         const newElement: LineElement = {
           id: generateId(),
           type: "line",
@@ -1803,12 +1873,223 @@ export function Canvas() {
     setResizeSnapshot(null); // Clear resize snapshot on pointer up
   };
 
+  // Copy selected elements to clipboard
+  const copySelectedElements = useCallback(() => {
+    const elementsToCopy: CanvasElement[] = [];
+
+    // If multiple elements selected, copy all of them
+    if (selectedElementIds.size > 0) {
+      elements.forEach((el) => {
+        if (selectedElementIds.has(el.id)) {
+          elementsToCopy.push(JSON.parse(JSON.stringify(el)));
+        }
+      });
+    }
+    // If single element selected
+    else if (selectedElementId) {
+      const element = elements.find((el) => el.id === selectedElementId);
+      if (element) {
+        // If element is in a group, copy all group elements
+        if (element.elementGroupId) {
+          const group = elementGroups.find(
+            (g) => g.id === element.elementGroupId
+          );
+          if (group) {
+            group.elementIds.forEach((id) => {
+              const groupEl = elements.find((el) => el.id === id);
+              if (groupEl) {
+                elementsToCopy.push(JSON.parse(JSON.stringify(groupEl)));
+              }
+            });
+          }
+        } else {
+          elementsToCopy.push(JSON.parse(JSON.stringify(element)));
+        }
+      }
+    }
+
+    if (elementsToCopy.length > 0) {
+      setClipboard(elementsToCopy);
+    }
+  }, [elements, selectedElementId, selectedElementIds, elementGroups]);
+
+  // Paste elements from clipboard
+  const pasteElements = useCallback(() => {
+    if (clipboard.length === 0) return;
+
+    recordSnapshot(); // Record for undo
+
+    const PASTE_OFFSET = 20; // Offset from original position
+    const newElements: CanvasElement[] = [];
+    const idMapping: Map<string, string> = new Map();
+
+    // First pass: create new IDs
+    clipboard.forEach((el) => {
+      const newId = generateId();
+      idMapping.set(el.id, newId);
+    });
+
+    // Second pass: create elements with new IDs and offset positions
+    clipboard.forEach((el) => {
+      const newId = idMapping.get(el.id)!;
+      const newElement: CanvasElement = {
+        ...el,
+        id: newId,
+        x: el.x + PASTE_OFFSET,
+        y: el.y + PASTE_OFFSET,
+        // Clear group references (pasted elements are ungrouped)
+        groupId: undefined,
+        elementGroupId: undefined,
+        componentType: undefined,
+      };
+
+      // Handle arrow/line specific properties
+      if (newElement.type === "arrow" || newElement.type === "line") {
+        const lineEl = newElement as ArrowElement | LineElement;
+        lineEl.startX += PASTE_OFFSET;
+        lineEl.startY += PASTE_OFFSET;
+        lineEl.endX += PASTE_OFFSET;
+        lineEl.endY += PASTE_OFFSET;
+      }
+
+      newElements.push(newElement);
+    });
+
+    setElements([...elements, ...newElements]);
+
+    // Select the pasted elements
+    const newIds = new Set(newElements.map((el) => el.id));
+    setSelectedElementIds(newIds);
+    setSelectedElementId(newElements[0].id);
+    setSelectedByClick(true);
+  }, [clipboard, elements, recordSnapshot]);
+
+  // Duplicate selected elements (copy + paste in one action)
+  const duplicateSelectedElements = useCallback(() => {
+    const elementsToDuplicate: CanvasElement[] = [];
+
+    // If multiple elements selected, duplicate all of them
+    if (selectedElementIds.size > 0) {
+      elements.forEach((el) => {
+        if (selectedElementIds.has(el.id)) {
+          elementsToDuplicate.push(el);
+        }
+      });
+    }
+    // If single element selected
+    else if (selectedElementId) {
+      const element = elements.find((el) => el.id === selectedElementId);
+      if (element) {
+        // If element is in a group, duplicate all group elements
+        if (element.elementGroupId) {
+          const group = elementGroups.find(
+            (g) => g.id === element.elementGroupId
+          );
+          if (group) {
+            group.elementIds.forEach((id) => {
+              const groupEl = elements.find((el) => el.id === id);
+              if (groupEl) {
+                elementsToDuplicate.push(groupEl);
+              }
+            });
+          }
+        } else {
+          elementsToDuplicate.push(element);
+        }
+      }
+    }
+
+    if (elementsToDuplicate.length === 0) return;
+
+    recordSnapshot(); // Record for undo
+
+    const DUPLICATE_OFFSET = 20;
+    const newElements: CanvasElement[] = [];
+
+    elementsToDuplicate.forEach((el) => {
+      const newId = generateId();
+      const newElement: CanvasElement = {
+        ...JSON.parse(JSON.stringify(el)),
+        id: newId,
+        x: el.x + DUPLICATE_OFFSET,
+        y: el.y + DUPLICATE_OFFSET,
+        // Clear group references
+        groupId: undefined,
+        elementGroupId: undefined,
+        componentType: undefined,
+      };
+
+      // Handle arrow/line specific properties
+      if (newElement.type === "arrow" || newElement.type === "line") {
+        const lineEl = newElement as ArrowElement | LineElement;
+        lineEl.startX += DUPLICATE_OFFSET;
+        lineEl.startY += DUPLICATE_OFFSET;
+        lineEl.endX += DUPLICATE_OFFSET;
+        lineEl.endY += DUPLICATE_OFFSET;
+      }
+
+      newElements.push(newElement);
+    });
+
+    setElements([...elements, ...newElements]);
+
+    // Select the duplicated elements
+    const newIds = new Set(newElements.map((el) => el.id));
+    setSelectedElementIds(newIds);
+    setSelectedElementId(newElements[0].id);
+    setSelectedByClick(true);
+  }, [
+    elements,
+    selectedElementId,
+    selectedElementIds,
+    elementGroups,
+    recordSnapshot,
+  ]);
+
   // Keyboard event handler for deletion, grouping, and ungrouping
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Disable canvas keyboard shortcuts during text editing
       // (text input handles its own keyboard events)
       if (editingElementId) return;
+
+      // Ctrl/Cmd+Z: Undo
+      if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        performUndo();
+        return;
+      }
+
+      // Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z: Redo
+      if (
+        ((e.ctrlKey || e.metaKey) && e.key === "y") ||
+        ((e.ctrlKey || e.metaKey) && e.key === "Z" && e.shiftKey)
+      ) {
+        e.preventDefault();
+        performRedo();
+        return;
+      }
+
+      // Ctrl/Cmd+C: Copy
+      if ((e.ctrlKey || e.metaKey) && e.key === "c") {
+        e.preventDefault();
+        copySelectedElements();
+        return;
+      }
+
+      // Ctrl/Cmd+V: Paste
+      if ((e.ctrlKey || e.metaKey) && e.key === "v") {
+        e.preventDefault();
+        pasteElements();
+        return;
+      }
+
+      // Ctrl/Cmd+D: Duplicate
+      if ((e.ctrlKey || e.metaKey) && e.key === "d") {
+        e.preventDefault();
+        duplicateSelectedElements();
+        return;
+      }
 
       // Check for Ctrl/Cmd+G to create group (needs multiple elements selected)
       if ((e.ctrlKey || e.metaKey) && e.key === "g" && !e.shiftKey) {
@@ -2031,6 +2312,7 @@ export function Canvas() {
         }
         // If multiple elements are selected (not in a group), delete all selected
         else if (selectedElementIds.size > 1) {
+          recordSnapshot(); // Record for undo
           setElements(elements.filter((el) => !selectedElementIds.has(el.id)));
           setSelectedElementIds(new Set());
           setSelectedElementId(null);
@@ -2038,6 +2320,7 @@ export function Canvas() {
         }
         // Remove single element from state
         else {
+          recordSnapshot(); // Record for undo
           setElements(elements.filter((el) => el.id !== selectedElementId));
           setSelectedElementId(null);
           setSelectedByClick(false);
@@ -2071,6 +2354,12 @@ export function Canvas() {
     elementGroups,
     editingElementId,
     selectedByClick,
+    performUndo,
+    performRedo,
+    recordSnapshot,
+    copySelectedElements,
+    pasteElements,
+    duplicateSelectedElements,
   ]);
 
   // Frame management handlers
@@ -2337,6 +2626,8 @@ export function Canvas() {
     // Prevent grouping elements from different frames (currently all elements are from active frame)
     // This is automatically enforced since we only work with elements from activeFrame
 
+    recordSnapshot(); // Record for undo
+
     const groupId = generateElementGroupId();
     const elementIds = Array.from(selectedElementIds);
 
@@ -2363,6 +2654,7 @@ export function Canvas() {
 
   // Ungroup a user-created element group
   const ungroupElements = (elementGroupId: string) => {
+    recordSnapshot(); // Record for undo
     // Remove group reference from all elements
     setElements(
       elements.map((el) =>
@@ -2381,6 +2673,7 @@ export function Canvas() {
 
   // Delete all elements in a user-created element group
   const deleteElementGroup = (elementGroupId: string) => {
+    recordSnapshot(); // Record for undo
     setElements(elements.filter((el) => el.elementGroupId !== elementGroupId));
     setElementGroups(elementGroups.filter((grp) => grp.id !== elementGroupId));
 
@@ -2390,6 +2683,7 @@ export function Canvas() {
   };
 
   const ungroupComponent = (groupId: string) => {
+    recordSnapshot(); // Record for undo
     // Remove group reference from all elements
     setElements(
       elements.map((el) =>
@@ -2409,6 +2703,7 @@ export function Canvas() {
   };
 
   const deleteGroup = (groupId: string) => {
+    recordSnapshot(); // Record for undo
     setElements(elements.filter((el) => el.groupId !== groupId));
     setComponentGroups(componentGroups.filter((grp) => grp.id !== groupId));
 
