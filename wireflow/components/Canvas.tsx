@@ -2250,6 +2250,19 @@ export function Canvas() {
                     endY: lineEl.endY + snapDy,
                   };
                 }
+                if (el.type === "freedraw") {
+                  // Freedraw elements need all points updated when moved
+                  const freedrawEl = el as FreedrawElement;
+                  return {
+                    ...freedrawEl,
+                    x: finalX,
+                    y: finalY,
+                    points: freedrawEl.points.map((p) => ({
+                      x: p.x + snapDx,
+                      y: p.y + snapDy,
+                    })),
+                  };
+                }
                 return { ...el, x: finalX, y: finalY };
               }
               return el;
@@ -3493,21 +3506,35 @@ export function Canvas() {
 
   const moveGroup = (groupId: string, dx: number, dy: number) => {
     setElements(
-      elements.map((el) =>
-        el.groupId === groupId
-          ? el.type === "arrow"
-            ? ({
-                ...el,
-                x: el.x + dx,
-                y: el.y + dy,
-                startX: (el as ArrowElement).startX + dx,
-                startY: (el as ArrowElement).startY + dy,
-                endX: (el as ArrowElement).endX + dx,
-                endY: (el as ArrowElement).endY + dy,
-              } as ArrowElement)
-            : { ...el, x: el.x + dx, y: el.y + dy }
-          : el,
-      ),
+      elements.map((el) => {
+        if (el.groupId !== groupId) return el;
+
+        if (el.type === "arrow" || el.type === "line") {
+          const lineEl = el as ArrowElement | LineElement;
+          return {
+            ...lineEl,
+            x: el.x + dx,
+            y: el.y + dy,
+            startX: lineEl.startX + dx,
+            startY: lineEl.startY + dy,
+            endX: lineEl.endX + dx,
+            endY: lineEl.endY + dy,
+          };
+        }
+        if (el.type === "freedraw") {
+          const freedrawEl = el as FreedrawElement;
+          return {
+            ...freedrawEl,
+            x: el.x + dx,
+            y: el.y + dy,
+            points: freedrawEl.points.map((p) => ({
+              x: p.x + dx,
+              y: p.y + dy,
+            })),
+          };
+        }
+        return { ...el, x: el.x + dx, y: el.y + dy };
+      }),
     );
 
     setComponentGroups(
@@ -3533,7 +3560,19 @@ export function Canvas() {
             startY: lineEl.startY + dy,
             endX: lineEl.endX + dx,
             endY: lineEl.endY + dy,
-          } as ArrowElement | LineElement;
+          };
+        }
+        if (el.type === "freedraw") {
+          const freedrawEl = el as FreedrawElement;
+          return {
+            ...freedrawEl,
+            x: el.x + dx,
+            y: el.y + dy,
+            points: freedrawEl.points.map((p) => ({
+              x: p.x + dx,
+              y: p.y + dy,
+            })),
+          };
         }
         return { ...el, x: el.x + dx, y: el.y + dy };
       }),
@@ -3556,7 +3595,19 @@ export function Canvas() {
             startY: lineEl.startY + dy,
             endX: lineEl.endX + dx,
             endY: lineEl.endY + dy,
-          } as ArrowElement | LineElement;
+          };
+        }
+        if (el.type === "freedraw") {
+          const freedrawEl = el as FreedrawElement;
+          return {
+            ...freedrawEl,
+            x: el.x + dx,
+            y: el.y + dy,
+            points: freedrawEl.points.map((p) => ({
+              x: p.x + dx,
+              y: p.y + dy,
+            })),
+          };
         }
         return { ...el, x: el.x + dx, y: el.y + dy };
       }),
