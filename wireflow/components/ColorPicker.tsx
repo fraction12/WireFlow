@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { HexColorPicker } from 'react-colorful';
 import { STROKE_COLORS, FILL_COLORS, getContrastColor, type PresetColor } from '@/lib/colors';
 import { Check } from 'lucide-react';
 
@@ -27,6 +28,7 @@ export function ColorPicker({
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
+  const [showCustomPicker, setShowCustomPicker] = useState(false);
 
   // Get appropriate color array based on label
   const colors = label === 'Stroke' ? STROKE_COLORS : FILL_COLORS;
@@ -38,6 +40,7 @@ export function ColorPicker({
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         onOpenChange(false);
+        setShowCustomPicker(false);
       }
     };
 
@@ -48,19 +51,19 @@ export function ColorPicker({
   // Focus management: set initial focused index when dropdown opens
   useEffect(() => {
     if (isOpen) {
-      // Find index of currently selected color
       const selectedIndex = colors.findIndex(
         c => c.hex.toLowerCase() === selectedColor.toLowerCase()
       );
       setFocusedIndex(selectedIndex >= 0 ? selectedIndex : 0);
     } else {
       setFocusedIndex(-1);
+      setShowCustomPicker(false);
     }
   }, [isOpen, selectedColor, colors]);
 
   // Handle keyboard navigation in dropdown
   const handleDropdownKeyDown = (e: React.KeyboardEvent) => {
-    if (!isOpen) return;
+    if (!isOpen || showCustomPicker) return;
 
     switch (e.key) {
       case 'Escape':
@@ -105,8 +108,12 @@ export function ColorPicker({
   const handleColorSelect = (color: PresetColor) => {
     onColorChange(color.hex);
     onOpenChange(false);
-    // Return focus to trigger after selection
     triggerRef.current?.focus();
+  };
+
+  // Handle custom color change from spectrum picker
+  const handleCustomColorChange = (color: string) => {
+    onColorChange(color);
   };
 
   // Render the color swatch trigger button
@@ -138,7 +145,7 @@ export function ColorPicker({
       >
         {/* Transparent indicator - diagonal line */}
         {isTransparent && (
-          <svg width="24" height="24" viewBox="0 0 24 24" className="text-red-500">
+          <svg width="24" height="24" viewBox="0 0 24 24" className="text-red-500" aria-hidden="true">
             <line x1="4" y1="20" x2="20" y2="4" stroke="currentColor" strokeWidth="2" />
           </svg>
         )}
@@ -150,19 +157,19 @@ export function ColorPicker({
   const renderDropdown = () => {
     if (!isOpen) return null;
 
-    // Generate unique ID for aria-activedescendant
     const getOptionId = (index: number) => `color-option-${label}-${index}`;
 
     return (
       <div
-        className="absolute top-full left-0 mt-2 p-2 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg z-50 animate-scale-in"
+        className="absolute top-full left-0 mt-2 p-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg z-50 animate-scale-in min-w-[200px]"
         role="listbox"
         aria-label={`Select ${label.toLowerCase()} color`}
         aria-activedescendant={focusedIndex >= 0 ? getOptionId(focusedIndex) : undefined}
         onKeyDown={handleDropdownKeyDown}
         tabIndex={-1}
       >
-        <div className="grid grid-cols-5 gap-1.5">
+        {/* Preset Color Grid */}
+        <div className="grid grid-cols-5 gap-2">
           {colors.map((color, index) => {
             const isSelected = color.hex.toLowerCase() === selectedColor.toLowerCase();
             const isFocused = index === focusedIndex;
@@ -174,19 +181,19 @@ export function ColorPicker({
                 key={color.hex}
                 onClick={() => handleColorSelect(color)}
                 className={`
-                  w-7 h-7 rounded-md border-2 flex items-center justify-center
+                  w-8 h-8 rounded-lg flex items-center justify-center
                   transition-all duration-150 ease-out
                   focus:outline-none
                   hover:scale-110 active:scale-95
                   ${isSelected
-                    ? 'border-blue-500 shadow-[0_0_0_2px_rgba(59,130,246,0.3)]'
+                    ? 'ring-2 ring-blue-500 ring-offset-1'
                     : isFocused
-                    ? 'border-blue-400 shadow-[0_0_0_2px_rgba(59,130,246,0.2)]'
-                    : 'border-transparent hover:border-zinc-300 dark:hover:border-zinc-500'
+                    ? 'ring-2 ring-blue-300 ring-offset-1'
+                    : 'ring-1 ring-zinc-200 dark:ring-zinc-600 hover:ring-zinc-400'
                   }
                 `}
                 style={{
-                  backgroundColor: isTransparent ? 'transparent' : color.hex,
+                  backgroundColor: isTransparent ? '#ffffff' : color.hex,
                 }}
                 title={color.name}
                 aria-label={color.name}
@@ -196,7 +203,13 @@ export function ColorPicker({
               >
                 {/* Transparent indicator */}
                 {isTransparent && (
-                  <svg width="20" height="20" viewBox="0 0 20 20" className="text-red-500">
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 20 20"
+                    className="text-red-500"
+                    aria-hidden="true"
+                  >
                     <line x1="3" y1="17" x2="17" y2="3" stroke="currentColor" strokeWidth="2" />
                   </svg>
                 )}
@@ -208,6 +221,42 @@ export function ColorPicker({
             );
           })}
         </div>
+
+        {/* Divider */}
+        <div className="my-2 h-px bg-zinc-200 dark:bg-zinc-700" />
+
+        {/* Custom Color Toggle */}
+        <button
+          onClick={() => setShowCustomPicker(!showCustomPicker)}
+          className="w-full text-xs text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 py-1 px-2 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
+        >
+          {showCustomPicker ? 'Hide custom color' : 'Custom color...'}
+        </button>
+
+        {/* Custom Color Picker (react-colorful) */}
+        {showCustomPicker && (
+          <div className="mt-2">
+            <HexColorPicker
+              color={selectedColor === 'transparent' ? '#ffffff' : selectedColor}
+              onChange={handleCustomColorChange}
+              style={{ width: '100%', height: '150px' }}
+            />
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                type="text"
+                value={selectedColor === 'transparent' ? '' : selectedColor}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (/^#[0-9A-Fa-f]{0,6}$/.test(val) || val === '') {
+                    onColorChange(val || '#000000');
+                  }
+                }}
+                placeholder="#000000"
+                className="flex-1 px-2 py-1 text-xs border border-zinc-200 dark:border-zinc-700 rounded bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+        )}
       </div>
     );
   };
