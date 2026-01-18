@@ -41,6 +41,7 @@ import { ThemeToggle } from "./ThemeToggle";
 import { TextToolbar } from "./TextToolbar";
 import { ImageExport } from "./ImageExport";
 import { DocumentationPanel } from "./DocumentationPanel";
+import { RightPanelStrip } from "./RightPanelStrip";
 import { StylingToolbar } from "./StylingToolbar";
 import { DEFAULT_STROKE_COLOR, DEFAULT_FILL_COLOR } from "@/lib/colors";
 
@@ -377,7 +378,8 @@ export function Canvas() {
   // Alignment guides state (lines to show when elements align)
   const [alignmentGuides, setAlignmentGuides] = useState<{ type: 'h' | 'v'; pos: number }[]>([]);
 
-  // Documentation panel state (Phase 1)
+  // Right panel states (Phase 1)
+  const [componentPanelExpanded, setComponentPanelExpanded] = useState(true);
   const [docPanelExpanded, setDocPanelExpanded] = useState(true);
 
   // Colors state (Phase 1)
@@ -4976,8 +4978,8 @@ export function Canvas() {
         }}
         onRenameUserComponent={renameUserComponent}
         getInstanceCount={countComponentInstances}
-        docPanelExpanded={docPanelExpanded}
-        onToggleDocPanel={() => setDocPanelExpanded(prev => !prev)}
+        isExpanded={componentPanelExpanded}
+        onToggle={() => setComponentPanelExpanded(prev => !prev)}
       />
 
       {/* Documentation Panel - Phase 1 */}
@@ -4990,6 +4992,14 @@ export function Canvas() {
         selectedElementId={selectedElementId}
         elementAnnotation={currentElementAnnotation}
         onElementAnnotationChange={handleElementAnnotationChange}
+      />
+
+      {/* Right panel collapsed strip - shows toggle buttons when panels are collapsed */}
+      <RightPanelStrip
+        componentPanelExpanded={componentPanelExpanded}
+        onToggleComponentPanel={() => setComponentPanelExpanded(prev => !prev)}
+        docPanelExpanded={docPanelExpanded}
+        onToggleDocPanel={() => setDocPanelExpanded(prev => !prev)}
       />
 
       {/* Confirm Dialog */}

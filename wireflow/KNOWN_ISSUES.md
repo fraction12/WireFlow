@@ -39,3 +39,17 @@ Each issue should include:
 - **Root Cause**: The TextToolbar component used raw element coordinates (world space) without applying zoom and pan transformations to convert to screen space.
 - **Fix Location**: `components/TextToolbar.tsx` - Added `zoom` and `pan` props, transformed element coordinates to screen space before positioning. `components/Canvas.tsx` - Pass `zoom` and `pan` props to TextToolbar.
 - **Fixed In**: TBD
+
+### KI-004: Right side panels (ComponentPanel and DocumentationPanel) share collapse behavior
+
+- **Status**: Fixed (by design)
+- **Description**: The ComponentPanel and DocumentationPanel on the right side share a unified collapse/expand behavior. When collapsed, both panels disappear completely and their toggle buttons appear in a shared collapsed strip (`RightPanelStrip`) on the right edge of the screen.
+- **Root Cause**: N/A - This is intentional design behavior.
+- **Behavior Details**:
+  - Each panel can be expanded/collapsed independently
+  - The collapsed strip only appears when at least one panel is collapsed
+  - Toggle buttons in the strip correspond to whichever panels are currently collapsed
+  - **ComponentPanel**: Shows component templates and user-created components. Toggle with the Menu icon.
+  - **DocumentationPanel**: Shows frame notes and element annotations. Toggle with the FileText icon or `Ctrl+\`.
+- **Fix Location**: `components/RightPanelStrip.tsx` (new), `components/ComponentPanel.tsx`, `components/DocumentationPanel.tsx`, `components/Canvas.tsx`
+- **Fixed In**: TBD

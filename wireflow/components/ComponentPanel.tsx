@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react';
 import type { ComponentTemplate, ComponentType, UserComponent } from '@/lib/types';
 import { COMPONENT_TEMPLATES } from '@/lib/componentTemplates';
 import {
-  Menu,
   ChevronRight,
   ChevronDown,
   Table2,
@@ -18,7 +17,6 @@ import {
   Trash2,
   Edit2,
   MoreVertical,
-  FileText,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -29,8 +27,10 @@ interface ComponentPanelProps {
   onDeleteUserComponent?: (componentId: string) => void;
   onRenameUserComponent?: (componentId: string, newName: string) => void;
   getInstanceCount?: (componentId: string) => number;
-  docPanelExpanded?: boolean;
-  onToggleDocPanel?: () => void;
+  /** Whether the component panel is expanded */
+  isExpanded: boolean;
+  /** Callback when component panel is toggled */
+  onToggle: () => void;
 }
 
 export function ComponentPanel({
@@ -40,10 +40,9 @@ export function ComponentPanel({
   onDeleteUserComponent,
   onRenameUserComponent,
   getInstanceCount,
-  docPanelExpanded,
-  onToggleDocPanel,
+  isExpanded,
+  onToggle,
 }: ComponentPanelProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'my' | ComponentType>('all');
   const [isMyComponentsExpanded, setIsMyComponentsExpanded] = useState(true);
   const [isTemplatesExpanded, setIsTemplatesExpanded] = useState(true);
@@ -96,35 +95,9 @@ export function ComponentPanel({
     e.dataTransfer.effectAllowed = 'copy';
   };
 
-  if (isCollapsed) {
-    return (
-      <div className="w-12 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-700 flex flex-col items-center py-4 gap-2">
-        <button
-          onClick={() => setIsCollapsed(false)}
-          className="w-10 h-10 flex items-center justify-center text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95"
-          title="Show Components"
-          aria-label="Show components panel"
-          aria-expanded="false"
-        >
-          <Menu size={20} />
-        </button>
-        {onToggleDocPanel && (
-          <button
-            onClick={onToggleDocPanel}
-            className={`w-10 h-10 flex items-center justify-center rounded-lg transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95 ${
-              docPanelExpanded
-                ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950'
-                : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-            }`}
-            title={docPanelExpanded ? "Hide Documentation (Ctrl+\\)" : "Show Documentation (Ctrl+\\)"}
-            aria-label={docPanelExpanded ? "Hide documentation panel" : "Show documentation panel"}
-            aria-expanded={docPanelExpanded}
-          >
-            <FileText size={20} />
-          </button>
-        )}
-      </div>
-    );
+  // Collapsed state - toggle buttons now live in RightPanelStrip
+  if (!isExpanded) {
+    return null;
   }
 
   return (
@@ -132,32 +105,15 @@ export function ComponentPanel({
       {/* Header */}
       <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center">
         <h2 className="font-semibold text-zinc-900 dark:text-zinc-100">Components</h2>
-        <div className="flex items-center gap-1">
-          {onToggleDocPanel && (
-            <button
-              onClick={onToggleDocPanel}
-              className={`w-8 h-8 flex items-center justify-center rounded-lg transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95 ${
-                docPanelExpanded
-                  ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950'
-                  : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800'
-              }`}
-              title={docPanelExpanded ? "Hide Documentation (Ctrl+\\)" : "Show Documentation (Ctrl+\\)"}
-              aria-label={docPanelExpanded ? "Hide documentation panel" : "Show documentation panel"}
-              aria-expanded={docPanelExpanded}
-            >
-              <FileText size={18} />
-            </button>
-          )}
-          <button
-            onClick={() => setIsCollapsed(true)}
-            className="w-8 h-8 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95"
-            title="Hide panel"
-            aria-label="Hide components panel"
-            aria-expanded="true"
-          >
-            <ChevronRight size={18} />
-          </button>
-        </div>
+        <button
+          onClick={onToggle}
+          className="w-8 h-8 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95"
+          title="Hide panel"
+          aria-label="Hide components panel"
+          aria-expanded="true"
+        >
+          <ChevronRight size={18} />
+        </button>
       </div>
 
       {/* Category filter */}
