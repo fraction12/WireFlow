@@ -1,6 +1,15 @@
 'use client';
 
 import type { Tool } from '@/lib/types';
+import {
+  MousePointer2,
+  Square,
+  Circle,
+  ArrowRight,
+  Minus,
+  Type,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 interface ToolbarProps {
   currentTool: Tool;
@@ -8,37 +17,46 @@ interface ToolbarProps {
 }
 
 export function Toolbar({ currentTool, onToolChange }: ToolbarProps) {
-  // Excalidraw-style tools: select, rectangle, ellipse, arrow, line, text
-  const tools: { name: Tool; label: string; icon: string }[] = [
-    { name: 'select', label: 'Select (V)', icon: '⌖' },
-    { name: 'rectangle', label: 'Rectangle (R)', icon: '□' },
-    { name: 'ellipse', label: 'Ellipse (O)', icon: '○' },
-    { name: 'arrow', label: 'Arrow (A)', icon: '→' },
-    { name: 'line', label: 'Line (L)', icon: '─' },
-    { name: 'text', label: 'Text (T)', icon: 'T' },
+  const tools: { name: Tool; label: string; icon: LucideIcon }[] = [
+    { name: 'select', label: 'Select (V)', icon: MousePointer2 },
+    { name: 'rectangle', label: 'Rectangle (R)', icon: Square },
+    { name: 'ellipse', label: 'Ellipse (O)', icon: Circle },
+    { name: 'arrow', label: 'Arrow (A)', icon: ArrowRight },
+    { name: 'line', label: 'Line (L)', icon: Minus },
+    { name: 'text', label: 'Text (T)', icon: Type },
   ];
 
   return (
-    <aside className="w-16 bg-white border-r border-zinc-200 flex flex-col items-center py-4 gap-1" aria-label="Drawing tools">
-      {tools.map((tool) => (
-        <button
-          key={tool.name}
-          onClick={() => onToolChange(tool.name)}
-          className={`
-            w-12 h-12 flex items-center justify-center text-2xl rounded-lg
-            transition-colors
-            ${currentTool === tool.name
-              ? 'bg-blue-100 text-blue-800'
-              : 'text-zinc-700 hover:bg-zinc-100'
-            }
-          `}
-          title={tool.label}
-          aria-label={tool.label}
-          aria-pressed={currentTool === tool.name}
-        >
-          {tool.icon}
-        </button>
-      ))}
+    <aside
+      className="w-16 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-700 flex flex-col items-center py-4 gap-1"
+      aria-label="Drawing tools"
+    >
+      {tools.map((tool) => {
+        const Icon = tool.icon;
+        const isActive = currentTool === tool.name;
+
+        return (
+          <button
+            key={tool.name}
+            onClick={() => onToolChange(tool.name)}
+            className={`
+              w-12 h-12 flex items-center justify-center rounded-lg
+              transition-all duration-150 ease-out
+              focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2
+              active:scale-95
+              ${isActive
+                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 shadow-sm'
+                : 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100'
+              }
+            `}
+            title={tool.label}
+            aria-label={tool.label}
+            aria-pressed={isActive}
+          >
+            <Icon size={22} strokeWidth={isActive ? 2 : 1.5} />
+          </button>
+        );
+      })}
     </aside>
   );
 }

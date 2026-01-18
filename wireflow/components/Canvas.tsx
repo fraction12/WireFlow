@@ -7,9 +7,88 @@ import { Toolbar } from './Toolbar';
 import { ExportButton } from './ExportButton';
 import { FrameList } from './FrameList';
 import { ComponentPanel } from './ComponentPanel';
+import { ConfirmDialog } from './ui/ConfirmDialog';
+import { useToast } from './ui/Toast';
+
+// Canvas color theme interface
+interface CanvasTheme {
+  sketch: string;
+  selected: string;
+  tagged: string;
+  group: string;
+  marqueeFill: string;
+  marqueeStroke: string;
+  handle: string;
+  handleFill: string;
+}
+
+// Get canvas colors from CSS variables
+function getCanvasTheme(): CanvasTheme {
+  if (typeof window === 'undefined') {
+    // Default light theme for SSR
+    return {
+      sketch: '#6b7280',
+      selected: '#3b82f6',
+      tagged: '#10b981',
+      group: '#8b5cf6',
+      marqueeFill: 'rgba(59, 130, 246, 0.1)',
+      marqueeStroke: '#3b82f6',
+      handle: '#3b82f6',
+      handleFill: '#ffffff',
+    };
+  }
+
+  const styles = getComputedStyle(document.documentElement);
+  return {
+    sketch: styles.getPropertyValue('--canvas-sketch').trim() || '#6b7280',
+    selected: styles.getPropertyValue('--canvas-selected').trim() || '#3b82f6',
+    tagged: styles.getPropertyValue('--canvas-tagged').trim() || '#10b981',
+    group: styles.getPropertyValue('--canvas-group').trim() || '#8b5cf6',
+    marqueeFill: styles.getPropertyValue('--canvas-marquee-fill').trim() || 'rgba(59, 130, 246, 0.1)',
+    marqueeStroke: styles.getPropertyValue('--canvas-marquee-stroke').trim() || '#3b82f6',
+    handle: styles.getPropertyValue('--canvas-handle').trim() || '#3b82f6',
+    handleFill: styles.getPropertyValue('--canvas-handle-fill').trim() || '#ffffff',
+  };
+}
 
 export function Canvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [canvasTheme, setCanvasTheme] = useState<CanvasTheme>(getCanvasTheme);
+  const { addToast } = useToast();
+
+  // Confirm dialog state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    variant: 'danger' | 'warning' | 'default';
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    variant: 'default',
+    onConfirm: () => {},
+  });
+
+  const showConfirmDialog = (
+    title: string,
+    message: string,
+    onConfirm: () => void,
+    variant: 'danger' | 'warning' | 'default' = 'danger'
+  ) => {
+    setConfirmDialog({
+      isOpen: true,
+      title,
+      message,
+      variant,
+      onConfirm,
+    });
+  };
+
+  const closeConfirmDialog = () => {
+    setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+  };
 
   // Constants for sketch rendering and interaction
   const SKETCH_AMPLITUDE = 1.5;
@@ -104,6 +183,24 @@ export function Canvas() {
 
   // Persistence: track if initial load has completed
   const hasLoadedRef = useRef(false);
+
+  // Listen for system color scheme changes to update canvas theme
+  useEffect(() => {
+    const updateTheme = () => {
+      setCanvasTheme(getCanvasTheme());
+    };
+
+    // Update on initial load
+    updateTheme();
+
+    // Listen for color scheme changes
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    mediaQuery.addEventListener('change', updateTheme);
+
+    return () => {
+      mediaQuery.removeEventListener('change', updateTheme);
+    };
+  }, []);
 
   // Load workspace from localStorage on mount
   useEffect(() => {
@@ -370,25 +467,25 @@ export function Canvas() {
 
     // Draw all elements
     elements.forEach((element) => {
-      // Softer, low-contrast gray for sketch style
-      ctx.strokeStyle = '#6b7280';
-      ctx.fillStyle = '#6b7280';
+      // Use theme colors for sketch style
+      ctx.strokeStyle = canvasTheme.sketch;
+      ctx.fillStyle = canvasTheme.sketch;
       ctx.lineWidth = 1.5;
       ctx.font = '16px sans-serif';
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
 
-      // Highlight selected elements with blue (single or multi-select)
+      // Highlight selected elements with theme selected color (single or multi-select)
       const isSelected = element.id === selectedElementId || selectedElementIds.has(element.id);
       if (isSelected) {
-        ctx.strokeStyle = '#3b82f6';
-        ctx.fillStyle = '#3b82f6';
+        ctx.strokeStyle = canvasTheme.selected;
+        ctx.fillStyle = canvasTheme.selected;
       }
 
-      // Highlight semantically tagged elements with green
+      // Highlight semantically tagged elements with theme tagged color
       if (element.semanticTag) {
-        ctx.strokeStyle = '#10b981';
-        ctx.fillStyle = '#10b981';
+        ctx.strokeStyle = canvasTheme.tagged;
+        ctx.fillStyle = canvasTheme.tagged;
       }
 
       // Use element ID as seed for deterministic randomness
@@ -437,8 +534,8 @@ export function Canvas() {
       const isInGroup = element.groupId || element.elementGroupId;
       const isSingleSelection = selectedElementIds.size === 0 || (selectedElementIds.size === 1 && selectedElementIds.has(element.id));
       if (element.id === selectedElementId && !isInGroup && isSingleSelection) {
-        ctx.fillStyle = '#3b82f6';
-        ctx.strokeStyle = '#3b82f6';
+        ctx.fillStyle = canvasTheme.handle;
+        ctx.strokeStyle = canvasTheme.handle;
 
         if (element.type === 'arrow' || element.type === 'line') {
           // Endpoint handles for arrows and lines: start and end points for length control
@@ -489,7 +586,7 @@ export function Canvas() {
         });
 
         // Draw group selection box with sketch style
-        ctx.strokeStyle = '#8b5cf6';  // Purple for component groups
+        ctx.strokeStyle = canvasTheme.group;  // Purple for component groups
         ctx.lineWidth = 2;
         ctx.setLineDash([8, 4]); // Dashed for group outline
         const groupSeed = parseInt(group.id.split('_')[1]) || 0;
@@ -497,7 +594,7 @@ export function Canvas() {
         ctx.setLineDash([]);
 
         // Draw group label
-        ctx.fillStyle = '#8b5cf6';
+        ctx.fillStyle = canvasTheme.group;
         ctx.font = '12px sans-serif';
         const label = `Component: ${group.componentType}`;
         ctx.fillText(label, minX, minY - 10);
@@ -525,7 +622,7 @@ export function Canvas() {
         });
 
         // Draw group selection box with sketch style
-        ctx.strokeStyle = '#3b82f6';  // Blue for user groups
+        ctx.strokeStyle = canvasTheme.selected;  // Blue for user groups
         ctx.lineWidth = 2;
         ctx.setLineDash([8, 4]); // Dashed for group outline
         const groupSeed = parseInt(group.id.split('_')[1]) || 0;
@@ -533,7 +630,7 @@ export function Canvas() {
         ctx.setLineDash([]);
 
         // Draw group label
-        ctx.fillStyle = '#3b82f6';
+        ctx.fillStyle = canvasTheme.selected;
         ctx.font = '12px sans-serif';
         ctx.fillText('Group', minX, minY - 10);
       }
@@ -558,7 +655,7 @@ export function Canvas() {
           maxY = Math.max(maxY, el.y + el.height);
         });
 
-        ctx.strokeStyle = '#3b82f6';
+        ctx.strokeStyle = canvasTheme.selected;
         ctx.lineWidth = 1;
         ctx.setLineDash([4, 4]);
         ctx.strokeRect(minX - 3, minY - 3, maxX - minX + 6, maxY - minY + 6);
@@ -576,17 +673,17 @@ export function Canvas() {
       };
 
       // Semi-transparent fill
-      ctx.fillStyle = 'rgba(59, 130, 246, 0.1)';
+      ctx.fillStyle = canvasTheme.marqueeFill;
       ctx.fillRect(bounds.x, bounds.y, bounds.width, bounds.height);
 
       // Dashed border
-      ctx.strokeStyle = '#3b82f6';
+      ctx.strokeStyle = canvasTheme.marqueeStroke;
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 4]);
       ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
       ctx.setLineDash([]);
     }
-  }, [elements, selectedElementId, selectedElementIds, componentGroups, selectedGroupId, elementGroups, getGroupElements, getElementGroupElements, isMarqueeSelecting, marqueeStart, marqueeEnd]);
+  }, [elements, selectedElementId, selectedElementIds, componentGroups, selectedGroupId, elementGroups, getGroupElements, getElementGroupElements, isMarqueeSelecting, marqueeStart, marqueeEnd, canvasTheme]);
 
   useEffect(() => {
     redraw();
@@ -1060,7 +1157,7 @@ export function Canvas() {
       const ctx = canvas?.getContext('2d');
       if (!ctx) return;
 
-      ctx.strokeStyle = '#9ca3af';
+      ctx.strokeStyle = canvasTheme.sketch;
       ctx.lineWidth = 1.5;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
@@ -1247,31 +1344,44 @@ export function Canvas() {
 
         // If element is in a user-created element group, delete entire group
         if (element.elementGroupId) {
-          const shouldDelete = window.confirm('Delete entire group?');
-          if (shouldDelete) {
-            deleteElementGroup(element.elementGroupId);
-          }
+          const groupId = element.elementGroupId;
+          showConfirmDialog(
+            'Delete group?',
+            'This will delete all elements in this group. This action cannot be undone.',
+            () => {
+              deleteElementGroup(groupId);
+              setSelectedByClick(false);
+            },
+            'danger'
+          );
         }
         // If element is in a component group, delete entire component group with confirmation
         else if (element.groupId) {
           const componentName = element.componentType || 'grouped';
-          const shouldDelete = window.confirm(`Delete entire ${componentName} component?`);
-          if (shouldDelete) {
-            deleteGroup(element.groupId);
-          }
+          const groupId = element.groupId;
+          showConfirmDialog(
+            `Delete ${componentName} component?`,
+            'This will delete the entire component and all its elements. This action cannot be undone.',
+            () => {
+              deleteGroup(groupId);
+              setSelectedByClick(false);
+            },
+            'danger'
+          );
         }
         // If multiple elements are selected (not in a group), delete all selected
         else if (selectedElementIds.size > 1) {
           setElements(elements.filter(el => !selectedElementIds.has(el.id)));
           setSelectedElementIds(new Set());
           setSelectedElementId(null);
+          setSelectedByClick(false);
         }
         // Remove single element from state
         else {
           setElements(elements.filter(el => el.id !== selectedElementId));
           setSelectedElementId(null);
+          setSelectedByClick(false);
         }
-        setSelectedByClick(false);
       }
 
       // Check for 'G' key (without modifiers) to ungroup component groups (legacy behavior)
@@ -1329,7 +1439,11 @@ export function Canvas() {
   const handleDeleteFrame = (frameId: string) => {
     // Safety: Prevent deleting the last frame
     if (frames.length === 1) {
-      alert('Cannot delete the last frame');
+      addToast({
+        type: 'warning',
+        title: 'Cannot delete frame',
+        message: 'You must have at least one frame.',
+      });
       return;
     }
 
@@ -1340,6 +1454,25 @@ export function Canvas() {
     if (frameId === activeFrameId && newFrames.length > 0) {
       setActiveFrameId(newFrames[0].id);
     }
+  };
+
+  // Handler for frame deletion request (shows confirm dialog)
+  const handleRequestDeleteFrame = (frameId: string, frameName: string) => {
+    if (frames.length === 1) {
+      addToast({
+        type: 'warning',
+        title: 'Cannot delete frame',
+        message: 'You must have at least one frame.',
+      });
+      return;
+    }
+
+    showConfirmDialog(
+      `Delete "${frameName}"?`,
+      'This will permanently delete this frame and all its elements. This action cannot be undone.',
+      () => handleDeleteFrame(frameId),
+      'danger'
+    );
   };
 
   // Component group operations
@@ -1601,7 +1734,7 @@ export function Canvas() {
   };
 
   return (
-    <div className="flex h-screen bg-zinc-50">
+    <div className="flex h-screen bg-zinc-50 dark:bg-zinc-950 min-w-[900px]">
       <FrameList
         frames={frames}
         activeFrameId={activeFrameId}
@@ -1609,19 +1742,20 @@ export function Canvas() {
         onCreateFrame={handleCreateFrame}
         onRenameFrame={handleRenameFrame}
         onDeleteFrame={handleDeleteFrame}
+        onRequestDeleteFrame={handleRequestDeleteFrame}
       />
 
       <Toolbar currentTool={currentTool} onToolChange={setCurrentTool} />
 
       <div className="flex-1 flex flex-col">
-        <div className="bg-white border-b border-zinc-200 px-4 py-3 flex justify-between items-center">
-          <h1 className="text-lg font-semibold text-zinc-900">
+        <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700 px-4 py-3 flex justify-between items-center">
+          <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             {activeFrame?.name || 'WireFlow'}
           </h1>
           <ExportButton frames={frames} />
         </div>
 
-        <div className="flex-1 overflow-hidden relative">
+        <div className="flex-1 overflow-hidden relative bg-white dark:bg-zinc-900">
           <canvas
             ref={canvasRef}
             width={2000}
@@ -1631,6 +1765,8 @@ export function Canvas() {
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onDoubleClick={handleDoubleClick}
+            role="img"
+            aria-label={`Canvas for ${activeFrame?.name || 'wireframing'}. Use the toolbar to select drawing tools.`}
           />
           {/* Inline text editing overlay */}
           {editingElementId && (() => {
@@ -1659,7 +1795,7 @@ export function Canvas() {
                   }
                 }}
                 onBlur={commitTextEdit}
-                className="absolute bg-white border-2 border-blue-500 px-1 text-sm text-zinc-900 caret-zinc-900 focus:outline-none resize-none overflow-hidden"
+                className="absolute bg-white dark:bg-zinc-800 border-2 border-blue-500 dark:border-blue-400 px-1 text-sm text-zinc-900 dark:text-zinc-100 caret-zinc-900 dark:caret-zinc-100 focus:outline-none resize-none overflow-hidden rounded"
                 style={{
                   left: editingElement.x,
                   top: editingElement.y,
@@ -1668,6 +1804,7 @@ export function Canvas() {
                   fontFamily: 'inherit',
                   lineHeight: `${lineHeight}px`,
                 }}
+                aria-label="Edit text element"
               />
             );
           })()}
@@ -1675,6 +1812,20 @@ export function Canvas() {
       </div>
 
       <ComponentPanel onInsertComponent={handleInsertComponent} />
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        variant={confirmDialog.variant}
+        confirmLabel="Delete"
+        onConfirm={() => {
+          confirmDialog.onConfirm();
+          closeConfirmDialog();
+        }}
+        onCancel={closeConfirmDialog}
+      />
     </div>
   );
 }
