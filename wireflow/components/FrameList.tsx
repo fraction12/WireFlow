@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { Frame, FrameType } from '@/lib/types';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Plus, ChevronDown } from 'lucide-react';
 
 interface FrameListProps {
   frames: Frame[];
@@ -24,14 +24,39 @@ export function FrameList({
   onRequestDeleteFrame,
 }: FrameListProps) {
   const [editingFrameId, setEditingFrameId] = useState<string | null>(null);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const handleCreateFrame = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const type = e.target.value as FrameType;
-    if (type) {
-      onCreateFrame(type);
-      e.target.value = ''; // Reset dropdown
-    }
+  const handleCreateFrame = (type: FrameType) => {
+    onCreateFrame(type);
+    setIsDropdownOpen(false);
   };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    if (isDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [isDropdownOpen]);
+
+  // Close dropdown on Escape key
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isDropdownOpen) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [isDropdownOpen]);
 
   const handleDeleteClick = (e: React.MouseEvent, frame: Frame) => {
     e.stopPropagation();
@@ -45,25 +70,62 @@ export function FrameList({
     }
   };
 
+  const frameTypes: Array<{ type: FrameType; label: string; description: string }> = [
+    { type: 'page', label: 'Page', description: 'Full page layout' },
+    { type: 'modal', label: 'Modal', description: 'Centered overlay dialog' },
+    { type: 'flyout', label: 'Flyout', description: 'Side panel or drawer' },
+  ];
+
   return (
     <nav className="w-64 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-700 flex flex-col h-full" aria-label="Frames navigation">
       {/* Header with "Add Frame" dropdown */}
       <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700">
         <h2 className="font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Frames</h2>
 
-        <select
-          onChange={handleCreateFrame}
-          className="w-full px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-colors"
-          defaultValue=""
-          aria-label="Create new frame"
-        >
-          <option value="" disabled className="text-zinc-600 dark:text-zinc-400">
-            + New Frame
-          </option>
-          <option value="page" className="text-zinc-900 dark:text-zinc-100">Page</option>
-          <option value="modal" className="text-zinc-900 dark:text-zinc-100">Modal</option>
-          <option value="flyout" className="text-zinc-900 dark:text-zinc-100">Flyout</option>
-        </select>
+        {/* Custom dropdown */}
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            className="w-full px-3 py-2 text-sm font-medium border border-zinc-300 dark:border-zinc-600 rounded-lg bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 hover:bg-zinc-50 dark:hover:bg-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-all duration-150 flex items-center justify-between gap-2 active:scale-[0.98]"
+            aria-label="Create new frame"
+            aria-haspopup="true"
+            aria-expanded={isDropdownOpen}
+          >
+            <span className="flex items-center gap-2">
+              <Plus size={16} strokeWidth={2} />
+              New Frame
+            </span>
+            <ChevronDown
+              size={16}
+              className={`transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+
+          {/* Dropdown menu */}
+          {isDropdownOpen && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg overflow-hidden z-50 animate-slide-in-down">
+              {frameTypes.map((frameType) => (
+                <button
+                  key={frameType.type}
+                  onClick={() => handleCreateFrame(frameType.type)}
+                  className="w-full px-3 py-2.5 text-left hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors duration-150 focus:outline-none focus-visible:bg-blue-50 dark:focus-visible:bg-blue-950 group"
+                  role="menuitem"
+                >
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100 group-hover:text-blue-700 dark:group-hover:text-blue-300 transition-colors">
+                        {frameType.label}
+                      </div>
+                      <div className="text-xs text-zinc-600 dark:text-zinc-400 mt-0.5">
+                        {frameType.description}
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Frame list */}
