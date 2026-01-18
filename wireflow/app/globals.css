@@ -24,8 +24,26 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Dark mode via explicit class */
+:root.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+
+  /* Canvas colors for dark mode */
+  --canvas-background: #0a0a0a;
+  --canvas-sketch: #9ca3af;
+  --canvas-selected: #60a5fa;
+  --canvas-tagged: #34d399;
+  --canvas-group: #a78bfa;
+  --canvas-marquee-fill: rgba(96, 165, 250, 0.15);
+  --canvas-marquee-stroke: #60a5fa;
+  --canvas-handle: #60a5fa;
+  --canvas-handle-fill: #1f2937;
+}
+
+/* Dark mode via system preference (when no explicit class is set) */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not(.light):not(.dark) {
     --background: #0a0a0a;
     --foreground: #ededed;
 
@@ -70,8 +88,12 @@ html {
   color: inherit;
 }
 
+.dark ::selection {
+  background-color: rgba(96, 165, 250, 0.4);
+}
+
 @media (prefers-color-scheme: dark) {
-  ::selection {
+  :root:not(.light):not(.dark) ::selection {
     background-color: rgba(96, 165, 250, 0.4);
   }
 }
@@ -95,12 +117,20 @@ html {
   background: #9ca3af;
 }
 
+.dark ::-webkit-scrollbar-thumb {
+  background: #4b5563;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
 @media (prefers-color-scheme: dark) {
-  ::-webkit-scrollbar-thumb {
+  :root:not(.light):not(.dark) ::-webkit-scrollbar-thumb {
     background: #4b5563;
   }
 
-  ::-webkit-scrollbar-thumb:hover {
+  :root:not(.light):not(.dark) ::-webkit-scrollbar-thumb:hover {
     background: #6b7280;
   }
 }

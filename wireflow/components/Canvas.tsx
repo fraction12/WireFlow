@@ -9,6 +9,7 @@ import { FrameList } from './FrameList';
 import { ComponentPanel } from './ComponentPanel';
 import { ConfirmDialog } from './ui/ConfirmDialog';
 import { useToast } from './ui/Toast';
+import { ThemeToggle } from './ThemeToggle';
 
 // Canvas color theme interface
 interface CanvasTheme {
@@ -184,21 +185,36 @@ export function Canvas() {
   // Persistence: track if initial load has completed
   const hasLoadedRef = useRef(false);
 
-  // Listen for system color scheme changes to update canvas theme
+  // Listen for theme changes (class-based toggle or system preference)
   useEffect(() => {
     const updateTheme = () => {
-      setCanvasTheme(getCanvasTheme());
+      // Small delay to ensure CSS variables have been applied
+      requestAnimationFrame(() => {
+        setCanvasTheme(getCanvasTheme());
+      });
     };
 
     // Update on initial load
     updateTheme();
 
-    // Listen for color scheme changes
+    // Listen for system color scheme changes
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     mediaQuery.addEventListener('change', updateTheme);
 
+    // Listen for class changes on document element (for manual toggle)
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.attributeName === 'class') {
+          updateTheme();
+          break;
+        }
+      }
+    });
+    observer.observe(document.documentElement, { attributes: true });
+
     return () => {
       mediaQuery.removeEventListener('change', updateTheme);
+      observer.disconnect();
     };
   }, []);
 
@@ -1752,7 +1768,10 @@ export function Canvas() {
           <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             {activeFrame?.name || 'WireFlow'}
           </h1>
-          <ExportButton frames={frames} />
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <ExportButton frames={frames} />
+          </div>
         </div>
 
         <div className="flex-1 overflow-hidden relative bg-white dark:bg-zinc-900">
