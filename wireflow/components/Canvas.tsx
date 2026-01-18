@@ -300,6 +300,75 @@ export function Canvas() {
   // Clipboard state for copy/paste
   const [clipboard, setClipboard] = useState<CanvasElement[]>([]);
 
+  // Zoom and Pan state
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [lastPanPoint, setLastPanPoint] = useState<{ x: number; y: number } | null>(null);
+
+  // Zoom constraints
+  const MIN_ZOOM = 0.1;
+  const MAX_ZOOM = 5;
+  const ZOOM_STEP = 0.1;
+
+  // Convert screen coordinates to canvas coordinates (accounting for zoom and pan)
+  const screenToCanvas = useCallback(
+    (screenX: number, screenY: number): { x: number; y: number } => {
+      return {
+        x: (screenX - pan.x) / zoom,
+        y: (screenY - pan.y) / zoom,
+      };
+    },
+    [zoom, pan]
+  );
+
+  // Convert canvas coordinates to screen coordinates
+  const canvasToScreen = useCallback(
+    (canvasX: number, canvasY: number): { x: number; y: number } => {
+      return {
+        x: canvasX * zoom + pan.x,
+        y: canvasY * zoom + pan.y,
+      };
+    },
+    [zoom, pan]
+  );
+
+  // Zoom functions
+  const zoomIn = useCallback(() => {
+    setZoom((prev) => Math.min(prev + ZOOM_STEP, MAX_ZOOM));
+  }, []);
+
+  const zoomOut = useCallback(() => {
+    setZoom((prev) => Math.max(prev - ZOOM_STEP, MIN_ZOOM));
+  }, []);
+
+  const resetZoom = useCallback(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, []);
+
+  // Zoom to a specific point (for scroll wheel zoom)
+  const zoomAtPoint = useCallback(
+    (delta: number, screenX: number, screenY: number) => {
+      const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom + delta));
+      if (newZoom === zoom) return;
+
+      // Calculate the point in canvas coordinates before zoom
+      const canvasPoint = screenToCanvas(screenX, screenY);
+
+      // After zoom, we want the same canvas point to be at the same screen position
+      // newScreenX = canvasX * newZoom + newPanX
+      // We want: screenX = canvasX * newZoom + newPanX
+      // So: newPanX = screenX - canvasX * newZoom
+      const newPanX = screenX - canvasPoint.x * newZoom;
+      const newPanY = screenY - canvasPoint.y * newZoom;
+
+      setZoom(newZoom);
+      setPan({ x: newPanX, y: newPanY });
+    },
+    [zoom, screenToCanvas]
+  );
+
   // Persistence: track if initial load has completed
   const hasLoadedRef = useRef(false);
 
@@ -675,6 +744,11 @@ export function Canvas() {
 
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Save current state and apply zoom/pan transform
+    ctx.save();
+    ctx.translate(pan.x, pan.y);
+    ctx.scale(zoom, zoom);
 
     // Draw all elements
     elements.forEach((element) => {
@@ -1071,6 +1145,9 @@ export function Canvas() {
       ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
       ctx.setLineDash([]);
     }
+
+    // Restore canvas state (undo zoom/pan transform)
+    ctx.restore();
   }, [
     elements,
     selectedElementId,
@@ -1087,6 +1164,8 @@ export function Canvas() {
     marqueeStart,
     marqueeEnd,
     canvasTheme,
+    zoom,
+    pan,
   ]);
 
   useEffect(() => {
@@ -1303,8 +1382,11 @@ export function Canvas() {
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+    const canvasCoords = screenToCanvas(screenX, screenY);
+    const x = canvasCoords.x;
+    const y = canvasCoords.y;
 
     const { element: clickedElement } = findElementAtPoint(x, y);
 
@@ -1351,8 +1433,21 @@ export function Canvas() {
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+
+    // Middle mouse button or spacebar held starts panning
+    if (e.button === 1 || (e.button === 0 && e.altKey)) {
+      setIsPanning(true);
+      setLastPanPoint({ x: screenX, y: screenY });
+      e.preventDefault();
+      return;
+    }
+
+    // Convert screen coordinates to canvas coordinates
+    const canvasCoords = screenToCanvas(screenX, screenY);
+    const x = canvasCoords.x;
+    const y = canvasCoords.y;
 
     if (currentTool === "select") {
       const { element: clickedElement, groupId } = findElementAtPoint(x, y);
@@ -1515,8 +1610,22 @@ export function Canvas() {
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+
+    // Handle panning
+    if (isPanning && lastPanPoint) {
+      const dx = screenX - lastPanPoint.x;
+      const dy = screenY - lastPanPoint.y;
+      setPan((prev) => ({ x: prev.x + dx, y: prev.y + dy }));
+      setLastPanPoint({ x: screenX, y: screenY });
+      return;
+    }
+
+    // Convert to canvas coordinates
+    const canvasCoords = screenToCanvas(screenX, screenY);
+    const x = canvasCoords.x;
+    const y = canvasCoords.y;
 
     // Handle marquee selection drag
     if (isMarqueeSelecting) {
@@ -1757,6 +1866,13 @@ export function Canvas() {
     // Disable canvas interactions during text editing
     if (editingElementId) return;
 
+    // End panning
+    if (isPanning) {
+      setIsPanning(false);
+      setLastPanPoint(null);
+      return;
+    }
+
     // Handle end of marquee selection
     if (isMarqueeSelecting) {
       const selectedIds = getElementsInMarquee();
@@ -1792,8 +1908,11 @@ export function Canvas() {
     if (!canvas) return;
 
     const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const screenX = e.clientX - rect.left;
+    const screenY = e.clientY - rect.top;
+    const canvasCoords = screenToCanvas(screenX, screenY);
+    const x = canvasCoords.x;
+    const y = canvasCoords.y;
 
     if (startPoint && currentTool !== "select" && currentTool !== "text") {
       const width = x - startPoint.x;
@@ -1871,6 +1990,31 @@ export function Canvas() {
     setDragOffset(null);
     setResizeHandle(null);
     setResizeSnapshot(null); // Clear resize snapshot on pointer up
+  };
+
+  // Wheel handler for zooming
+  const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
+    // Ctrl/Cmd + wheel for zooming
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const screenX = e.clientX - rect.left;
+      const screenY = e.clientY - rect.top;
+
+      // Zoom in/out based on scroll direction
+      const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+      zoomAtPoint(delta, screenX, screenY);
+    }
+    // Without modifier, allow normal scroll for pan
+    else {
+      // Horizontal scroll (shift+wheel) or trackpad pan
+      const dx = e.deltaX;
+      const dy = e.deltaY;
+      setPan((prev) => ({ x: prev.x - dx, y: prev.y - dy }));
+    }
   };
 
   // Copy selected elements to clipboard
@@ -2088,6 +2232,23 @@ export function Canvas() {
       if ((e.ctrlKey || e.metaKey) && e.key === "d") {
         e.preventDefault();
         duplicateSelectedElements();
+        return;
+      }
+
+      // Zoom shortcuts: Ctrl/Cmd++ to zoom in, Ctrl/Cmd+- to zoom out, Ctrl/Cmd+0 to reset
+      if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) {
+        e.preventDefault();
+        zoomIn();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "-") {
+        e.preventDefault();
+        zoomOut();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "0") {
+        e.preventDefault();
+        resetZoom();
         return;
       }
 
@@ -2360,6 +2521,9 @@ export function Canvas() {
     copySelectedElements,
     pasteElements,
     duplicateSelectedElements,
+    zoomIn,
+    zoomOut,
+    resetZoom,
   ]);
 
   // Frame management handlers
@@ -2777,7 +2941,31 @@ export function Canvas() {
           <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
             {activeFrame?.name || "WireFlow"}
           </h1>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
+            {/* Zoom controls */}
+            <div className="flex items-center gap-1 text-sm text-zinc-600 dark:text-zinc-400">
+              <button
+                onClick={zoomOut}
+                className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded"
+                title="Zoom out (Ctrl+-)"
+              >
+                −
+              </button>
+              <button
+                onClick={resetZoom}
+                className="px-2 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded min-w-[50px] text-center"
+                title="Reset zoom (Ctrl+0)"
+              >
+                {Math.round(zoom * 100)}%
+              </button>
+              <button
+                onClick={zoomIn}
+                className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded"
+                title="Zoom in (Ctrl++)"
+              >
+                +
+              </button>
+            </div>
             <ThemeToggle />
             <ExportButton frames={frames} />
           </div>
@@ -2791,12 +2979,19 @@ export function Canvas() {
             ref={canvasRef}
             width={2000}
             height={2000}
-            className={`absolute inset-0 ${currentTool === "select" ? "cursor-default" : "cursor-crosshair"}`}
+            className={`absolute inset-0 ${currentTool === "select" ? "cursor-default" : "cursor-crosshair"} ${isPanning ? "cursor-grabbing" : ""}`}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
-            onMouseLeave={() => setHoveredElementId(null)}
+            onMouseLeave={() => {
+              setHoveredElementId(null);
+              if (isPanning) {
+                setIsPanning(false);
+                setLastPanPoint(null);
+              }
+            }}
             onDoubleClick={handleDoubleClick}
+            onWheel={handleWheel}
             role="img"
             aria-label={`Canvas for ${activeFrame?.name || "wireframing"}. Use the toolbar to select drawing tools.`}
           />
@@ -2875,17 +3070,17 @@ export function Canvas() {
                   data-gramm="false"
                   className="absolute resize-none overflow-hidden"
                   style={{
-                    left: editingElement.x + TEXT_PADDING,
-                    top: editingElement.y,
-                    width: Math.max(currentWidth - TEXT_PADDING * 2, MIN_TEXT_WIDTH),
-                    minWidth: MIN_TEXT_WIDTH,
-                    height: calculatedHeight,
+                    left: (editingElement.x + TEXT_PADDING) * zoom + pan.x,
+                    top: editingElement.y * zoom + pan.y,
+                    width: Math.max(currentWidth - TEXT_PADDING * 2, MIN_TEXT_WIDTH) * zoom,
+                    minWidth: MIN_TEXT_WIDTH * zoom,
+                    height: calculatedHeight * zoom,
                     fontFamily: "sans-serif",
-                    fontSize: `${fontSize}px`,
+                    fontSize: `${fontSize * zoom}px`,
                     fontWeight: fontWeight,
                     fontStyle: fontStyle,
                     textAlign: textAlign,
-                    lineHeight: `${lineHeight}px`,
+                    lineHeight: `${lineHeight * zoom}px`,
                     // Fully transparent - WYSIWYG
                     background: "transparent",
                     color: canvasTheme.sketch,
