@@ -141,6 +141,11 @@ export function Canvas() {
     setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
   };
 
+  // State for promote to component dialog
+  const [isPromoteDialogOpen, setIsPromoteDialogOpen] = useState(false);
+  const [pendingPromoteGroupId, setPendingPromoteGroupId] = useState<string | null>(null);
+  const [newComponentName, setNewComponentName] = useState('');
+
   // Constants for sketch rendering and interaction
   const SKETCH_AMPLITUDE = 1.5;
   const SEGMENT_DISTANCE = 20;
@@ -3194,6 +3199,14 @@ export function Canvas() {
       // (text input handles its own keyboard events)
       if (editingElementId) return;
 
+      // Don't handle shortcuts when focus is on input fields or dialogs are open
+      const activeElement = document.activeElement;
+      const isInputFocused = activeElement instanceof HTMLInputElement ||
+                             activeElement instanceof HTMLTextAreaElement ||
+                             activeElement?.getAttribute('contenteditable') === 'true';
+      if (isInputFocused) return;
+      if (isPromoteDialogOpen || confirmDialog.isOpen) return;
+
       // Escape: deselect all and switch to select tool
       if (e.key === "Escape") {
         e.preventDefault();
@@ -3625,6 +3638,8 @@ export function Canvas() {
     sendToBack,
     bringForward,
     sendBackward,
+    isPromoteDialogOpen,
+    confirmDialog.isOpen,
   ]);
 
   // Frame management handlers
@@ -4073,11 +4088,6 @@ export function Canvas() {
 
     return baseDef;
   };
-
-  // State for component name dialog
-  const [isPromoteDialogOpen, setIsPromoteDialogOpen] = useState(false);
-  const [pendingPromoteGroupId, setPendingPromoteGroupId] = useState<string | null>(null);
-  const [newComponentName, setNewComponentName] = useState('');
 
   // Promote an element group to a user component
   const promoteGroupToComponent = (elementGroupId: string, componentName: string) => {
