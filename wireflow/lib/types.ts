@@ -56,6 +56,7 @@ export interface TextElement extends BaseElement {
   textAlign?: TextAlign;
   lineHeight?: number;
   preset?: TextPreset;
+  autoWidth?: boolean; // When true, element width auto-expands with content
 }
 
 export interface ArrowElement extends BaseElement {

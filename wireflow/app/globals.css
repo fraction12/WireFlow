@@ -87,6 +87,22 @@ body {
   outline: none;
 }
 
+/* Ensure text editing textarea has no browser focus styles (Excalidraw-style inline editing) */
+textarea[aria-label="Edit text element"] {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+}
+
+textarea[aria-label="Edit text element"]:focus,
+textarea[aria-label="Edit text element"]:focus-visible {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
 /* Smooth scrolling */
 html {
   scroll-behavior: smooth;

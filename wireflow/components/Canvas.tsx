@@ -16,6 +16,11 @@ import type {
   ElementGroup,
 } from "@/lib/types";
 import { saveWorkspace, loadWorkspace } from "@/lib/persistence";
+import {
+  MIN_TEXT_WIDTH,
+  TEXT_PADDING,
+  calculateAutoWidth,
+} from "@/lib/textMeasurement";
 import { Toolbar } from "./Toolbar";
 import { ExportButton } from "./ExportButton";
 import { FrameList } from "./FrameList";
@@ -210,10 +215,10 @@ export function Canvas() {
   // Text editing state: tracks inline editing of text elements
   // - editingElementId: which text element is currently being edited (null = not editing)
   // - editingText: current text value during editing
-  // - originalText: text value before editing started (for cancel/escape)
+  // - isNewTextElement: true if this is a newly created text element (for delete-if-empty behavior)
   const [editingElementId, setEditingElementId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState("");
-  const [originalText, setOriginalText] = useState("");
+  const [isNewTextElement, setIsNewTextElement] = useState(false);
   const textInputRef = useRef<HTMLTextAreaElement>(null);
 
   // Track if current selection was made by clicking (for Backspace delete behavior)
@@ -657,12 +662,18 @@ export function Canvas() {
         );
       } else if (element.type === "text") {
         const textEl = element as TextElement;
-        const padding = 4;
+        const padding = TEXT_PADDING;
 
         // Determine visual state for text element
         const isHovered =
           element.id === hoveredElementId && currentTool === "select";
         const isBeingEdited = element.id === editingElementId;
+
+        // Skip rendering entirely when being edited - textarea overlay handles it
+        // This prevents double-rendering (WYSIWYG)
+        if (isBeingEdited) {
+          return; // Skip to next element
+        }
 
         // Get typography properties with defaults
         const fontSize = textEl.fontSize || 16;
@@ -677,10 +688,11 @@ export function Canvas() {
         ctx.textAlign = textAlign;
 
         const maxWidth = element.width - padding * 2;
-        const lines = wrapText(ctx, textEl.content || "Text", maxWidth);
+        // Use empty string display for empty content (will show nothing)
+        const lines = wrapText(ctx, textEl.content || "", maxWidth);
 
-        // Draw subtle background for selected text elements (not when editing)
-        if (isSelected && !isBeingEdited) {
+        // Draw subtle background for selected text elements
+        if (isSelected) {
           ctx.fillStyle = canvasTheme.selectedBg;
           ctx.fillRect(element.x, element.y, element.width, element.height);
           // Restore fill style for text
@@ -709,10 +721,7 @@ export function Canvas() {
         ctx.textAlign = "left";
 
         // Visual state handling for text border
-        if (isBeingEdited) {
-          // When editing, don't draw the canvas border (textarea overlay handles it)
-          // Skip drawing sketch rect entirely
-        } else if (isSelected) {
+        if (isSelected) {
           // Selected: use selected color with slightly thicker line for prominence
           ctx.strokeStyle = canvasTheme.selected;
           ctx.lineWidth = 2;
@@ -829,8 +838,8 @@ export function Canvas() {
             ctx.arc(handle.x, handle.y, HANDLE_SIZE / 2, 0, Math.PI * 2);
             ctx.fill();
           });
-        } else {
-          // Corner handles for rectangles, ellipses, and text
+        } else if (element.type !== "text") {
+          // Corner handles for rectangles and ellipses (not text - text uses auto-width)
           const handles = [
             { x: element.x - HANDLE_SIZE / 2, y: element.y - HANDLE_SIZE / 2 }, // NW
             {
@@ -1097,12 +1106,18 @@ export function Canvas() {
   };
 
   // Check if click is on a resize handle.
-  // Returns handle ID: 'nw'|'ne'|'sw'|'se' for rectangles/text, 'start'|'end' for arrows/lines.
+  // Returns handle ID: 'nw'|'ne'|'sw'|'se' for rectangles, 'start'|'end' for arrows/lines.
+  // Text elements have no resize handles (they use auto-width).
   const getResizeHandle = (
     x: number,
     y: number,
     element: CanvasElement,
   ): string | null => {
+    // Text elements don't have resize handles - they use auto-width
+    if (element.type === "text") {
+      return null;
+    }
+
     if (element.type === "arrow" || element.type === "line") {
       // Endpoint handles for arrows and lines
       const lineEl = element as ArrowElement | LineElement;
@@ -1122,7 +1137,7 @@ export function Canvas() {
       return null;
     }
 
-    // Corner handles for rectangles and text
+    // Corner handles for rectangles and ellipses
     const handles = {
       nw: { x: element.x, y: element.y },
       ne: { x: element.x + element.width, y: element.y },
@@ -1145,12 +1160,16 @@ export function Canvas() {
   const enterEditMode = (element: TextElement) => {
     setEditingElementId(element.id);
     setEditingText(element.content || "");
-    setOriginalText(element.content || "");
+    setIsNewTextElement(false); // Existing element, not new
     setSelectedByClick(false); // Clear click-selection flag (prevents Backspace delete after editing)
-    // Focus input after React renders it, then select all text for immediate editing
+    // Focus input after React renders it
     setTimeout(() => {
       textInputRef.current?.focus();
-      textInputRef.current?.select(); // Auto-select all text for easy replacement
+      // Move cursor to end instead of selecting all (Excalidraw behavior)
+      if (textInputRef.current) {
+        const len = textInputRef.current.value.length;
+        textInputRef.current.setSelectionRange(len, len);
+      }
     }, 0);
   };
 
@@ -1162,17 +1181,37 @@ export function Canvas() {
       return;
     }
 
-    // Update element with new text (or 'Text' if empty to maintain placeholder)
-    const finalText = editingText.trim() || "Text";
+    const trimmedText = editingText.trim();
 
-    // Calculate required height based on line count and element's typography
+    // If empty, delete the element (no placeholder)
+    if (!trimmedText) {
+      setElements(elements.filter((el) => el.id !== editingElementId));
+      setSelectedElementId(null);
+      exitEditMode();
+      return;
+    }
+
+    // Calculate dimensions
     const textEl = editingElement as TextElement;
     const fontSize = textEl.fontSize || 16;
+    const fontWeight = textEl.fontWeight || "normal";
+    const fontStyle = textEl.fontStyle || "normal";
     const lineHeight = textEl.lineHeight || Math.round(fontSize * 1.5);
-    const lineCount = finalText.split("\n").length;
-    const requiredHeight = Math.max(
-      editingElement.height,
-      lineCount * lineHeight + 8,
+    const lineCount = trimmedText.split("\n").length;
+
+    // Calculate auto-width if enabled
+    let finalWidth = editingElement.width;
+    if (textEl.autoWidth !== false) {
+      finalWidth = calculateAutoWidth(trimmedText, {
+        fontSize,
+        fontWeight,
+        fontStyle,
+      });
+    }
+
+    const finalHeight = Math.max(
+      lineCount * lineHeight + TEXT_PADDING * 2,
+      lineHeight + TEXT_PADDING * 2,
     );
 
     setElements(
@@ -1180,8 +1219,9 @@ export function Canvas() {
         el.id === editingElementId && el.type === "text"
           ? ({
               ...el,
-              content: finalText,
-              height: requiredHeight,
+              content: trimmedText,
+              width: finalWidth,
+              height: finalHeight,
             } as TextElement)
           : el,
       ),
@@ -1189,24 +1229,10 @@ export function Canvas() {
     exitEditMode();
   };
 
-  const cancelTextEdit = () => {
-    // Restore original text
-    if (editingElementId) {
-      setElements(
-        elements.map((el) =>
-          el.id === editingElementId && el.type === "text"
-            ? ({ ...el, content: originalText } as TextElement)
-            : el,
-        ),
-      );
-    }
-    exitEditMode();
-  };
-
   const exitEditMode = () => {
     setEditingElementId(null);
     setEditingText("");
-    setOriginalText("");
+    setIsNewTextElement(false);
   };
 
   // Double-click handler for entering text edit mode
@@ -1220,9 +1246,32 @@ export function Canvas() {
 
     const { element: clickedElement } = findElementAtPoint(x, y);
 
-    // Only text elements are editable via double-click
     if (clickedElement && clickedElement.type === "text") {
+      // Edit existing text element
       enterEditMode(clickedElement as TextElement);
+    } else if (!clickedElement) {
+      // Double-click on empty canvas: create new text element (Excalidraw behavior)
+      const newElement: TextElement = {
+        id: generateId(),
+        type: "text",
+        x,
+        y,
+        width: MIN_TEXT_WIDTH,
+        height: 24,
+        content: "",
+        autoWidth: true,
+      };
+      setElements([...elements, newElement]);
+      setSelectedElementId(newElement.id);
+      setIsNewTextElement(true);
+
+      // Enter edit mode immediately
+      setEditingElementId(newElement.id);
+      setEditingText("");
+
+      setTimeout(() => {
+        textInputRef.current?.focus();
+      }, 0);
     }
   };
 
@@ -1360,22 +1409,33 @@ export function Canvas() {
       setIsDrawing(true);
       setStartPoint({ x, y });
 
-      // Text tool: click-to-place
+      // Text tool: click-to-place and immediately enter edit mode
       if (currentTool === "text") {
         const newElement: TextElement = {
           id: generateId(),
           type: "text",
           x,
           y,
-          width: 100,
-          height: 20,
-          content: "Text",
+          width: MIN_TEXT_WIDTH,
+          height: 24, // Single line height
+          content: "", // Empty - no placeholder
+          autoWidth: true,
         };
         setElements([...elements, newElement]);
         setSelectedElementId(newElement.id);
         setCurrentTool("select");
         setIsDrawing(false);
         setStartPoint(null);
+
+        // Immediately enter edit mode
+        setEditingElementId(newElement.id);
+        setEditingText("");
+        setIsNewTextElement(true);
+
+        // Focus textarea after render
+        setTimeout(() => {
+          textInputRef.current?.focus();
+        }, 0);
       }
       // Other tools (rectangle, ellipse, arrow, line) are drag-to-draw in handleMouseUp
     }
@@ -2369,12 +2429,24 @@ export function Canvas() {
     );
   };
 
-  // Get selected text element for toolbar
-  const selectedTextElement = selectedElementId
-    ? (elements.find(
-        (el) => el.id === selectedElementId && el.type === "text",
-      ) as TextElement | undefined)
-    : undefined;
+  // Get selected text element for toolbar (either selected or being edited)
+  const textElementForToolbar = (() => {
+    // First check if we're editing a text element
+    if (editingElementId) {
+      const editingElement = elements.find(
+        (el) => el.id === editingElementId && el.type === "text"
+      );
+      if (editingElement) return editingElement as TextElement;
+    }
+    // Otherwise check if a text element is selected
+    if (selectedElementId) {
+      const selectedElement = elements.find(
+        (el) => el.id === selectedElementId && el.type === "text"
+      );
+      if (selectedElement) return selectedElement as TextElement;
+    }
+    return undefined;
+  })();
 
   // Component insertion handler
   const handleInsertComponent = (template: ComponentTemplate) => {
@@ -2452,18 +2524,43 @@ export function Canvas() {
                 textEl.lineHeight || Math.round(fontSize * 1.5);
 
               // Calculate height based on line count (for auto-grow)
-              const lineCount = editingText.split("\n").length;
-              const minHeight = Math.max(editingElement.height, lineHeight);
+              const lineCount = Math.max(1, editingText.split("\n").length);
               const calculatedHeight = Math.max(
-                minHeight,
-                lineCount * lineHeight + 8,
+                lineHeight + TEXT_PADDING * 2,
+                lineCount * lineHeight + TEXT_PADDING * 2,
               );
+
+              // Calculate auto-width in real-time
+              const currentWidth = textEl.autoWidth !== false
+                ? Math.max(MIN_TEXT_WIDTH, calculateAutoWidth(editingText || " ", {
+                    fontSize,
+                    fontWeight,
+                    fontStyle,
+                  }))
+                : editingElement.width;
 
               return (
                 <textarea
                   ref={textInputRef}
                   value={editingText}
-                  onChange={(e) => setEditingText(e.target.value)}
+                  onChange={(e) => {
+                    setEditingText(e.target.value);
+                    // Update element width in real-time for auto-width
+                    if (textEl.autoWidth !== false) {
+                      const newWidth = calculateAutoWidth(e.target.value || " ", {
+                        fontSize,
+                        fontWeight,
+                        fontStyle,
+                      });
+                      setElements((prev) =>
+                        prev.map((el) =>
+                          el.id === editingElementId
+                            ? { ...el, width: Math.max(MIN_TEXT_WIDTH, newWidth) }
+                            : el
+                        )
+                      );
+                    }
+                  }}
                   onKeyDown={(e) => {
                     // Shift+Enter for newline, Enter alone commits
                     if (e.key === "Enter" && !e.shiftKey) {
@@ -2471,15 +2568,22 @@ export function Canvas() {
                       commitTextEdit();
                     } else if (e.key === "Escape") {
                       e.preventDefault();
-                      cancelTextEdit();
+                      commitTextEdit(); // Escape now commits (Excalidraw behavior)
                     }
+                    e.stopPropagation(); // Prevent canvas keyboard handlers
                   }}
                   onBlur={commitTextEdit}
-                  className="absolute bg-white dark:bg-zinc-800 border-2 border-blue-500 dark:border-blue-400 px-1 text-zinc-900 dark:text-zinc-100 caret-zinc-900 dark:caret-zinc-100 focus:outline-none resize-none overflow-hidden rounded animate-scale-in"
+                  spellCheck={false}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  data-gramm="false"
+                  className="absolute resize-none overflow-hidden"
                   style={{
-                    left: editingElement.x,
+                    left: editingElement.x + TEXT_PADDING,
                     top: editingElement.y,
-                    width: Math.max(editingElement.width, 100),
+                    width: Math.max(currentWidth - TEXT_PADDING * 2, MIN_TEXT_WIDTH),
+                    minWidth: MIN_TEXT_WIDTH,
                     height: calculatedHeight,
                     fontFamily: "sans-serif",
                     fontSize: `${fontSize}px`,
@@ -2487,18 +2591,26 @@ export function Canvas() {
                     fontStyle: fontStyle,
                     textAlign: textAlign,
                     lineHeight: `${lineHeight}px`,
-                    transition:
-                      "border-color 150ms ease-out, box-shadow 150ms ease-out",
-                    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.1)",
+                    // Fully transparent - WYSIWYG
+                    background: "transparent",
+                    color: canvasTheme.sketch,
+                    caretColor: canvasTheme.selected,
+                    // Remove ALL styling
+                    padding: 0,
+                    margin: 0,
+                    border: "none",
+                    outline: "none",
+                    boxShadow: "none",
+                    WebkitAppearance: "none",
                   }}
                   aria-label="Edit text element"
                 />
               );
             })()}
           {/* Text formatting toolbar */}
-          {selectedTextElement && !editingElementId && (
+          {textElementForToolbar && (
             <TextToolbar
-              element={selectedTextElement}
+              element={textElementForToolbar}
               canvasRect={canvasRect}
               onUpdate={handleTextToolbarUpdate}
             />
