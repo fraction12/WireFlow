@@ -227,7 +227,7 @@ html {
 }
 
 .animate-fade-out {
-  animation: fadeOut 150ms ease-out;
+  animation: fadeOut 150ms ease-out forwards;
 }
 
 .animate-slide-in-up {

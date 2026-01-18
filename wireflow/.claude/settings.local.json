@@ -11,7 +11,9 @@
       "Bash(pnpm build:*)",
       "Bash(powershell -Command:*)",
       "Bash(cd:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(node -e:*)"
     ]
   }
 }

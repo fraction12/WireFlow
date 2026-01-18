@@ -25,14 +25,25 @@ export function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
-  const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
-  // Focus the confirm button when dialog opens
+  // Lock body scroll when dialog is open
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [isOpen]);
+
+  // Focus the cancel button when dialog opens (safer default for destructive actions)
   useEffect(() => {
     if (isOpen) {
       // Small delay to ensure dialog is rendered
       const timer = setTimeout(() => {
-        confirmButtonRef.current?.focus();
+        cancelButtonRef.current?.focus();
       }, 50);
       return () => clearTimeout(timer);
     }
@@ -58,7 +69,7 @@ export function ConfirmDialog({
     if (e.key !== 'Tab') return;
 
     const focusableElements = dialogRef.current?.querySelectorAll(
-      'button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      'button:not([disabled])'
     );
 
     if (!focusableElements || focusableElements.length === 0) return;

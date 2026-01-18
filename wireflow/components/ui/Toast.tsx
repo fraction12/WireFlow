@@ -55,12 +55,11 @@ interface ToastContainerProps {
 }
 
 function ToastContainer({ toasts, onRemove }: ToastContainerProps) {
-  if (toasts.length === 0) return null;
-
   return (
     <div
-      className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"
+      className="fixed bottom-4 right-4 z-50 flex flex-col-reverse gap-2 pointer-events-none"
       aria-live="polite"
+      aria-atomic="false"
       aria-label="Notifications"
     >
       {toasts.map((toast) => (
@@ -91,9 +90,10 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
 
   useEffect(() => {
     if (isExiting) {
+      // Wait for animation to complete (150ms) plus small buffer (50ms)
       const timer = setTimeout(() => {
         onRemove(toast.id);
-      }, 150);
+      }, 200);
       return () => clearTimeout(timer);
     }
   }, [isExiting, onRemove, toast.id]);
@@ -123,6 +123,8 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
     info: 'text-blue-600 dark:text-blue-400',
   }[toast.type];
 
+  // Use role="status" for non-critical notifications, maintain polite live region
+  // Error toasts could use role="alert" but we keep consistent UX via the parent polite live region
   return (
     <div
       className={`
@@ -134,7 +136,8 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
         ${colors}
         ${isExiting ? 'animate-fade-out' : 'animate-slide-in-up'}
       `}
-      role="alert"
+      role="status"
+      aria-live="off"
     >
       <Icon size={20} className={`flex-shrink-0 mt-0.5 ${iconColors}`} />
       <div className="flex-1 min-w-0">
@@ -148,7 +151,7 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
         className="flex-shrink-0 p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-current"
         aria-label="Dismiss notification"
       >
-        <X size={16} />
+        <X size={18} />
       </button>
     </div>
   );

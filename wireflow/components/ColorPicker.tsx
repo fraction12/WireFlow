@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { STROKE_COLORS, FILL_COLORS, getContrastColor, type PresetColor } from '@/lib/colors';
 import { Check } from 'lucide-react';
 
@@ -25,7 +25,8 @@ export function ColorPicker({
   onOpenChange,
 }: ColorPickerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [focusedIndex, setFocusedIndex] = useState<number>(-1);
 
   // Get appropriate color array based on label
   const colors = label === 'Stroke' ? STROKE_COLORS : FILL_COLORS;
@@ -44,10 +45,59 @@ export function ColorPicker({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen, onOpenChange]);
 
-  // Handle keyboard navigation
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      onOpenChange(false);
+  // Focus management: set initial focused index when dropdown opens
+  useEffect(() => {
+    if (isOpen) {
+      // Find index of currently selected color
+      const selectedIndex = colors.findIndex(
+        c => c.hex.toLowerCase() === selectedColor.toLowerCase()
+      );
+      setFocusedIndex(selectedIndex >= 0 ? selectedIndex : 0);
+    } else {
+      setFocusedIndex(-1);
+    }
+  }, [isOpen, selectedColor, colors]);
+
+  // Handle keyboard navigation in dropdown
+  const handleDropdownKeyDown = (e: React.KeyboardEvent) => {
+    if (!isOpen) return;
+
+    switch (e.key) {
+      case 'Escape':
+        e.preventDefault();
+        onOpenChange(false);
+        triggerRef.current?.focus();
+        break;
+
+      case 'ArrowRight':
+      case 'ArrowDown':
+        e.preventDefault();
+        setFocusedIndex(prev => (prev + 1) % colors.length);
+        break;
+
+      case 'ArrowLeft':
+      case 'ArrowUp':
+        e.preventDefault();
+        setFocusedIndex(prev => (prev - 1 + colors.length) % colors.length);
+        break;
+
+      case 'Enter':
+      case ' ':
+        e.preventDefault();
+        if (focusedIndex >= 0) {
+          handleColorSelect(colors[focusedIndex]);
+        }
+        break;
+
+      case 'Home':
+        e.preventDefault();
+        setFocusedIndex(0);
+        break;
+
+      case 'End':
+        e.preventDefault();
+        setFocusedIndex(colors.length - 1);
+        break;
     }
   };
 
@@ -55,6 +105,8 @@ export function ColorPicker({
   const handleColorSelect = (color: PresetColor) => {
     onColorChange(color.hex);
     onOpenChange(false);
+    // Return focus to trigger after selection
+    triggerRef.current?.focus();
   };
 
   // Render the color swatch trigger button
@@ -63,8 +115,9 @@ export function ColorPicker({
 
     return (
       <button
+        ref={triggerRef}
         onClick={() => onOpenChange(!isOpen)}
-        onKeyDown={handleKeyDown}
+        onKeyDown={handleDropdownKeyDown}
         className={`
           w-7 h-7 rounded-md border-2 flex items-center justify-center
           transition-all duration-150 ease-out

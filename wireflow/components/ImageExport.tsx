@@ -33,6 +33,20 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Close dropdown on Escape key
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isOpen) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+      return () => document.removeEventListener('keydown', handleEscape);
+    }
+  }, [isOpen]);
+
   // Sketch-style drawing functions (simplified versions for export)
   const SKETCH_AMPLITUDE = 1.5;
   const SEGMENT_DISTANCE = 20;
@@ -478,17 +492,24 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-1 w-40 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg z-50 overflow-hidden">
+        <div
+          className="absolute right-0 mt-1 w-40 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg z-50 overflow-hidden"
+          role="menu"
+          aria-label="Image export options"
+          aria-orientation="vertical"
+        >
           <button
             onClick={exportPNG}
-            className="w-full px-3 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-2 transition-colors"
+            className="w-full px-3 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-2 transition-colors focus:outline-none focus-visible:bg-zinc-100 dark:focus-visible:bg-zinc-700"
+            role="menuitem"
           >
             <Image size={16} />
             Export as PNG
           </button>
           <button
             onClick={exportSVG}
-            className="w-full px-3 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-2 transition-colors"
+            className="w-full px-3 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-2 transition-colors focus:outline-none focus-visible:bg-zinc-100 dark:focus-visible:bg-zinc-700"
+            role="menuitem"
           >
             <FileCode size={16} />
             Export as SVG

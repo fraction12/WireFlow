@@ -1,5 +1,5 @@
 {
-  "iteration": 1,
+  "iteration": 2,
   "ui_surfaces": [
     {
       "id": "frame-navigation-panel",
@@ -152,13 +152,38 @@
       "cleaned_iteration": 1,
       "fixes_applied": 2,
       "summary": "Fixed form label accessibility and keyboard focus styles on tab button"
+    },
+    {
+      "id": "text-formatting-toolbar",
+      "cleaned_iteration": 2,
+      "fixes_applied": 4,
+      "summary": "Added caption preset, fixed dropdown click handling, removed misleading keyboard hints, added keyboard navigation"
+    },
+    {
+      "id": "styling-toolbar",
+      "cleaned_iteration": 2,
+      "fixes_applied": 3,
+      "summary": "Removed misleading keyboard hints, fixed label alignment, added cursor-pointer to reset",
+      "notes": "Keyboard shortcut integration requires Canvas.tsx refactor (out of scope)"
+    },
+    {
+      "id": "toast-notifications",
+      "cleaned_iteration": 2,
+      "fixes_applied": 6,
+      "summary": "Fixed ARIA live region, toast stacking order, animation timing, icon sizing consistency"
+    },
+    {
+      "id": "error-boundary",
+      "cleaned_iteration": 2,
+      "fixes_applied": 9,
+      "summary": "Added ARIA dialog attributes, focus management, keyboard handling, backdrop overlay, consistent styling"
     }
   ],
   "in_progress": {
-    "text-formatting-toolbar": { "agent": 1, "iteration": 2 },
-    "styling-toolbar": { "agent": 2, "iteration": 2 },
-    "toast-notifications": { "agent": 3, "iteration": 2 },
-    "error-boundary": { "agent": 4, "iteration": 2 }
+    "confirm-dialog": { "agent": 1, "iteration": 3 },
+    "color-picker": { "agent": 2, "iteration": 3 },
+    "image-export-menu": { "agent": 3, "iteration": 3 },
+    "theme-toggle": { "agent": 4, "iteration": 3 }
   },
   "blocked": [],
   "stop_reason": null,
@@ -175,6 +200,14 @@
       "surfaces_assigned": ["frame-navigation-panel", "drawing-toolbar", "component-panel", "documentation-panel"],
       "surfaces_cleaned": 4,
       "total_fixes": 24,
+      "timestamp": "2026-01-18"
+    },
+    {
+      "iteration": 2,
+      "action": "hardening",
+      "surfaces_assigned": ["text-formatting-toolbar", "styling-toolbar", "toast-notifications", "error-boundary"],
+      "surfaces_cleaned": 4,
+      "total_fixes": 22,
       "timestamp": "2026-01-18"
     }
   ]

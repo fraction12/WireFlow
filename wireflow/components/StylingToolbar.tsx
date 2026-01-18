@@ -40,6 +40,8 @@ export function StylingToolbar({
   };
 
   // Close other picker when opening one
+  // NOTE: Keyboard shortcuts (S/G) are handled in Canvas.tsx
+  // These handlers manage click-triggered picker state only
   const handleStrokePickerOpen = (open: boolean) => {
     setStrokePickerOpen(open);
     if (open) setFillPickerOpen(false);
@@ -58,7 +60,7 @@ export function StylingToolbar({
     >
       {/* Stroke color section */}
       <div className="flex items-center gap-2">
-        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400 min-w-[40px]">
+        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400 min-w-[32px]">
           Stroke
         </span>
         <ColorPicker
@@ -75,7 +77,7 @@ export function StylingToolbar({
 
       {/* Fill color section */}
       <div className="flex items-center gap-2">
-        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400 min-w-[24px]">
+        <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400 min-w-[32px]">
           Fill
         </span>
         <ColorPicker
@@ -93,17 +95,12 @@ export function StylingToolbar({
       {/* Reset button */}
       <button
         onClick={handleResetColors}
-        className="w-7 h-7 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95"
-        title="Reset to defaults (D)"
+        className="w-7 h-7 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95 cursor-pointer"
+        title="Reset to defaults"
         aria-label="Reset colors to defaults"
       >
         <RotateCcw size={16} />
       </button>
-
-      {/* Keyboard hints */}
-      <div className="text-xs text-zinc-400 dark:text-zinc-500 ml-2 hidden sm:block">
-        S: stroke, G: fill, D: reset
-      </div>
     </div>
   );
 }

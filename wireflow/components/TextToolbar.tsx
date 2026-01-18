@@ -26,6 +26,7 @@ export function TextToolbar({ element, canvasRect, onUpdate, zoom, pan }: TextTo
   const [showSizeDropdown, setShowSizeDropdown] = useState(false);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [focusedSizeIndex, setFocusedSizeIndex] = useState(-1);
 
   // Get current values with defaults
   const fontSize = element.fontSize || 16;
@@ -34,8 +35,10 @@ export function TextToolbar({ element, canvasRect, onUpdate, zoom, pan }: TextTo
   const textAlign = element.textAlign || 'left';
   const preset = element.preset;
 
-  // Close dropdown when clicking outside
+  // Close dropdown when clicking outside (including the trigger button when open)
   useEffect(() => {
+    if (!showSizeDropdown) return;
+
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setShowSizeDropdown(false);
@@ -43,7 +46,7 @@ export function TextToolbar({ element, canvasRect, onUpdate, zoom, pan }: TextTo
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [showSizeDropdown]);
 
   // Calculate toolbar position with improved logic using useMemo to avoid re-render loops
   const { toolbarStyle, position } = useMemo(() => {
@@ -149,6 +152,42 @@ export function TextToolbar({ element, canvasRect, onUpdate, zoom, pan }: TextTo
       preset: undefined, // Clear preset when manually changing size
     });
     setShowSizeDropdown(false);
+    setFocusedSizeIndex(-1);
+  };
+
+  // Keyboard navigation for dropdown
+  const handleDropdownKeyDown = (e: React.KeyboardEvent) => {
+    if (!showSizeDropdown) return;
+
+    switch (e.key) {
+      case 'Escape':
+        setShowSizeDropdown(false);
+        setFocusedSizeIndex(-1);
+        e.preventDefault();
+        break;
+      case 'ArrowDown':
+        setFocusedSizeIndex((prev) => Math.min(prev + 1, FONT_SIZES.length - 1));
+        e.preventDefault();
+        break;
+      case 'ArrowUp':
+        setFocusedSizeIndex((prev) => Math.max(prev - 1, 0));
+        e.preventDefault();
+        break;
+      case 'Enter':
+        if (focusedSizeIndex >= 0) {
+          handleFontSizeChange(FONT_SIZES[focusedSizeIndex]);
+        }
+        e.preventDefault();
+        break;
+      case 'Home':
+        setFocusedSizeIndex(0);
+        e.preventDefault();
+        break;
+      case 'End':
+        setFocusedSizeIndex(FONT_SIZES.length - 1);
+        e.preventDefault();
+        break;
+    }
   };
 
   const toggleBold = () => {
@@ -171,6 +210,7 @@ export function TextToolbar({ element, canvasRect, onUpdate, zoom, pan }: TextTo
     { key: 'heading3', label: 'H3' },
     { key: 'body', label: 'Body' },
     { key: 'label', label: 'Label' },
+    { key: 'caption', label: 'Cap' },
   ];
 
   const buttonBase = `
@@ -251,7 +291,7 @@ export function TextToolbar({ element, canvasRect, onUpdate, zoom, pan }: TextTo
         <button
           onClick={toggleBold}
           className={`${buttonBase} w-8 ${fontWeight === 'bold' ? buttonActive : buttonInactive}`}
-          title="Bold (Ctrl+B)"
+          title="Bold"
           aria-label="Toggle bold"
           aria-pressed={fontWeight === 'bold'}
         >
@@ -260,7 +300,7 @@ export function TextToolbar({ element, canvasRect, onUpdate, zoom, pan }: TextTo
         <button
           onClick={toggleItalic}
           className={`${buttonBase} w-8 ${fontStyle === 'italic' ? buttonActive : buttonInactive}`}
-          title="Italic (Ctrl+I)"
+          title="Italic"
           aria-label="Toggle italic"
           aria-pressed={fontStyle === 'italic'}
         >
@@ -273,7 +313,7 @@ export function TextToolbar({ element, canvasRect, onUpdate, zoom, pan }: TextTo
         <button
           onClick={() => handleAlignChange('left')}
           className={`${buttonBase} w-8 ${textAlign === 'left' ? buttonActive : buttonInactive}`}
-          title="Align left (Ctrl+Shift+L)"
+          title="Align left"
           aria-label="Align left"
           aria-pressed={textAlign === 'left'}
         >
@@ -282,7 +322,7 @@ export function TextToolbar({ element, canvasRect, onUpdate, zoom, pan }: TextTo
         <button
           onClick={() => handleAlignChange('center')}
           className={`${buttonBase} w-8 ${textAlign === 'center' ? buttonActive : buttonInactive}`}
-          title="Align center (Ctrl+Shift+E)"
+          title="Align center"
           aria-label="Align center"
           aria-pressed={textAlign === 'center'}
         >
@@ -291,7 +331,7 @@ export function TextToolbar({ element, canvasRect, onUpdate, zoom, pan }: TextTo
         <button
           onClick={() => handleAlignChange('right')}
           className={`${buttonBase} w-8 ${textAlign === 'right' ? buttonActive : buttonInactive}`}
-          title="Align right (Ctrl+Shift+R)"
+          title="Align right"
           aria-label="Align right"
           aria-pressed={textAlign === 'right'}
         >
@@ -302,7 +342,18 @@ export function TextToolbar({ element, canvasRect, onUpdate, zoom, pan }: TextTo
       {/* Font size dropdown */}
       <div className="relative" ref={dropdownRef}>
         <button
-          onClick={() => setShowSizeDropdown(!showSizeDropdown)}
+          onClick={() => {
+            const newState = !showSizeDropdown;
+            setShowSizeDropdown(newState);
+            if (newState) {
+              // Initialize focused index to current size when opening
+              const currentIndex = FONT_SIZES.indexOf(fontSize);
+              setFocusedSizeIndex(currentIndex >= 0 ? currentIndex : 0);
+            } else {
+              setFocusedSizeIndex(-1);
+            }
+          }}
+          onKeyDown={handleDropdownKeyDown}
           className={`${buttonBase} ${buttonInactive} min-w-[60px] gap-1 text-sm`}
           title="Font size"
           aria-label={`Font size: ${fontSize}px`}
@@ -314,18 +365,21 @@ export function TextToolbar({ element, canvasRect, onUpdate, zoom, pan }: TextTo
         </button>
         {showSizeDropdown && (
           <div
-            className="absolute top-full left-0 mt-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg py-1 min-w-[60px] max-h-48 overflow-y-auto"
+            className="absolute top-full left-0 mt-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg py-1 min-w-[60px] max-h-48 overflow-y-auto z-50"
             role="listbox"
             aria-label="Select font size"
+            onKeyDown={handleDropdownKeyDown}
           >
-            {FONT_SIZES.map((size) => (
+            {FONT_SIZES.map((size, index) => (
               <button
                 key={size}
                 onClick={() => handleFontSizeChange(size)}
                 className={`
-                  w-full px-3 py-1.5 text-sm text-left
+                  w-full px-3 py-1.5 text-sm text-left transition-colors
                   ${size === fontSize
                     ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                    : index === focusedSizeIndex
+                    ? 'bg-zinc-200 dark:bg-zinc-600 text-zinc-900 dark:text-zinc-100'
                     : 'text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700'
                   }
                 `}

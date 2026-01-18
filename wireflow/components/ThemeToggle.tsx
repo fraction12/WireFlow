@@ -16,11 +16,11 @@ export function ThemeToggle() {
   const getIcon = () => {
     switch (theme) {
       case 'light':
-        return <Sun size={18} />;
+        return <Sun size={16} />;
       case 'dark':
-        return <Moon size={18} />;
+        return <Moon size={16} />;
       case 'system':
-        return <Monitor size={18} />;
+        return <Monitor size={16} />;
     }
   };
 
@@ -36,13 +36,19 @@ export function ThemeToggle() {
   };
 
   return (
-    <button
-      onClick={cycleTheme}
-      className="p-2 rounded-lg text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-      title={getLabel()}
-      aria-label={`Current theme: ${getLabel()}. Click to change.`}
-    >
-      {getIcon()}
-    </button>
+    <>
+      <button
+        onClick={cycleTheme}
+        className="p-2 rounded-lg text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+        title={getLabel()}
+        aria-label={`Current theme: ${getLabel()}. Click to change.`}
+      >
+        {getIcon()}
+      </button>
+      {/* Screen reader announcement for theme changes */}
+      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        Theme changed to {getLabel()}
+      </div>
+    </>
   );
 }
