@@ -1,9 +1,9 @@
 ---
 active: true
 iteration: 1
-max_iterations: 20
+max_iterations: 0
 completion_promise: null
-started_at: "2026-01-18T23:57:05Z"
+started_at: "2026-01-19T00:46:19Z"
 ---
 
-Make all suggested improvements from the code review: stage canvas-core directory, create barrel export index.ts files for dialogs panels and ui directories, update Canvas.tsx imports, verify CLAUDE.md documentation accuracy
+Follow the instructions in RALPH_MCP_PROMPT.md to build the WireFlow MCP server. Use the multi-agent approach described in the prompt. [--max iterations 25] [--completion=promise MCP SERVER COMPLETE]

@@ -27,7 +27,8 @@
       "Bash(grep:*)",
       "Bash(while read f)",
       "Bash(find:*)",
-      "Bash(git mv:*)"
+      "Bash(git mv:*)",
+      "Bash(pnpm install:*)"
     ]
   }
 }
