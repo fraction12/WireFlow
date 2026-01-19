@@ -870,6 +870,31 @@ export function Canvas() {
 
   // Sketch-style rendering helpers are imported from ./canvas-core
 
+  // Attach non-passive wheel event listener for proper zoom handling
+  // React wheel events are passive by default, which prevents e.preventDefault() from working
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const wheelHandler = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const screenX = e.clientX - rect.left;
+        const screenY = e.clientY - rect.top;
+        const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+        zoomAtPoint(delta, screenX, screenY);
+      } else {
+        const dx = e.deltaX;
+        const dy = e.deltaY;
+        setPan((prev) => ({ x: prev.x - dx, y: prev.y - dy }));
+      }
+    };
+
+    canvas.addEventListener('wheel', wheelHandler, { passive: false });
+    return () => canvas.removeEventListener('wheel', wheelHandler);
+  }, [zoomAtPoint]);
+
   // Draw all elements on canvas
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -3270,31 +3295,6 @@ export function Canvas() {
     setRotationStart(null);
   };
 
-  // Wheel handler for zooming
-  const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
-    // Ctrl/Cmd + wheel for zooming
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-
-      const rect = canvas.getBoundingClientRect();
-      const screenX = e.clientX - rect.left;
-      const screenY = e.clientY - rect.top;
-
-      // Zoom in/out based on scroll direction
-      const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
-      zoomAtPoint(delta, screenX, screenY);
-    }
-    // Without modifier, allow normal scroll for pan
-    else {
-      // Horizontal scroll (shift+wheel) or trackpad pan
-      const dx = e.deltaX;
-      const dy = e.deltaY;
-      setPan((prev) => ({ x: prev.x - dx, y: prev.y - dy }));
-    }
-  };
-
   // Copy selected elements to clipboard
   const copySelectedElements = useCallback(() => {
     const elementsToCopy: CanvasElement[] = [];
@@ -5348,6 +5348,30 @@ export function Canvas() {
                 </span>
               </div>
             )}
+            {/* Keyboard shortcuts button */}
+            <button
+              onClick={() => setShortcutsOpen(true)}
+              className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              title="View keyboard shortcuts (press ?)"
+              aria-label="Open keyboard shortcuts panel, press question mark key"
+            >
+              <svg
+                className="w-4 h-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="2" y="6" width="20" height="12" rx="2" />
+                <line x1="6" y1="10" x2="6.01" y2="10" />
+                <line x1="10" y1="10" x2="10.01" y2="10" />
+                <line x1="14" y1="10" x2="14.01" y2="10" />
+                <line x1="18" y1="10" x2="18.01" y2="10" />
+                <line x1="7" y1="14" x2="17" y2="14" />
+              </svg>
+            </button>
             <ThemeToggle />
             <ImageExport elements={elements} frameName={activeFrame?.name || 'wireflow'} />
             <ExportButton frames={frames} />
@@ -5433,7 +5457,6 @@ export function Canvas() {
               }
             }}
             onDoubleClick={handleDoubleClick}
-            onWheel={handleWheel}
             tabIndex={0}
             role="application"
             aria-label={`Canvas for ${activeFrame?.name || "wireframing"}. Use the toolbar to select drawing tools. Press Delete to remove selected elements, Ctrl+Z to undo, Ctrl+Y to redo.`}

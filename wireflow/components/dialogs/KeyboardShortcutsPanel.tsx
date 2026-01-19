@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { X } from 'lucide-react';
 
 interface KeyboardShortcutsPanelProps {
@@ -106,11 +106,37 @@ const shortcutGroups: ShortcutGroup[] = [
 ];
 
 export function KeyboardShortcutsPanel({ isOpen, onClose }: KeyboardShortcutsPanelProps) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
   // Close on Escape key
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape' && isOpen) {
       e.preventDefault();
       onClose();
+    }
+
+    // Focus trap - handle Tab key
+    if (e.key === 'Tab' && isOpen && panelRef.current) {
+      const focusableElements = panelRef.current.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      const firstElement = focusableElements[0] as HTMLElement;
+      const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+
+      if (e.shiftKey) {
+        // Shift+Tab: if on first element, focus last
+        if (document.activeElement === firstElement) {
+          e.preventDefault();
+          lastElement?.focus();
+        }
+      } else {
+        // Tab: if on last element, focus first
+        if (document.activeElement === lastElement) {
+          e.preventDefault();
+          firstElement?.focus();
+        }
+      }
     }
   }, [isOpen, onClose]);
 
@@ -127,6 +153,13 @@ export function KeyboardShortcutsPanel({ isOpen, onClose }: KeyboardShortcutsPan
       return () => {
         document.body.style.overflow = originalOverflow;
       };
+    }
+  }, [isOpen]);
+
+  // Focus close button when panel opens
+  useEffect(() => {
+    if (isOpen && closeButtonRef.current) {
+      closeButtonRef.current.focus();
     }
   }, [isOpen]);
 
@@ -147,13 +180,17 @@ export function KeyboardShortcutsPanel({ isOpen, onClose }: KeyboardShortcutsPan
       />
 
       {/* Panel */}
-      <div className="relative bg-white dark:bg-zinc-900 rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-700 w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col animate-fade-in">
+      <div
+        ref={panelRef}
+        className="relative bg-white dark:bg-zinc-900 rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-700 w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col animate-fade-in"
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-200 dark:border-zinc-700">
           <h2 id="shortcuts-title" className="text-xl font-semibold text-zinc-900 dark:text-zinc-100">
             Keyboard Shortcuts
           </h2>
           <button
+            ref={closeButtonRef}
             onClick={onClose}
             className="p-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             aria-label="Close shortcuts panel"
