@@ -1,9 +1,9 @@
 ---
 active: true
 iteration: 1
-max_iterations: 40
-completion_promise: "POLISH COMPLETE"
-started_at: "2026-01-18T19:12:28Z"
+max_iterations: 20
+completion_promise: null
+started_at: "2026-01-18T23:57:05Z"
 ---
 
-Read .claude/POLISH-PLAN.md and implement the polish items. Mark completed items with [x]. Use specialized agents for review.
+Make all suggested improvements from the code review: stage canvas-core directory, create barrel export index.ts files for dialogs panels and ui directories, update Canvas.tsx imports, verify CLAUDE.md documentation accuracy

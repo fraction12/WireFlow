@@ -32,19 +32,22 @@ import {
   calculateAutoWidth,
 } from "@/lib/textMeasurement";
 import { useHistoryManager } from "@/lib/useHistory";
-import { Toolbar } from "./ui/Toolbar";
+import { Toolbar, useToast } from "./ui";
 import { ExportButton } from "./ExportButton";
-import { FrameList } from "./panels/FrameList";
-import { ComponentPanel } from "./panels/ComponentPanel";
-import { ConfirmDialog } from "./dialogs/ConfirmDialog";
-import { useToast } from "./ui/Toast";
-import { ThemeToggle } from "./theme/ThemeToggle";
-import { ImageExport } from "./dialogs/ImageExport";
-import { DocumentationPanel } from "./panels/DocumentationPanel";
-import { RightPanelStrip } from "./panels/RightPanelStrip";
-import { UnifiedStyleBar } from "./panels/UnifiedStyleBar";
-import { KeyboardShortcutsPanel } from "./dialogs/KeyboardShortcutsPanel";
-import { WelcomeModal } from "./dialogs/WelcomeModal";
+import {
+  ComponentPanel,
+  DocumentationPanel,
+  FrameList,
+  RightPanelStrip,
+  UnifiedStyleBar,
+} from "./panels";
+import {
+  ConfirmDialog,
+  ImageExport,
+  KeyboardShortcutsPanel,
+  WelcomeModal,
+} from "./dialogs";
+import { ThemeToggle } from "./theme";
 import { DEFAULT_STROKE_COLOR, DEFAULT_FILL_COLOR } from "@/lib/colors";
 import {
   // Constants

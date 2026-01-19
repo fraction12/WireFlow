@@ -43,20 +43,24 @@ components/
 │   ├── renderers.ts       # Sketch-style drawing functions
 │   └── utils.ts           # ID generation, bound text helpers
 ├── panels/                 # Sidebar panel components
+│   ├── index.ts           # Barrel exports
 │   ├── ComponentPanel.tsx # Component library browser
 │   ├── DocumentationPanel.tsx # Element annotations
 │   ├── FrameList.tsx      # Frame/page management
 │   ├── RightPanelStrip.tsx # Right sidebar toggle
 │   └── UnifiedStyleBar.tsx # Style controls
 ├── dialogs/                # Modal & dialog components
+│   ├── index.ts           # Barrel exports
 │   ├── ConfirmDialog.tsx  # Yes/no confirmation
 │   ├── ImageExport.tsx    # PNG/SVG export
 │   ├── KeyboardShortcutsPanel.tsx # Help panel
 │   └── WelcomeModal.tsx   # First-time user guide
 ├── theme/                  # Theme system
+│   ├── index.ts           # Barrel exports
 │   ├── ThemeProvider.tsx  # Dark/light mode context
 │   └── ThemeToggle.tsx    # Theme switcher
 ├── ui/                     # Reusable UI components
+│   ├── index.ts           # Barrel exports
 │   ├── ColorPicker.tsx    # Color selection
 │   ├── Divider.tsx        # Visual separator
 │   ├── Toast.tsx          # Notification system
@@ -128,7 +132,8 @@ All types defined in `lib/types.ts`. New types MUST go there.
 
 **New Panel/Dialog:**
 1. Create component in `components/panels/` or `components/dialogs/`
-2. Import and use in `Canvas.tsx`
+2. Add export to corresponding `index.ts` barrel file
+3. Import and use in `Canvas.tsx`
 
 ## Additional Documentation
 
