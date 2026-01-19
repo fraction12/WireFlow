@@ -135,6 +135,22 @@ All types defined in `lib/types.ts`. New types MUST go there.
 2. Add export to corresponding `index.ts` barrel file
 3. Import and use in `Canvas.tsx`
 
+## Project Management Hub
+
+**Location:** `C:\Users\Dushyant\Desktop\WFLocal\`
+
+This external folder contains task tracking and documentation (not in git). **You MUST use this for all project management:**
+
+- **Tasks**: Log all tasks in `WFLocal/tasks/` (backlog.md → active.md → completed.md)
+- **Feature Specs**: Write specs in `WFLocal/docs/features/` before major implementations
+- **Decisions**: Document architecture decisions in `WFLocal/docs/decisions/`
+- **Changelog**: Update `WFLocal/releases/changelog.md` when features ship
+
+**At session start**: Check `WFLocal/tasks/active.md` for in-progress work
+**At session end**: Update task statuses and document any decisions made
+
+See `WFLocal/CLAUDE.md` for full instructions.
+
 ## Additional Documentation
 
 See these files for detailed information:
