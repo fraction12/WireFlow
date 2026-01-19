@@ -88,11 +88,12 @@ export function useMCPBridge(
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptRef = useRef(0);
   const isConnectedRef = useRef(false);
+  const hasLoggedDisconnectRef = useRef(false);
 
   const config = {
     url: "ws://localhost:3001",
-    initialDelay: 1000,
-    maxDelay: 30000,
+    initialDelay: 2000,
+    maxDelay: 60000,
     backoffMultiplier: 2,
   };
 
@@ -117,9 +118,10 @@ export function useMCPBridge(
       const ws = new WebSocket(config.url);
 
       ws.onopen = () => {
-        console.log("[MCP Bridge] Connected to MCP server");
+        console.log("[MCP Bridge] Connected to MCP server on port 3001");
         reconnectAttemptRef.current = 0;
         isConnectedRef.current = true;
+        hasLoggedDisconnectRef.current = false;
 
         // Send connected event
         ws.send(
@@ -139,13 +141,14 @@ export function useMCPBridge(
       ws.onmessage = handleMessage;
 
       ws.onclose = (event) => {
-        console.log(
-          "[MCP Bridge] Disconnected:",
-          event.code,
-          event.reason
-        );
+        const wasConnected = isConnectedRef.current;
         isConnectedRef.current = false;
         wsRef.current = null;
+
+        // Only log disconnection if we were previously connected
+        if (wasConnected) {
+          console.log("[MCP Bridge] Disconnected from MCP server");
+        }
 
         // Attempt reconnect if not intentional close
         if (event.code !== 1000 && enabled) {
@@ -153,8 +156,12 @@ export function useMCPBridge(
         }
       };
 
-      ws.onerror = (error) => {
-        console.error("[MCP Bridge] WebSocket error:", error);
+      ws.onerror = () => {
+        // Only log once per session to avoid console spam
+        if (!hasLoggedDisconnectRef.current) {
+          hasLoggedDisconnectRef.current = true;
+          console.log("[MCP Bridge] MCP server not available at ws://localhost:3001 - will retry in background");
+        }
       };
 
       wsRef.current = ws;
@@ -171,9 +178,10 @@ export function useMCPBridge(
       config.maxDelay
     );
 
-    console.log(
-      `[MCP Bridge] Reconnecting in ${delay}ms (attempt ${reconnectAttemptRef.current + 1})`
-    );
+    // Only log reconnect attempts occasionally to reduce noise
+    if (reconnectAttemptRef.current === 0 || reconnectAttemptRef.current % 5 === 0) {
+      console.log(`[MCP Bridge] Will retry connection in ${Math.round(delay / 1000)}s`);
+    }
 
     reconnectTimeoutRef.current = setTimeout(() => {
       reconnectAttemptRef.current++;
@@ -332,6 +340,61 @@ function processRequest(
 }
 
 // ============================================================
+// Validation Helpers
+// ============================================================
+
+const CANVAS_MIN = 0;
+const CANVAS_MAX = 2000;
+const MIN_DIMENSION = 1;
+
+interface ValidationResult {
+  valid: boolean;
+  error?: { code: string; message: string };
+}
+
+function validateCoordinates(x: number, y: number): ValidationResult {
+  if (typeof x !== "number" || typeof y !== "number" || isNaN(x) || isNaN(y)) {
+    return {
+      valid: false,
+      error: { code: "INVALID_COORDINATES", message: "Coordinates must be valid numbers" },
+    };
+  }
+  if (x < CANVAS_MIN || x > CANVAS_MAX || y < CANVAS_MIN || y > CANVAS_MAX) {
+    return {
+      valid: false,
+      error: {
+        code: "OUT_OF_BOUNDS",
+        message: `Coordinates must be between ${CANVAS_MIN} and ${CANVAS_MAX}. Got x=${x}, y=${y}`,
+      },
+    };
+  }
+  return { valid: true };
+}
+
+function validateDimensions(width: number, height: number): ValidationResult {
+  if (typeof width !== "number" || typeof height !== "number" || isNaN(width) || isNaN(height)) {
+    return {
+      valid: false,
+      error: { code: "INVALID_DIMENSIONS", message: "Dimensions must be valid numbers" },
+    };
+  }
+  if (width < MIN_DIMENSION || height < MIN_DIMENSION) {
+    return {
+      valid: false,
+      error: {
+        code: "INVALID_DIMENSIONS",
+        message: `Dimensions must be at least ${MIN_DIMENSION}. Got width=${width}, height=${height}`,
+      },
+    };
+  }
+  return { valid: true };
+}
+
+function clampToCanvas(value: number): number {
+  return Math.max(CANVAS_MIN, Math.min(CANVAS_MAX, value));
+}
+
+// ============================================================
 // Request Handlers
 // ============================================================
 
@@ -416,14 +479,25 @@ function handleCreateRectangle(
     fillColor?: string;
   };
 
+  // Validate before recording snapshot
+  const coordValidation = validateCoordinates(params.x, params.y);
+  if (!coordValidation.valid) {
+    return { type: "error", correlationId, timestamp, success: false, error: coordValidation.error };
+  }
+
+  const dimValidation = validateDimensions(params.width, params.height);
+  if (!dimValidation.valid) {
+    return { type: "error", correlationId, timestamp, success: false, error: dimValidation.error };
+  }
+
   callbacks.recordSnapshot();
 
   const id = callbacks.generateId();
   const newElement: CanvasElement = {
     id,
     type: "rectangle",
-    x: params.x,
-    y: params.y,
+    x: clampToCanvas(params.x),
+    y: clampToCanvas(params.y),
     width: params.width,
     height: params.height,
     style: {
@@ -458,14 +532,25 @@ function handleCreateEllipse(
     fillColor?: string;
   };
 
+  // Validate before recording snapshot
+  const coordValidation = validateCoordinates(params.x, params.y);
+  if (!coordValidation.valid) {
+    return { type: "error", correlationId, timestamp, success: false, error: coordValidation.error };
+  }
+
+  const dimValidation = validateDimensions(params.width, params.height);
+  if (!dimValidation.valid) {
+    return { type: "error", correlationId, timestamp, success: false, error: dimValidation.error };
+  }
+
   callbacks.recordSnapshot();
 
   const id = callbacks.generateId();
   const newElement: CanvasElement = {
     id,
     type: "ellipse",
-    x: params.x,
-    y: params.y,
+    x: clampToCanvas(params.x),
+    y: clampToCanvas(params.y),
     width: params.width,
     height: params.height,
     style: {
@@ -499,14 +584,20 @@ function handleCreateText(
     textAlign?: "left" | "center" | "right";
   };
 
+  // Validate before recording snapshot
+  const coordValidation = validateCoordinates(params.x, params.y);
+  if (!coordValidation.valid) {
+    return { type: "error", correlationId, timestamp, success: false, error: coordValidation.error };
+  }
+
   callbacks.recordSnapshot();
 
   const id = callbacks.generateId();
   const newElement: CanvasElement = {
     id,
     type: "text",
-    x: params.x,
-    y: params.y,
+    x: clampToCanvas(params.x),
+    y: clampToCanvas(params.y),
     width: 100,
     height: 24,
     content: params.content,
@@ -540,20 +631,35 @@ function handleCreateArrow(
     strokeColor?: string;
   };
 
+  // Validate before recording snapshot
+  const startValidation = validateCoordinates(params.startX, params.startY);
+  if (!startValidation.valid) {
+    return { type: "error", correlationId, timestamp, success: false, error: startValidation.error };
+  }
+  const endValidation = validateCoordinates(params.endX, params.endY);
+  if (!endValidation.valid) {
+    return { type: "error", correlationId, timestamp, success: false, error: endValidation.error };
+  }
+
   callbacks.recordSnapshot();
+
+  const startX = clampToCanvas(params.startX);
+  const startY = clampToCanvas(params.startY);
+  const endX = clampToCanvas(params.endX);
+  const endY = clampToCanvas(params.endY);
 
   const id = callbacks.generateId();
   const newElement: CanvasElement = {
     id,
     type: "arrow",
-    x: Math.min(params.startX, params.endX),
-    y: Math.min(params.startY, params.endY),
-    width: Math.abs(params.endX - params.startX),
-    height: Math.abs(params.endY - params.startY),
-    startX: params.startX,
-    startY: params.startY,
-    endX: params.endX,
-    endY: params.endY,
+    x: Math.min(startX, endX),
+    y: Math.min(startY, endY),
+    width: Math.abs(endX - startX) || 1,
+    height: Math.abs(endY - startY) || 1,
+    startX,
+    startY,
+    endX,
+    endY,
     style: {
       strokeColor: params.strokeColor || "#6b7280",
       fillColor: "transparent",
@@ -585,20 +691,35 @@ function handleCreateLine(
     strokeColor?: string;
   };
 
+  // Validate before recording snapshot
+  const startValidation = validateCoordinates(params.startX, params.startY);
+  if (!startValidation.valid) {
+    return { type: "error", correlationId, timestamp, success: false, error: startValidation.error };
+  }
+  const endValidation = validateCoordinates(params.endX, params.endY);
+  if (!endValidation.valid) {
+    return { type: "error", correlationId, timestamp, success: false, error: endValidation.error };
+  }
+
   callbacks.recordSnapshot();
+
+  const startX = clampToCanvas(params.startX);
+  const startY = clampToCanvas(params.startY);
+  const endX = clampToCanvas(params.endX);
+  const endY = clampToCanvas(params.endY);
 
   const id = callbacks.generateId();
   const newElement: CanvasElement = {
     id,
     type: "line",
-    x: Math.min(params.startX, params.endX),
-    y: Math.min(params.startY, params.endY),
-    width: Math.abs(params.endX - params.startX),
-    height: Math.abs(params.endY - params.startY),
-    startX: params.startX,
-    startY: params.startY,
-    endX: params.endX,
-    endY: params.endY,
+    x: Math.min(startX, endX),
+    y: Math.min(startY, endY),
+    width: Math.abs(endX - startX) || 1,
+    height: Math.abs(endY - startY) || 1,
+    startX,
+    startY,
+    endX,
+    endY,
     style: {
       strokeColor: params.strokeColor || "#6b7280",
       fillColor: "transparent",
@@ -641,6 +762,25 @@ function handleUpdateElement(
     };
   }
 
+  // Validate coordinate updates before recording snapshot
+  if (typeof updates.x === "number" || typeof updates.y === "number") {
+    const x = typeof updates.x === "number" ? updates.x : element.x;
+    const y = typeof updates.y === "number" ? updates.y : element.y;
+    const coordValidation = validateCoordinates(x, y);
+    if (!coordValidation.valid) {
+      return { type: "error", correlationId, timestamp, success: false, error: coordValidation.error };
+    }
+  }
+
+  if (typeof updates.width === "number" || typeof updates.height === "number") {
+    const width = typeof updates.width === "number" ? updates.width : element.width;
+    const height = typeof updates.height === "number" ? updates.height : element.height;
+    const dimValidation = validateDimensions(width, height);
+    if (!dimValidation.valid) {
+      return { type: "error", correlationId, timestamp, success: false, error: dimValidation.error };
+    }
+  }
+
   callbacks.recordSnapshot();
 
   callbacks.setElements((prev) =>
@@ -649,9 +789,9 @@ function handleUpdateElement(
 
       const updated = { ...el };
 
-      // Apply position updates
-      if (typeof updates.x === "number") updated.x = updates.x;
-      if (typeof updates.y === "number") updated.y = updates.y;
+      // Apply position updates (with clamping)
+      if (typeof updates.x === "number") updated.x = clampToCanvas(updates.x);
+      if (typeof updates.y === "number") updated.y = clampToCanvas(updates.y);
       if (typeof updates.width === "number") updated.width = updates.width;
       if (typeof updates.height === "number") updated.height = updates.height;
 

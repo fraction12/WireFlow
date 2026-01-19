@@ -28,7 +28,8 @@
       "Bash(while read f)",
       "Bash(find:*)",
       "Bash(git mv:*)",
-      "Bash(pnpm install:*)"
+      "Bash(pnpm install:*)",
+      "Bash(node mcp-server/dist/index.js:*)"
     ]
   }
 }
