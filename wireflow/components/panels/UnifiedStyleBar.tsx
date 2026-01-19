@@ -248,19 +248,6 @@ export function UnifiedStyleBar({
       role="toolbar"
       aria-label={`Element styling and text formatting. ${selectionLabel}`}
     >
-      {/* Selection count indicator (visible only for multi-selection) */}
-      {selectionCount > 1 && (
-        <>
-          <span
-            className="text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded"
-            aria-live="polite"
-          >
-            {selectionCount} selected
-          </span>
-          <div className="w-px h-6 bg-zinc-200 dark:bg-zinc-700" aria-hidden="true" />
-        </>
-      )}
-
       {/* ============================================ */}
       {/* COLOR CONTROLS (Always Enabled unless disabled) */}
       {/* ============================================ */}

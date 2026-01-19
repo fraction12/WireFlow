@@ -2355,11 +2355,16 @@ export function Canvas() {
         }
 
         // Single click (no Shift): select element and its group members
+        // Set clicked element as primary selection (enables intuitive drag behavior)
         setSelectedElementId(clickedElement.id);
 
         // If element is in a user-created group, select all group members
         if (elementGroup) {
           setSelectedElementIds(new Set(elementGroup.elementIds));
+        } else if (selectedElementIds.has(clickedElement.id) && selectedElementIds.size > 1) {
+          // Clicked element is part of existing multi-selection - preserve it
+          // This allows dragging multiple marquee-selected elements together
+          // No action needed - selectedElementIds remains unchanged
         } else {
           // Clear multi-selection for single element
           setSelectedElementIds(new Set());
