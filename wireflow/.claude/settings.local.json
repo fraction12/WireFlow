@@ -29,7 +29,16 @@
       "Bash(find:*)",
       "Bash(git mv:*)",
       "Bash(pnpm install:*)",
-      "Bash(node mcp-server/dist/index.js:*)"
+      "Bash(node mcp-server/dist/index.js:*)",
+      "Bash(node:*)",
+      "Bash(timeout:*)",
+      "mcp__wireflow__get_canvas_state",
+      "mcp__wireflow__get_elements",
+      "mcp__wireflow__create_frame",
+      "mcp__wireflow__create_rectangle",
+      "mcp__wireflow__create_text",
+      "mcp__wireflow__create_arrow",
+      "mcp__wireflow__create_line"
     ]
   }
 }
