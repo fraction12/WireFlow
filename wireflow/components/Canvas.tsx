@@ -5026,6 +5026,44 @@ export function Canvas() {
     }
   };
 
+  // Calculate canGroup: multiple ungrouped elements selected
+  const canGroup = (() => {
+    if (selectedElementIds.size < 2) return false;
+    const selectedElements = elements.filter((el) => selectedElementIds.has(el.id));
+    // Can't group if any element is already in a group
+    return !selectedElements.some((el) => el.elementGroupId || el.groupId);
+  })();
+
+  // Calculate canUngroup: selected element is in a group
+  const canUngroup = (() => {
+    const selectedElement = selectedElementId
+      ? elements.find((el) => el.id === selectedElementId)
+      : null;
+    if (!selectedElement) return false;
+    return !!(selectedElement.elementGroupId || selectedElement.groupId);
+  })();
+
+  // Handler for grouping selected elements from UnifiedStyleBar
+  const handleGroup = () => {
+    if (canGroup) {
+      createElementGroup();
+    }
+  };
+
+  // Handler for ungrouping elements from UnifiedStyleBar
+  const handleUngroup = () => {
+    const selectedElement = selectedElementId
+      ? elements.find((el) => el.id === selectedElementId)
+      : null;
+    if (!selectedElement) return;
+
+    if (selectedElement.elementGroupId) {
+      ungroupElements(selectedElement.elementGroupId);
+    } else if (selectedElement.groupId) {
+      ungroupComponent(selectedElement.groupId);
+    }
+  };
+
   // Handler for updating selected text element from UnifiedStyleBar
   const handleStyleBarTextUpdate = (updates: Partial<TextElement>) => {
     if (!selectedElementId) return;
@@ -5224,6 +5262,10 @@ export function Canvas() {
             fillPickerOpen={fillPickerOpen}
             onStrokePickerOpenChange={setStrokePickerOpen}
             onFillPickerOpenChange={setFillPickerOpen}
+            canGroup={canGroup}
+            canUngroup={canUngroup}
+            onGroup={handleGroup}
+            onUngroup={handleUngroup}
           />
         </div>
 

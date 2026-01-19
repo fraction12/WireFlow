@@ -14,6 +14,8 @@ import {
   AlignCenter,
   AlignRight,
   ChevronDown,
+  Group,
+  Ungroup,
 } from 'lucide-react';
 
 /** Indicator for mixed values in multi-selection */
@@ -39,6 +41,12 @@ interface UnifiedStyleBarProps {
   onStrokePickerOpenChange: (open: boolean) => void;
   onFillPickerOpenChange: (open: boolean) => void;
 
+  // Group/Ungroup controls
+  canGroup: boolean;
+  canUngroup: boolean;
+  onGroup: () => void;
+  onUngroup: () => void;
+
   // Optional: disabled state for locked elements
   disabled?: boolean;
 }
@@ -55,6 +63,10 @@ export function UnifiedStyleBar({
   fillPickerOpen,
   onStrokePickerOpenChange,
   onFillPickerOpenChange,
+  canGroup,
+  canUngroup,
+  onGroup,
+  onUngroup,
   disabled = false,
 }: UnifiedStyleBarProps) {
   const [showSizeDropdown, setShowSizeDropdown] = useState(false);
@@ -499,6 +511,37 @@ export function UnifiedStyleBar({
       >
         <RotateCcw size={16} />
       </button>
+
+      {/* Divider */}
+      <Divider orientation="vertical" />
+
+      {/* ============================================ */}
+      {/* GROUP/UNGROUP BUTTONS */}
+      {/* ============================================ */}
+      <div
+        className="flex items-center gap-0.5"
+        role="group"
+        aria-label="Element grouping"
+      >
+        <button
+          onClick={onGroup}
+          disabled={!canGroup}
+          className={`${buttonBase} w-8 ${buttonInactive} ${!canGroup ? buttonDisabled : ''}`}
+          title={canGroup ? 'Group selected elements (Ctrl+G)' : 'Select multiple elements to group'}
+          aria-label="Group selected elements"
+        >
+          <Group size={16} />
+        </button>
+        <button
+          onClick={onUngroup}
+          disabled={!canUngroup}
+          className={`${buttonBase} w-8 ${buttonInactive} ${!canUngroup ? buttonDisabled : ''}`}
+          title={canUngroup ? 'Ungroup elements (Ctrl+Shift+G)' : 'Select a grouped element to ungroup'}
+          aria-label="Ungroup elements"
+        >
+          <Ungroup size={16} />
+        </button>
+      </div>
     </div>
   );
 }
