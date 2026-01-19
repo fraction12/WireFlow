@@ -49,6 +49,8 @@ import {
 } from "./dialogs";
 import { ThemeToggle } from "./theme";
 import { DEFAULT_STROKE_COLOR, DEFAULT_FILL_COLOR } from "@/lib/colors";
+import { useMCPBridge, type MCPBridgeCallbacks } from "@/lib/mcpBridge";
+import { COMPONENT_TEMPLATES } from "@/lib/componentTemplates";
 import {
   // Constants
   ARROW_HEAD_LENGTH,
@@ -629,6 +631,105 @@ export function Canvas() {
 
     return () => clearTimeout(timeoutId);
   }, [frames, componentGroups, elementGroups, userComponents, componentInstances, activeFrameId]);
+
+  // MCP Bridge integration - enables Claude Code to control the canvas
+  const mcpBridgeCallbacks: MCPBridgeCallbacks = {
+    getState: () => ({
+      frames,
+      activeFrameId,
+      componentGroups,
+      elementGroups,
+      userComponents,
+      componentInstances,
+    }),
+    getElements: () => elements,
+    getSelectedElementIds: () => Array.from(selectedElementIds),
+    recordSnapshot,
+    setElements,
+    setSelectedElementIds,
+    setSelectedElementId,
+    setActiveFrameId,
+    addFrame: (name: string, frameType: FrameType) => {
+      const newFrame: Frame = {
+        id: generateFrameId(),
+        name,
+        type: frameType,
+        elements: [],
+        createdAt: new Date().toISOString(),
+      };
+      setFrames([...frames, newFrame]);
+      return newFrame.id;
+    },
+    createComponentGroup: (templateType: string, x: number, y: number) => {
+      const template = COMPONENT_TEMPLATES.find(t => t.type === templateType);
+      if (!template) return null;
+
+      recordSnapshot();
+
+      const groupId = `grp_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+      const elementIds: string[] = [];
+
+      const newElements: CanvasElement[] = [];
+      for (const tplEl of template.elements) {
+        const elId = generateId();
+        elementIds.push(elId);
+
+        const baseProps = {
+          id: elId,
+          x: x + tplEl.offsetX,
+          y: y + tplEl.offsetY,
+          width: tplEl.width,
+          height: tplEl.height,
+          semanticTag: tplEl.semanticTag,
+          description: tplEl.description,
+          groupId,
+          componentType: template.type,
+        };
+
+        if (tplEl.type === "text") {
+          newElements.push({
+            ...baseProps,
+            type: "text",
+            content: tplEl.content || "Text",
+            textAlign: tplEl.textAlign,
+          } as TextElement);
+        } else if (tplEl.type === "rectangle") {
+          newElements.push({ ...baseProps, type: "rectangle" } as RectangleElement);
+        } else if (tplEl.type === "ellipse") {
+          newElements.push({ ...baseProps, type: "ellipse" } as EllipseElement);
+        } else if (tplEl.type === "line") {
+          newElements.push({
+            ...baseProps,
+            type: "line",
+            startX: x + (tplEl.startX ?? tplEl.offsetX),
+            startY: y + (tplEl.startY ?? tplEl.offsetY),
+            endX: x + (tplEl.endX ?? tplEl.offsetX + tplEl.width),
+            endY: y + (tplEl.endY ?? tplEl.offsetY),
+          } as LineElement);
+        }
+      }
+
+      setElements([...elements, ...newElements]);
+
+      const group: ComponentGroup = {
+        id: groupId,
+        componentType: template.type,
+        x,
+        y,
+        elementIds,
+        createdAt: new Date().toISOString(),
+      };
+
+      setComponentGroups([...componentGroups, group]);
+
+      return { elementIds, groupId };
+    },
+    generateId,
+    generateFrameId,
+  };
+
+  // Initialize MCP bridge (connects to MCP server via WebSocket)
+  useMCPBridge(mcpBridgeCallbacks, true);
 
   // Helper function to get component group elements (defined before redraw)
   const getGroupElements = useCallback(

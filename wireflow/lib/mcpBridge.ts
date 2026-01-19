@@ -556,6 +556,7 @@ function handleCreateArrow(
     endY: params.endY,
     style: {
       strokeColor: params.strokeColor || "#6b7280",
+      fillColor: "transparent",
     },
   };
 
@@ -600,6 +601,7 @@ function handleCreateLine(
     endY: params.endY,
     style: {
       strokeColor: params.strokeColor || "#6b7280",
+      fillColor: "transparent",
     },
   };
 
@@ -620,10 +622,8 @@ function handleUpdateElement(
   timestamp: string,
   callbacks: MCPBridgeCallbacks
 ): MCPResponse {
-  const { elementId, updates } = request as {
-    elementId: string;
-    updates: Record<string, unknown>;
-  };
+  const elementId = request.elementId as string;
+  const updates = request.updates as Record<string, unknown>;
 
   const elements = callbacks.getElements();
   const element = elements.find((e) => e.id === elementId);
@@ -657,10 +657,10 @@ function handleUpdateElement(
 
       // Apply style updates
       if (updates.strokeColor || updates.fillColor) {
+        const currentStyle = updated.style || { strokeColor: "#6b7280", fillColor: "transparent" };
         updated.style = {
-          ...updated.style,
-          ...(updates.strokeColor && { strokeColor: updates.strokeColor as string }),
-          ...(updates.fillColor && { fillColor: updates.fillColor as string }),
+          strokeColor: typeof updates.strokeColor === "string" ? updates.strokeColor : currentStyle.strokeColor,
+          fillColor: typeof updates.fillColor === "string" ? updates.fillColor : currentStyle.fillColor,
         };
       }
 
@@ -705,7 +705,7 @@ function handleDeleteElements(
   timestamp: string,
   callbacks: MCPBridgeCallbacks
 ): MCPResponse {
-  const { elementIds } = request as { elementIds: string[] };
+  const elementIds = request.elementIds as string[];
 
   callbacks.recordSnapshot();
 
@@ -788,7 +788,7 @@ function handleSelectElements(
   timestamp: string,
   callbacks: MCPBridgeCallbacks
 ): MCPResponse {
-  const { elementIds } = request as { elementIds: string[] };
+  const elementIds = request.elementIds as string[];
 
   callbacks.setSelectedElementIds(new Set(elementIds));
   callbacks.setSelectedElementId(elementIds.length === 1 ? elementIds[0] : null);
@@ -844,11 +844,9 @@ function handleCreateComponent(
   timestamp: string,
   callbacks: MCPBridgeCallbacks
 ): MCPResponse {
-  const { templateType, x, y } = request as {
-    templateType: string;
-    x: number;
-    y: number;
-  };
+  const templateType = request.templateType as string;
+  const x = request.x as number;
+  const y = request.y as number;
 
   const result = callbacks.createComponentGroup(templateType, x, y);
 
@@ -903,7 +901,7 @@ function handleSwitchFrame(
   timestamp: string,
   callbacks: MCPBridgeCallbacks
 ): MCPResponse {
-  const { frameId } = request as { frameId: string };
+  const frameId = request.frameId as string;
 
   const state = callbacks.getState();
   const frame = state.frames.find((f) => f.id === frameId);
@@ -938,10 +936,8 @@ function handleCreateFrame(
   timestamp: string,
   callbacks: MCPBridgeCallbacks
 ): MCPResponse {
-  const { name, frameType = "page" } = request as {
-    name: string;
-    frameType?: FrameType;
-  };
+  const name = request.name as string;
+  const frameType = (request.frameType as FrameType) || "page";
 
   const frameId = callbacks.addFrame(name, frameType);
 
