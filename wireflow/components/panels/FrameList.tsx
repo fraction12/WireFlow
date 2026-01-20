@@ -110,7 +110,7 @@ export function FrameList({
 
   return (
     <nav
-      className="w-64 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-700 flex flex-col max-h-[50%] shrink-0 transition-all duration-200 motion-reduce:transition-none overflow-hidden"
+      className="w-64 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-700 flex flex-col shrink-0 transition-all duration-200 motion-reduce:transition-none overflow-hidden"
       aria-label="Frames navigation"
     >
       {/* Content only visible after opening animation completes / before closing animation starts */}

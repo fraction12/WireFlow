@@ -10,6 +10,7 @@ import type {
   FreedrawElement,
 } from '@/lib/types';
 import { useToast } from '../ui/Toast';
+import { wrapText } from '../canvas-core/renderers';
 
 interface ImageExportProps {
   elements: CanvasElement[];
@@ -288,10 +289,12 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
         const fontWeight = textEl.fontWeight || 'normal';
         const fontStyle = textEl.fontStyle || 'normal';
         const textAlign = textEl.textAlign || 'left';
+        const lineHeight = textEl.lineHeight || Math.round(fontSize * 1.5);
+        const padding = 4; // Matches TEXT_PADDING from textMeasurement.ts
 
         ctx.font = `${fontStyle === 'italic' ? 'italic ' : ''}${fontWeight === 'bold' ? 'bold ' : ''}${fontSize}px sans-serif`;
         ctx.textAlign = textAlign;
-        ctx.textBaseline = 'top';
+        ctx.textBaseline = 'alphabetic';
 
         let textX: number;
         switch (textAlign) {
@@ -299,15 +302,23 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
             textX = x + element.width / 2;
             break;
           case 'right':
-            textX = x + element.width - 8;
+            textX = x + element.width - padding;
             break;
           default:
-            textX = x + 8;
+            textX = x + padding;
         }
 
         // Use element's stroke color for text fill (matches Canvas.tsx behavior)
         ctx.fillStyle = elementStrokeColor;
-        ctx.fillText(textEl.content || '', textX, y + 8);
+
+        // Wrap text to fit within element width
+        const maxWidth = element.width - padding * 2;
+        const lines = wrapText(ctx, textEl.content || '', maxWidth);
+
+        // Render each line of wrapped text
+        lines.forEach((line, index) => {
+          ctx.fillText(line, textX, y + fontSize + index * lineHeight);
+        });
       } else if (element.type === 'arrow') {
         const arrowEl = element as ArrowElement;
         const startX = arrowEl.startX - offsetX;
@@ -462,6 +473,8 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
           const fontWeight = textEl.fontWeight || 'normal';
           const fontStyle = textEl.fontStyle || 'normal';
           const textAlign = textEl.textAlign || 'left';
+          const lineHeight = textEl.lineHeight || Math.round(fontSize * 1.5);
+          const padding = 4; // Matches TEXT_PADDING from textMeasurement.ts
 
           let textX: number;
           let anchor: string;
@@ -471,18 +484,41 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
               anchor = 'middle';
               break;
             case 'right':
-              textX = x + element.width - 8;
+              textX = x + element.width - padding;
               anchor = 'end';
               break;
             default:
-              textX = x + 8;
+              textX = x + padding;
               anchor = 'start';
           }
 
-          const textY = y + fontSize + 8;
           const style = `font-size:${fontSize}px;font-weight:${fontWeight};font-style:${fontStyle};font-family:sans-serif`;
-          const escapedContent = (textEl.content || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-          svgContent += `    <text x="${textX}" y="${textY}" fill="${elementStrokeColor}" text-anchor="${anchor}" style="${style}">${escapedContent}</text>\n`;
+
+          // Create offscreen canvas to measure text for wrapping
+          const measureCanvas = document.createElement('canvas');
+          const measureCtx = measureCanvas.getContext('2d');
+          let lines: string[] = [textEl.content || ''];
+
+          if (measureCtx) {
+            measureCtx.font = `${fontStyle === 'italic' ? 'italic ' : ''}${fontWeight === 'bold' ? 'bold ' : ''}${fontSize}px sans-serif`;
+            const maxWidth = element.width - padding * 2;
+            lines = wrapText(measureCtx, textEl.content || '', maxWidth);
+          }
+
+          // Build SVG text element with tspan for each line
+          const textY = y + fontSize;
+          const escapeLine = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+          if (lines.length === 1) {
+            svgContent += `    <text x="${textX}" y="${textY}" fill="${elementStrokeColor}" text-anchor="${anchor}" style="${style}">${escapeLine(lines[0])}</text>\n`;
+          } else {
+            svgContent += `    <text x="${textX}" y="${textY}" fill="${elementStrokeColor}" text-anchor="${anchor}" style="${style}">\n`;
+            lines.forEach((line, index) => {
+              const dy = index === 0 ? 0 : lineHeight;
+              svgContent += `      <tspan x="${textX}" dy="${dy}">${escapeLine(line)}</tspan>\n`;
+            });
+            svgContent += `    </text>\n`;
+          }
         } else if (element.type === 'arrow') {
           const arrowEl = element as ArrowElement;
           const startX = arrowEl.startX - bounds.x;

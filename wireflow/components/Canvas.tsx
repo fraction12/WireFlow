@@ -3712,6 +3712,33 @@ export function Canvas() {
         lineEl.endY += DUPLICATE_OFFSET;
       }
 
+      // Recalculate height for text elements with fixed width (autoWidth: false)
+      // to ensure wrapped text content fits within the element bounds
+      if (newElement.type === "text") {
+        const textEl = newElement as TextElement;
+        if (textEl.autoWidth === false && textEl.content) {
+          // Create a measurement canvas to calculate wrapped lines
+          const measureCanvas = document.createElement("canvas");
+          const measureCtx = measureCanvas.getContext("2d");
+          if (measureCtx) {
+            const fontSize = textEl.fontSize || 16;
+            const fontWeight = textEl.fontWeight || "normal";
+            const fontStyle = textEl.fontStyle || "normal";
+            const lineHeight = textEl.lineHeight || Math.round(fontSize * 1.5);
+            const fontString = `${fontStyle === "italic" ? "italic " : ""}${fontWeight === "bold" ? "bold " : ""}${fontSize}px sans-serif`;
+            measureCtx.font = fontString;
+
+            const maxWidth = textEl.width - TEXT_PADDING * 2;
+            const lines = wrapText(measureCtx, textEl.content, maxWidth);
+            const calculatedHeight = Math.max(
+              lineHeight + TEXT_PADDING * 2,
+              lines.length * lineHeight + TEXT_PADDING * 2
+            );
+            textEl.height = calculatedHeight;
+          }
+        }
+      }
+
       newElements.push(newElement);
     });
 
@@ -6051,7 +6078,7 @@ export function Canvas() {
                     paddingBottom: `${TEXT_PADDING * zoom}px`,
                     // Fully transparent - WYSIWYG
                     background: "transparent",
-                    color: canvasTheme.sketch,
+                    color: textEl.style?.strokeColor || canvasTheme.sketch,
                     caretColor: canvasTheme.selected,
                     // Remove default styling
                     margin: 0,
