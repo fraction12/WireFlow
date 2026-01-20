@@ -299,6 +299,8 @@ export interface ComponentElementDef {
   autoWidth?: boolean;
   semanticTag?: SemanticTag;
   description?: string;
+  // Style properties
+  style?: ElementStyle;
   // Arrow/line specific
   startX?: number;
   startY?: number;

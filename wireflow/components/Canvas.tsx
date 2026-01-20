@@ -975,7 +975,7 @@ export function Canvas() {
 
     // Draw grid if enabled
     if (showGrid) {
-      ctx.strokeStyle = "rgba(200, 200, 200, 0.3)";
+      ctx.strokeStyle = canvasTheme.grid;
       ctx.lineWidth = 0.5;
 
       // Calculate visible area in canvas coordinates
@@ -1390,7 +1390,27 @@ export function Canvas() {
             ctx.arc(handle.x, handle.y, HANDLE_SIZE / 2, 0, Math.PI * 2);
             ctx.fill();
           });
-        } else if (element.type !== "text" && element.type !== "freedraw") {
+        } else if (element.type === "text") {
+          // Horizontal edge handles for text elements (east/west only)
+          // These allow manual width control for text wrapping
+          // Skip resize handles for bound text (text inside containers)
+          const textEl = element as TextElement;
+          if (!textEl.containerId) {
+            const centerY = element.y + element.height / 2;
+            const leftX = element.x - SELECTION_PADDING;
+            const rightX = element.x + element.width + SELECTION_PADDING;
+
+            // Draw west (left) handle
+            ctx.beginPath();
+            ctx.arc(leftX, centerY, HANDLE_SIZE / 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw east (right) handle
+            ctx.beginPath();
+            ctx.arc(rightX, centerY, HANDLE_SIZE / 2, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        } else if (element.type !== "freedraw") {
           // Corner handles for rectangles, ellipses, and diamonds
           // Position handles at the selection border corners (outside the element)
           const centerX = element.x + element.width / 2;
@@ -1550,9 +1570,13 @@ export function Canvas() {
         const y = instance.y + def.offsetY;
         const seed = parseInt(def.id.split("_")[1]) || 0;
 
-        // Set colors
-        ctx.strokeStyle = isSelected ? canvasTheme.selected : canvasTheme.sketch;
-        ctx.fillStyle = isSelected ? canvasTheme.selected : canvasTheme.sketch;
+        // Use element's custom colors or fall back to theme sketch color
+        const defStrokeColor = def.style?.strokeColor || canvasTheme.sketch;
+        const defFillColor = def.style?.fillColor || 'transparent';
+
+        // Set colors - selected instances still show their colors, just like regular elements
+        ctx.strokeStyle = defStrokeColor;
+        ctx.fillStyle = defStrokeColor; // For text and other fills that use stroke color
         ctx.lineWidth = 1.5;
 
         // Apply rotation if present
@@ -1570,10 +1594,41 @@ export function Canvas() {
 
         // Draw based on element type
         if (def.type === "rectangle") {
+          // Fill rectangle first if fill color is set
+          if (defFillColor && defFillColor !== 'transparent') {
+            ctx.fillStyle = defFillColor;
+            ctx.fillRect(x, y, def.width, def.height);
+          }
           drawSketchRect(ctx, x, y, def.width, def.height, seed);
         } else if (def.type === "ellipse") {
+          // Fill ellipse first if fill color is set
+          if (defFillColor && defFillColor !== 'transparent') {
+            ctx.fillStyle = defFillColor;
+            ctx.beginPath();
+            ctx.ellipse(
+              x + def.width / 2,
+              y + def.height / 2,
+              def.width / 2,
+              def.height / 2,
+              0, 0, Math.PI * 2
+            );
+            ctx.fill();
+          }
           drawSketchEllipse(ctx, x, y, def.width, def.height, seed);
         } else if (def.type === "diamond") {
+          // Fill diamond first if fill color is set
+          if (defFillColor && defFillColor !== 'transparent') {
+            ctx.fillStyle = defFillColor;
+            const cx = x + def.width / 2;
+            const cy = y + def.height / 2;
+            ctx.beginPath();
+            ctx.moveTo(cx, y); // Top
+            ctx.lineTo(x + def.width, cy); // Right
+            ctx.lineTo(cx, y + def.height); // Bottom
+            ctx.lineTo(x, cy); // Left
+            ctx.closePath();
+            ctx.fill();
+          }
           drawSketchDiamond(ctx, x, y, def.width, def.height, seed);
         } else if (def.type === "text") {
           // Get override for text content if any
@@ -1943,15 +1998,38 @@ export function Canvas() {
   };
 
   // Check if click is on a resize handle.
-  // Returns handle ID: 'nw'|'ne'|'sw'|'se' for rectangles, 'start'|'end' for arrows/lines.
-  // Text elements have no resize handles (they use auto-width).
+  // Returns handle ID: 'nw'|'ne'|'sw'|'se' for rectangles, 'start'|'end' for arrows/lines,
+  // 'e'|'w' for text elements (horizontal-only resize).
   const getResizeHandle = (
     x: number,
     y: number,
     element: CanvasElement,
   ): string | null => {
-    // Text elements don't have resize handles - they use auto-width
+    // Text elements have horizontal resize handles (east/west) for width control
+    // Skip for bound text (text inside containers) - their size is controlled by the container
     if (element.type === "text") {
+      const textEl = element as TextElement;
+      if (textEl.containerId) {
+        return null;
+      }
+      const centerY = element.y + element.height / 2;
+      const leftX = element.x - SELECTION_PADDING;
+      const rightX = element.x + element.width + SELECTION_PADDING;
+
+      // Check west (left) handle
+      if (
+        Math.abs(x - leftX) <= HANDLE_SIZE + HANDLE_TOLERANCE &&
+        Math.abs(y - centerY) <= HANDLE_SIZE + HANDLE_TOLERANCE
+      ) {
+        return "w";
+      }
+      // Check east (right) handle
+      if (
+        Math.abs(x - rightX) <= HANDLE_SIZE + HANDLE_TOLERANCE &&
+        Math.abs(y - centerY) <= HANDLE_SIZE + HANDLE_TOLERANCE
+      ) {
+        return "e";
+      }
       return null;
     }
 
@@ -2046,6 +2124,9 @@ export function Canvas() {
       case "ne":
       case "sw":
         return "cursor-nesw-resize";
+      case "e":
+      case "w":
+        return "cursor-ew-resize";
       case "start":
       case "end":
         return "cursor-crosshair";
@@ -2823,8 +2904,67 @@ export function Canvas() {
               return el;
             }),
           );
+        } else if (element.type === "text" && (resizeHandle === "e" || resizeHandle === "w")) {
+          // TEXT HORIZONTAL RESIZE MODE: Only adjust width, auto-wrap text
+          const textEl = element as TextElement;
+
+          // Compute anchor (the edge that stays fixed)
+          const anchorX = resizeHandle === "w"
+            ? initialBounds.x + initialBounds.width // Anchor is on the right (E side)
+            : initialBounds.x; // Anchor is on the left (W side)
+
+          // Compute new moving edge position
+          const movingEdgeInitialX = resizeHandle === "w"
+            ? initialBounds.x
+            : initialBounds.x + initialBounds.width;
+
+          let newMovingX = movingEdgeInitialX + dx;
+
+          // Clamp to minimum width
+          if (resizeHandle === "w") {
+            newMovingX = Math.min(newMovingX, anchorX - MIN_ELEMENT_SIZE);
+          } else {
+            newMovingX = Math.max(newMovingX, anchorX + MIN_ELEMENT_SIZE);
+          }
+
+          // Calculate new x and width
+          const newX = Math.min(anchorX, newMovingX);
+          const newWidth = Math.abs(newMovingX - anchorX);
+
+          // Calculate new height based on text wrapping with new width
+          const fontSize = textEl.fontSize || 16;
+          const fontWeight = textEl.fontWeight || "normal";
+          const fontStyle = textEl.fontStyle || "normal";
+          const lineHeight = textEl.lineHeight || Math.round(fontSize * 1.5);
+
+          // Create an offscreen canvas to measure text
+          const measureCanvas = document.createElement("canvas");
+          const measureCtx = measureCanvas.getContext("2d");
+          if (measureCtx) {
+            const fontString = `${fontStyle === "italic" ? "italic " : ""}${fontWeight === "bold" ? "bold " : ""}${fontSize}px sans-serif`;
+            measureCtx.font = fontString;
+
+            const maxWidth = newWidth - TEXT_PADDING * 2;
+            const lines = wrapText(measureCtx, textEl.content || "", maxWidth);
+            const newHeight = Math.max(lineHeight, lines.length * lineHeight);
+
+            setElements(
+              elements.map((el) => {
+                if (el.id === selectedElementId && el.type === "text") {
+                  return {
+                    ...el,
+                    x: newX,
+                    width: newWidth,
+                    height: newHeight,
+                    autoWidth: false, // Disable auto-width when manually resized
+                  } as TextElement;
+                }
+                return el;
+              }),
+            );
+          }
         } else if (element.type !== "arrow" && element.type !== "line") {
-          // RECTANGLE/TEXT RESIZE MODE: Compute new bounds from the snapshot.
+          // RECTANGLE RESIZE MODE: Compute new bounds from the snapshot.
           //
           // Handle-to-Anchor Mapping:
           //   Handle   |  Fixed Anchor Corner
@@ -4092,8 +4232,116 @@ export function Canvas() {
         // Prevent default browser behavior (e.g., navigate back)
         e.preventDefault();
 
+        // Handle multi-selection deletion (including groups)
+        if (selectedElementIds.size > 1) {
+          // Collect all selected elements
+          const selectedElements = elements.filter((el) =>
+            selectedElementIds.has(el.id)
+          );
+
+          // Collect unique group IDs from selected elements
+          const componentGroupIds = new Set<string>();
+          const elementGroupIds = new Set<string>();
+          let ungroupedCount = 0;
+
+          selectedElements.forEach((el) => {
+            if (el.groupId) {
+              componentGroupIds.add(el.groupId);
+            } else if (el.elementGroupId) {
+              elementGroupIds.add(el.elementGroupId);
+            } else {
+              ungroupedCount++;
+            }
+          });
+
+          const totalGroups = componentGroupIds.size + elementGroupIds.size;
+
+          // If any groups are involved, show confirmation dialog
+          if (totalGroups > 0) {
+            // Build message parts
+            const parts: string[] = [];
+            if (componentGroupIds.size > 0) {
+              parts.push(
+                `${componentGroupIds.size} component${componentGroupIds.size > 1 ? "s" : ""}`
+              );
+            }
+            if (elementGroupIds.size > 0) {
+              parts.push(
+                `${elementGroupIds.size} group${elementGroupIds.size > 1 ? "s" : ""}`
+              );
+            }
+            if (ungroupedCount > 0) {
+              parts.push(
+                `${ungroupedCount} element${ungroupedCount > 1 ? "s" : ""}`
+              );
+            }
+
+            const title =
+              totalGroups === 1 && ungroupedCount === 0
+                ? componentGroupIds.size > 0
+                  ? "Delete component?"
+                  : "Delete group?"
+                : "Delete selection?";
+
+            const message =
+              `This will delete ${parts.join(" and ")}. This action cannot be undone.`;
+
+            showConfirmDialog(
+              title,
+              message,
+              () => {
+                recordSnapshot(); // Record for undo
+
+                // Delete all selected elements
+                setElements(
+                  elements.filter((el) => !selectedElementIds.has(el.id))
+                );
+
+                // Clean up component group records
+                if (componentGroupIds.size > 0) {
+                  setComponentGroups(
+                    componentGroups.filter(
+                      (grp) => !componentGroupIds.has(grp.id)
+                    )
+                  );
+                }
+
+                // Clean up element group records
+                if (elementGroupIds.size > 0) {
+                  setElementGroups(
+                    elementGroups.filter(
+                      (grp) => !elementGroupIds.has(grp.id)
+                    )
+                  );
+                }
+
+                // Clear all selections
+                setSelectedElementIds(new Set());
+                setSelectedElementId(null);
+                setSelectedGroupId(null);
+                setSelectedByClick(false);
+
+                announce(
+                  `Deleted ${parts.join(" and ")}`
+                );
+              },
+              "danger"
+            );
+          } else {
+            // No groups, just delete individual elements
+            recordSnapshot(); // Record for undo
+            const count = selectedElementIds.size;
+            setElements(
+              elements.filter((el) => !selectedElementIds.has(el.id))
+            );
+            setSelectedElementIds(new Set());
+            setSelectedElementId(null);
+            setSelectedByClick(false);
+            announce(`Deleted ${count} elements`);
+          }
+        }
         // If element is in a user-created element group, delete entire group
-        if (element.elementGroupId) {
+        else if (element.elementGroupId) {
           const groupId = element.elementGroupId;
           showConfirmDialog(
             "Delete group?",
@@ -4118,16 +4366,6 @@ export function Canvas() {
             },
             "danger",
           );
-        }
-        // If multiple elements are selected (not in a group), delete all selected
-        else if (selectedElementIds.size > 1) {
-          recordSnapshot(); // Record for undo
-          const count = selectedElementIds.size;
-          setElements(elements.filter((el) => !selectedElementIds.has(el.id)));
-          setSelectedElementIds(new Set());
-          setSelectedElementId(null);
-          setSelectedByClick(false);
-          announce(`Deleted ${count} elements`);
         }
         // Remove single element from state
         else {
@@ -4728,6 +4966,7 @@ export function Canvas() {
       rotation: element.rotation,
       semanticTag: element.semanticTag,
       description: element.description,
+      style: element.style,
     };
 
     // Add type-specific properties
@@ -4948,6 +5187,7 @@ export function Canvas() {
             semanticTag: def.semanticTag,
             description: def.description,
             elementGroupId: newGroupId,
+            style: def.style,
           };
 
           // Apply overrides if any
@@ -5711,7 +5951,7 @@ export function Canvas() {
                   autoCorrect="off"
                   autoCapitalize="off"
                   data-gramm="false"
-                  className="absolute resize-none overflow-hidden focus:outline-2 focus:outline-offset-1 focus:outline-blue-400/60"
+                  className="absolute resize-none overflow-hidden border border-blue-400/50 rounded-sm"
                   style={{
                     left: textareaX * zoom + pan.x,
                     // Offset top to match canvas baseline rendering
@@ -5737,7 +5977,6 @@ export function Canvas() {
                     caretColor: canvasTheme.selected,
                     // Remove default styling
                     margin: 0,
-                    border: "none",
                     boxShadow: "none",
                     WebkitAppearance: "none",
                   }}
@@ -5804,8 +6043,11 @@ export function Canvas() {
         elements={elements}
         componentGroups={componentGroups}
         elementGroups={elementGroups}
+        userComponents={userComponents}
+        componentInstances={componentInstances.filter(i => i.frameId === activeFrameId)}
         selectedElementId={selectedElementId}
         selectedElementIds={selectedElementIds}
+        selectedInstanceId={selectedInstanceId}
         onSelectElement={(elementId, addToSelection) => {
           if (addToSelection) {
             setSelectedElementIds(prev => new Set([...prev, elementId]));
@@ -5813,6 +6055,7 @@ export function Canvas() {
             setSelectedElementId(elementId);
             setSelectedElementIds(new Set());
           }
+          setSelectedInstanceId(null); // Clear instance selection when selecting element
           setSelectedByClick(true);
         }}
         onSelectGroup={(groupId, groupType) => {
@@ -5824,8 +6067,15 @@ export function Canvas() {
           if (groupElementIds.length > 0) {
             setSelectedElementId(groupElementIds[0]);
             setSelectedElementIds(new Set(groupElementIds));
+            setSelectedInstanceId(null); // Clear instance selection when selecting group
             setSelectedByClick(true);
           }
+        }}
+        onSelectInstance={(instanceId) => {
+          setSelectedInstanceId(instanceId);
+          setSelectedElementId(null); // Clear element selection when selecting instance
+          setSelectedElementIds(new Set());
+          setSelectedByClick(true);
         }}
         onReorderElements={reorderElement}
         onToggleVisibility={toggleElementVisibility}

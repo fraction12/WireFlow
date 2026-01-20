@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, memo } from 'react';
 import type { ComponentTemplate, ComponentType, UserComponent } from '@/lib/types';
 import { COMPONENT_TEMPLATES } from '@/lib/componentTemplates';
+import { usePanelAnimation } from '@/lib/usePanelAnimation';
 import {
   ChevronRight,
   ChevronDown,
@@ -51,6 +52,9 @@ export function ComponentPanel({
   selectedElementGroupId,
   onConvertGroupToComponent,
 }: ComponentPanelProps) {
+  // Manage content visibility timing for smooth animation
+  const contentVisible = usePanelAnimation(isExpanded);
+
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'my' | ComponentType>('all');
   const [isMyComponentsExpanded, setIsMyComponentsExpanded] = useState(true);
   const [isTemplatesExpanded, setIsTemplatesExpanded] = useState(true);
@@ -109,8 +113,11 @@ export function ComponentPanel({
         isExpanded ? 'w-72' : 'w-0 border-l-0'
       }`}
     >
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center">
+      {/* Content only visible after opening animation completes / before closing animation starts */}
+      {contentVisible && (
+        <>
+          {/* Header */}
+          <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center">
         <h2 className="font-semibold text-zinc-900 dark:text-zinc-100">Components</h2>
         <button
           onClick={onToggle}
@@ -121,75 +128,75 @@ export function ComponentPanel({
         >
           <ChevronRight size={18} />
         </button>
-      </div>
+          </div>
 
-      {/* Category filter */}
-      <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700">
-        <div className="flex flex-wrap gap-2">
-          {categories.map(cat => (
-            <button
-              key={cat.id}
-              onClick={() => setSelectedCategory(cat.id)}
-              className={`px-3 py-1.5 text-xs rounded-full transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                selectedCategory === cat.id
-                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 font-medium'
-                  : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
-              }`}
-              aria-pressed={selectedCategory === cat.id}
-            >
-              {cat.label}
-              {cat.id === 'my' && userComponents.length > 0 && (
-                <span className="ml-1 text-xs opacity-70">({userComponents.length})</span>
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
+          {/* Category filter */}
+          <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700">
+            <div className="flex flex-wrap gap-2">
+              {categories.map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={`px-3 py-1.5 text-xs rounded-full transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                    selectedCategory === cat.id
+                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300 font-medium'
+                      : 'bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
+                  }`}
+                  aria-pressed={selectedCategory === cat.id}
+                >
+                  {cat.label}
+                  {cat.id === 'my' && userComponents.length > 0 && (
+                    <span className="ml-1 text-xs opacity-70">({userComponents.length})</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
 
-      {/* Component list */}
-      <div className="flex-1 overflow-y-auto">
-        {/* My Components Section */}
-        {showUserComponents && (
-          <div className="border-b border-zinc-200 dark:border-zinc-700">
-            <button
-              onClick={() => setIsMyComponentsExpanded(!isMyComponentsExpanded)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  setIsMyComponentsExpanded(!isMyComponentsExpanded);
-                }
-              }}
-              className="w-full px-4 py-2 flex items-center justify-between text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
-              role="button"
-              aria-expanded={isMyComponentsExpanded}
-              aria-controls="my-components-list"
-            >
-              <span className="flex items-center gap-2">
-                <Layers size={16} />
-                My Components
-                {userComponents.length > 0 && (
-                  <span className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 px-1.5 py-0.5 rounded">
-                    {userComponents.length}
+          {/* Component list */}
+          <div className="flex-1 overflow-y-auto">
+            {/* My Components Section */}
+            {showUserComponents && (
+              <div className="border-b border-zinc-200 dark:border-zinc-700">
+                <button
+                  onClick={() => setIsMyComponentsExpanded(!isMyComponentsExpanded)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setIsMyComponentsExpanded(!isMyComponentsExpanded);
+                    }
+                  }}
+                  className="w-full px-4 py-2 flex items-center justify-between text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
+                  role="button"
+                  aria-expanded={isMyComponentsExpanded}
+                  aria-controls="my-components-list"
+                >
+                  <span className="flex items-center gap-2">
+                    <Layers size={16} />
+                    My Components
+                    {userComponents.length > 0 && (
+                      <span className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300 px-1.5 py-0.5 rounded">
+                        {userComponents.length}
+                      </span>
+                    )}
                   </span>
-                )}
-              </span>
-              {isMyComponentsExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-            </button>
+                  {isMyComponentsExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                </button>
 
-            {isMyComponentsExpanded && (
-              <div id="my-components-list" className="p-4 space-y-3">
-                {/* Convert Group to Component button */}
-                {selectedElementGroupId && onConvertGroupToComponent && (
-                  <button
-                    onClick={() => onConvertGroupToComponent(selectedElementGroupId)}
-                    className="w-full flex items-center gap-2 px-3 py-2.5 bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800 rounded-lg text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900 hover:border-purple-300 dark:hover:border-purple-700 transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
-                  >
-                    <PackagePlus size={18} className="flex-shrink-0" />
-                    <span className="text-sm font-medium">Convert Group to Component</span>
-                  </button>
-                )}
-                {userComponents.length === 0 && !selectedElementGroupId ? (
-                  <div className="text-center py-8 text-zinc-500 dark:text-zinc-400">
+                {isMyComponentsExpanded && (
+                  <div id="my-components-list" className="p-4 space-y-3">
+                    {/* Convert Group to Component button */}
+                    {selectedElementGroupId && onConvertGroupToComponent && (
+                      <button
+                        onClick={() => onConvertGroupToComponent(selectedElementGroupId)}
+                        className="w-full flex items-center gap-2 px-3 py-2.5 bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800 rounded-lg text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900 hover:border-purple-300 dark:hover:border-purple-700 transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
+                      >
+                        <PackagePlus size={18} className="flex-shrink-0" />
+                        <span className="text-sm font-medium">Convert Group to Component</span>
+                      </button>
+                    )}
+                    {userComponents.length === 0 && !selectedElementGroupId ? (
+                      <div className="text-center py-8 text-zinc-500 dark:text-zinc-400">
                     {/* Empty state illustration - grouped shapes */}
                     <svg
                       width="64"
@@ -221,91 +228,93 @@ export function ComponentPanel({
                       {/* Connecting dots */}
                       <circle cx="22" cy="30" r="1.5" fill="currentColor" />
                       <circle cx="37" cy="32" r="1.5" fill="currentColor" />
-                    </svg>
-                    <p className="text-sm font-medium mb-1">No components yet</p>
-                    <p className="text-xs opacity-70">
-                      Select elements and press{' '}
-                      <kbd className="px-1 py-0.5 text-[10px] bg-zinc-100 dark:bg-zinc-800 rounded border border-zinc-200 dark:border-zinc-700">
-                        Ctrl+Shift+C
-                      </kbd>
-                    </p>
+                        </svg>
+                        <p className="text-sm font-medium mb-1">No components yet</p>
+                        <p className="text-xs opacity-70">
+                          Select elements and press{' '}
+                          <kbd className="px-1 py-0.5 text-[10px] bg-zinc-100 dark:bg-zinc-800 rounded border border-zinc-200 dark:border-zinc-700">
+                            Ctrl+Shift+C
+                          </kbd>
+                        </p>
+                      </div>
+                    ) : userComponents.length === 0 ? (
+                      null
+                    ) : (
+                      userComponents.map(component => (
+                        <UserComponentCard
+                          key={component.id}
+                          component={component}
+                          isEditing={editingComponentId === component.id}
+                          editingName={editingName}
+                          onEditingNameChange={setEditingName}
+                          onSaveRename={handleSaveRename}
+                          onCancelRename={handleCancelRename}
+                          onStartRename={handleStartRename}
+                          onDelete={onDeleteUserComponent}
+                          onInsert={onInsertUserComponent}
+                          onDragStart={handleDragStart}
+                          instanceCount={getInstanceCount?.(component.id) || 0}
+                          menuOpen={menuOpenId === component.id}
+                          onMenuToggle={(open) => setMenuOpenId(open ? component.id : null)}
+                        />
+                      ))
+                    )}
                   </div>
-                ) : userComponents.length === 0 ? (
-                  null
-                ) : (
-                  userComponents.map(component => (
-                    <UserComponentCard
-                      key={component.id}
-                      component={component}
-                      isEditing={editingComponentId === component.id}
-                      editingName={editingName}
-                      onEditingNameChange={setEditingName}
-                      onSaveRename={handleSaveRename}
-                      onCancelRename={handleCancelRename}
-                      onStartRename={handleStartRename}
-                      onDelete={onDeleteUserComponent}
-                      onInsert={onInsertUserComponent}
-                      onDragStart={handleDragStart}
-                      instanceCount={getInstanceCount?.(component.id) || 0}
-                      menuOpen={menuOpenId === component.id}
-                      onMenuToggle={(open) => setMenuOpenId(open ? component.id : null)}
-                    />
-                  ))
+                )}
+              </div>
+            )}
+
+            {/* Templates Section */}
+            {showTemplates && (
+              <div>
+                <button
+                  onClick={() => setIsTemplatesExpanded(!isTemplatesExpanded)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setIsTemplatesExpanded(!isTemplatesExpanded);
+                    }
+                  }}
+                  className="w-full px-4 py-2 flex items-center justify-between text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
+                  role="button"
+                  aria-expanded={isTemplatesExpanded}
+                  aria-controls="templates-list"
+                >
+                  <span className="flex items-center gap-2">
+                    <Square size={16} />
+                    Templates
+                  </span>
+                  {isTemplatesExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                </button>
+
+                {isTemplatesExpanded && (
+                  <div id="templates-list" className="p-4 space-y-3">
+                    {filteredTemplates.length === 0 ? (
+                      <div className="text-center py-8 text-zinc-500 dark:text-zinc-400">
+                        <CircleDashed size={32} className="mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No templates available</p>
+                      </div>
+                    ) : (
+                      filteredTemplates.map(template => (
+                        <ComponentPreview
+                          key={template.id}
+                          template={template}
+                          onInsert={onInsertComponent}
+                        />
+                      ))
+                    )}
+                  </div>
                 )}
               </div>
             )}
           </div>
-        )}
 
-        {/* Templates Section */}
-        {showTemplates && (
-          <div>
-            <button
-              onClick={() => setIsTemplatesExpanded(!isTemplatesExpanded)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  setIsTemplatesExpanded(!isTemplatesExpanded);
-                }
-              }}
-              className="w-full px-4 py-2 flex items-center justify-between text-sm font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
-              role="button"
-              aria-expanded={isTemplatesExpanded}
-              aria-controls="templates-list"
-            >
-              <span className="flex items-center gap-2">
-                <Square size={16} />
-                Templates
-              </span>
-              {isTemplatesExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-            </button>
-
-            {isTemplatesExpanded && (
-              <div id="templates-list" className="p-4 space-y-3">
-                {filteredTemplates.length === 0 ? (
-                  <div className="text-center py-8 text-zinc-500 dark:text-zinc-400">
-                    <CircleDashed size={32} className="mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">No templates available</p>
-                  </div>
-                ) : (
-                  filteredTemplates.map(template => (
-                    <ComponentPreview
-                      key={template.id}
-                      template={template}
-                      onInsert={onInsertComponent}
-                    />
-                  ))
-                )}
-              </div>
-            )}
+          {/* Footer hint */}
+          <div className="px-4 py-3 border-t border-zinc-200 dark:border-zinc-700 text-xs text-zinc-600 dark:text-zinc-400">
+            Click to insert • Drag to position
           </div>
-        )}
-      </div>
-
-      {/* Footer hint */}
-      <div className="px-4 py-3 border-t border-zinc-200 dark:border-zinc-700 text-xs text-zinc-600 dark:text-zinc-400">
-        Click to insert • Drag to position
-      </div>
+        </>
+      )}
     </div>
   );
 }

@@ -89,6 +89,7 @@ export interface CanvasTheme {
   marqueeStroke: string;
   handle: string;
   handleFill: string;
+  grid: string;
 }
 
 /** Default light theme colors for SSR */
@@ -107,6 +108,7 @@ export const DEFAULT_CANVAS_THEME: CanvasTheme = {
   marqueeStroke: "#3b82f6",
   handle: "#3b82f6",
   handleFill: "#ffffff",
+  grid: "rgba(150, 150, 150, 0.3)",
 };
 
 /**
@@ -134,5 +136,6 @@ export function getCanvasTheme(): CanvasTheme {
     marqueeStroke: styles.getPropertyValue("--canvas-marquee-stroke").trim() || DEFAULT_CANVAS_THEME.marqueeStroke,
     handle: styles.getPropertyValue("--canvas-handle").trim() || DEFAULT_CANVAS_THEME.handle,
     handleFill: styles.getPropertyValue("--canvas-handle-fill").trim() || DEFAULT_CANVAS_THEME.handleFill,
+    grid: styles.getPropertyValue("--canvas-grid").trim() || DEFAULT_CANVAS_THEME.grid,
   };
 }

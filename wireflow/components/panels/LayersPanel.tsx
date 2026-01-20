@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import type { CanvasElement, ElementType, ComponentGroup, ElementGroup } from '@/lib/types';
+import type { CanvasElement, ElementType, ComponentGroup, ElementGroup, UserComponent, ComponentInstance } from '@/lib/types';
+import { usePanelAnimation } from '@/lib/usePanelAnimation';
 import {
   Layers,
   ChevronDown,
@@ -20,6 +21,7 @@ import {
   Pencil,
   Folder,
   Component,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface LayersPanelProps {
@@ -33,14 +35,22 @@ interface LayersPanelProps {
   componentGroups: ComponentGroup[];
   /** User-created element groups */
   elementGroups: ElementGroup[];
+  /** User-created component library */
+  userComponents: UserComponent[];
+  /** Component instances in current frame */
+  componentInstances: ComponentInstance[];
   /** Currently selected element ID (single selection) */
   selectedElementId: string | null;
   /** Currently selected element IDs (multi-selection) */
   selectedElementIds: Set<string>;
+  /** Currently selected instance ID */
+  selectedInstanceId: string | null;
   /** Callback when element is selected via panel click */
   onSelectElement: (elementId: string, addToSelection: boolean) => void;
   /** Callback when group is selected (selects all elements in group) */
   onSelectGroup: (groupId: string, groupType: 'component' | 'element') => void;
+  /** Callback when component instance is selected via panel click */
+  onSelectInstance: (instanceId: string) => void;
   /** Callback when elements are reordered via drag-drop */
   onReorderElements: (fromIndex: number, toIndex: number) => void;
   /** Callback when element visibility is toggled */
@@ -92,15 +102,22 @@ export function LayersPanel({
   elements,
   componentGroups,
   elementGroups,
+  userComponents,
+  componentInstances,
   selectedElementId,
   selectedElementIds,
+  selectedInstanceId,
   onSelectElement,
   onSelectGroup,
+  onSelectInstance,
   onReorderElements,
   onToggleVisibility,
   onToggleLock,
   onRenameElement,
 }: LayersPanelProps) {
+  // Manage content visibility timing for smooth animation
+  const contentVisible = usePanelAnimation(isExpanded);
+
   // Editing state for inline rename
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
@@ -224,7 +241,8 @@ export function LayersPanel({
   type LayerItem =
     | { type: 'element'; element: CanvasElement; displayIndex: number }
     | { type: 'componentGroup'; group: ComponentGroup; elements: CanvasElement[] }
-    | { type: 'elementGroup'; group: ElementGroup; elements: CanvasElement[] };
+    | { type: 'elementGroup'; group: ElementGroup; elements: CanvasElement[] }
+    | { type: 'userComponentInstance'; instance: ComponentInstance; component: UserComponent | undefined };
 
   const buildLayerHierarchy = useCallback((): LayerItem[] => {
     const items: LayerItem[] = [];
@@ -270,8 +288,17 @@ export function LayersPanel({
       }
     });
 
+    // Add user component instances (sorted by creation order, newest first)
+    const sortedInstances = [...componentInstances].sort((a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+    sortedInstances.forEach(instance => {
+      const component = userComponents.find(c => c.id === instance.componentId);
+      items.push({ type: 'userComponentInstance', instance, component });
+    });
+
     return items;
-  }, [elements, componentGroups, elementGroups]);
+  }, [elements, componentGroups, elementGroups, componentInstances, userComponents]);
 
   const layerItems = buildLayerHierarchy();
 
@@ -481,39 +508,47 @@ export function LayersPanel({
       role="region"
       aria-label="Layers panel"
     >
-      {/* Header */}
-      <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center">
-        <div className="flex items-center gap-2">
-          <Layers size={18} className="text-zinc-600 dark:text-zinc-400" />
-          <h2 className="font-semibold text-zinc-900 dark:text-zinc-100">Layers</h2>
-        </div>
-        <button
-          onClick={onToggle}
-          className="w-8 h-8 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95"
-          title="Hide panel (Ctrl+L)"
-          aria-label="Hide layers panel"
-          aria-expanded="true"
-        >
-          <ChevronRight size={18} />
-        </button>
-      </div>
+      {/* Content only visible after opening animation completes / before closing animation starts */}
+      {contentVisible && (
+        <>
+          {/* Header */}
+          <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <Layers size={18} className="text-zinc-600 dark:text-zinc-400" />
+              <h2 className="font-semibold text-zinc-900 dark:text-zinc-100">Layers</h2>
+            </div>
+            <button
+              onClick={onToggle}
+              className="w-8 h-8 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95"
+              title="Hide panel (Ctrl+L)"
+              aria-label="Hide layers panel"
+              aria-expanded="true"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
 
-      {/* Element count */}
-      <div className="px-4 py-2 text-xs text-zinc-500 dark:text-zinc-400 border-b border-zinc-100 dark:border-zinc-800">
-        {elements.length} {elements.length === 1 ? 'element' : 'elements'}
-        {groupCount > 0 && (
-          <span className="ml-2">
-            · {groupCount} {groupCount === 1 ? 'group' : 'groups'}
-          </span>
-        )}
-      </div>
+          {/* Element count */}
+          <div className="px-4 py-2 text-xs text-zinc-500 dark:text-zinc-400 border-b border-zinc-100 dark:border-zinc-800">
+            {elements.length} {elements.length === 1 ? 'element' : 'elements'}
+            {groupCount > 0 && (
+              <span className="ml-2">
+                · {groupCount} {groupCount === 1 ? 'group' : 'groups'}
+              </span>
+            )}
+            {componentInstances.length > 0 && (
+              <span className="ml-2">
+                · {componentInstances.length} {componentInstances.length === 1 ? 'instance' : 'instances'}
+              </span>
+            )}
+          </div>
 
-      {/* Layer list */}
-      <div
-        className="flex-1 overflow-y-auto"
-        role="tree"
-        aria-label="Element layers"
-      >
+          {/* Layer list */}
+          <div
+            className="flex-1 overflow-y-auto"
+            role="tree"
+            aria-label="Element layers"
+          >
         {layerItems.length === 0 ? (
           <div className="px-4 py-8 text-center text-sm text-zinc-400 dark:text-zinc-500">
             No elements yet
@@ -560,6 +595,48 @@ export function LayersPanel({
                 );
               }
 
+              if (item.type === 'userComponentInstance') {
+                const { instance, component } = item;
+                const isSelected = instance.id === selectedInstanceId;
+                const isOrphaned = !component;
+                const componentName = component?.name || 'Unknown Component';
+
+                return (
+                  <div
+                    key={instance.id}
+                    onClick={() => onSelectInstance(instance.id)}
+                    className={`
+                      group flex items-center gap-2 px-2 py-2 border-b border-zinc-100 dark:border-zinc-800
+                      transition-all duration-150 cursor-pointer
+                      ${isSelected
+                        ? 'bg-purple-50 dark:bg-purple-950 border-l-4 border-l-purple-500'
+                        : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/50 border-l-4 border-l-transparent'
+                      }
+                      ${isOrphaned ? 'opacity-70' : ''}
+                    `}
+                    role="treeitem"
+                    aria-label={`Component instance: ${componentName}${isOrphaned ? ' (orphaned)' : ''}`}
+                  >
+                    {/* Component icon */}
+                    <div className={`flex-shrink-0 ${isOrphaned ? 'text-amber-500 dark:text-amber-400' : 'text-purple-500 dark:text-purple-400'}`}>
+                      {isOrphaned ? <AlertTriangle size={16} /> : <Component size={16} />}
+                    </div>
+
+                    {/* Component name */}
+                    <div className="flex-1 min-w-0">
+                      <span className={`text-sm ${isOrphaned ? 'italic' : 'font-medium'} text-zinc-700 dark:text-zinc-300 truncate`}>
+                        {componentName}
+                      </span>
+                      {isOrphaned && (
+                        <span className="ml-2 text-xs text-amber-500 dark:text-amber-400">
+                          (deleted)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
               return null;
             })}
             {/* Bottom drop zone for moving to the end of the list */}
@@ -584,12 +661,14 @@ export function LayersPanel({
             )}
           </>
         )}
-      </div>
+          </div>
 
-      {/* Footer with keyboard hints */}
-      <div className="px-4 py-2 border-t border-zinc-200 dark:border-zinc-700 text-xs text-zinc-500 dark:text-zinc-400">
-        <span className="font-medium">H</span> hide · <span className="font-medium">Ctrl+L</span> lock
-      </div>
+          {/* Footer with keyboard hints */}
+          <div className="px-4 py-2 border-t border-zinc-200 dark:border-zinc-700 text-xs text-zinc-500 dark:text-zinc-400">
+            <span className="font-medium">H</span> hide · <span className="font-medium">Ctrl+L</span> lock
+          </div>
+        </>
+      )}
     </div>
   );
 }
