@@ -5711,7 +5711,7 @@ export function Canvas() {
                   autoCorrect="off"
                   autoCapitalize="off"
                   data-gramm="false"
-                  className="absolute resize-none overflow-hidden focus:outline-2 focus:outline-offset-1 focus:outline-blue-400/30"
+                  className="absolute resize-none overflow-hidden focus:outline-2 focus:outline-offset-1 focus:outline-blue-400/60"
                   style={{
                     left: textareaX * zoom + pan.x,
                     // Offset top to match canvas baseline rendering

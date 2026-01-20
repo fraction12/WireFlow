@@ -101,16 +101,20 @@ All types defined in `lib/types.ts`. New types MUST go there.
 
 ## Design Principles
 
-### Intentional Constraints (Features, Not Bugs)
-- No grids/snapping - freeform philosophy
-- Fixed 2000x2000 canvas - no zoom/pan
-- Rough sketch aesthetic - deterministic wobble
-- Semantic layer is additive, not prescriptive
+### Core Philosophy
+- **Sketch-first workflow** - Draw freely, add structure later
+- **Rough sketch aesthetic** - Deterministic wobble, hand-drawn feel
+- **Semantic layer is additive** - Tagging is optional, not required
+- **Canvas.tsx is the hub** - All state lives there, no global state
+
+### Current Capabilities
+- **Zoom/Pan** - 10%-500% zoom, middle-click or Space+drag to pan
+- **Grid system** - Toggle grid (G), snap-to-grid (Shift+G)
+- **2000x2000px canvas** - Per frame, with multi-frame support
 
 ### What NOT to Do
-- Don't add global state management
-- Don't create unnecessary new files (prefer editing Canvas.tsx)
-- Don't remove intentional limitations
+- Don't add global state management (Redux, Context, etc.)
+- Don't create unnecessary new files (prefer editing existing ones)
 - Don't add external dependencies without explicit request
 
 ## Adding Features
@@ -164,8 +168,5 @@ See `WFLocal/CLAUDE.md` for full instructions.
 
 ## Additional Documentation
 
-See these files for detailed information:
-- `CLAUDE_README.md` - Comprehensive AI agent instructions
-- `ARCHITECTURE.md` - Design philosophy and data flow
-- `IMPLEMENTATION.md` - Implementation details
-- `KNOWN_ISSUES.md` - Issue tracker
+- `README.md` - Project overview
+- `WFLocal/releases/v1.0.0.md` - Full feature documentation
