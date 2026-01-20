@@ -4026,6 +4026,15 @@ export function Canvas() {
             );
             return;
           }
+
+          // Enter: Enter edit mode for text element (accessibility - WCAG 2.1.1)
+          if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+            if (textEl.locked !== true) {
+              e.preventDefault();
+              enterEditMode(textEl);
+            }
+            return;
+          }
         }
       }
 
