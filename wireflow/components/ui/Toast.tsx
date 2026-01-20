@@ -86,7 +86,7 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
     }, duration);
 
     return () => clearTimeout(timer);
-  }, [toast.duration]);
+  }, [toast.id, toast.duration]);
 
   useEffect(() => {
     if (isExiting) {

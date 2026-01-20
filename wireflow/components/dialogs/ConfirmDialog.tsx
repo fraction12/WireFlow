@@ -26,6 +26,7 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
+  const previousActiveElement = useRef<HTMLElement | null>(null);
 
   // Lock body scroll when dialog is open
   useEffect(() => {
@@ -39,13 +40,21 @@ export function ConfirmDialog({
   }, [isOpen]);
 
   // Focus the cancel button when dialog opens (safer default for destructive actions)
+  // and restore focus when dialog closes
   useEffect(() => {
     if (isOpen) {
-      // Small delay to ensure dialog is rendered
-      const timer = setTimeout(() => {
+      // Store the currently focused element to restore later
+      previousActiveElement.current = document.activeElement as HTMLElement;
+
+      // Use requestAnimationFrame for more reliable focus after render
+      const frameId = requestAnimationFrame(() => {
         cancelButtonRef.current?.focus();
-      }, 50);
-      return () => clearTimeout(timer);
+      });
+      return () => cancelAnimationFrame(frameId);
+    } else if (previousActiveElement.current) {
+      // Restore focus to the previously focused element
+      previousActiveElement.current.focus();
+      previousActiveElement.current = null;
     }
   }, [isOpen]);
 
@@ -68,9 +77,8 @@ export function ConfirmDialog({
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key !== 'Tab') return;
 
-    const focusableElements = dialogRef.current?.querySelectorAll(
-      'button:not([disabled])'
-    );
+    const focusableSelector = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusableElements = dialogRef.current?.querySelectorAll(focusableSelector);
 
     if (!focusableElements || focusableElements.length === 0) return;
 

@@ -38,6 +38,17 @@ export function ThemeToggle() {
     }
   };
 
+  const getNextLabel = () => {
+    switch (theme) {
+      case 'light':
+        return 'dark mode';
+      case 'dark':
+        return 'system theme';
+      case 'system':
+        return 'light mode';
+    }
+  };
+
   // Announce theme changes to screen readers
   useEffect(() => {
     if (previousThemeRef.current !== theme && announceRef.current) {
@@ -53,7 +64,7 @@ export function ThemeToggle() {
         onClick={cycleTheme}
         className="p-2 rounded-lg text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
         title={getLabel()}
-        aria-label={`Current theme: ${getLabel()}. Click to change.`}
+        aria-label={`Current theme: ${getLabel()}. Switch to ${getNextLabel()}`}
       >
         {getIcon()}
       </button>

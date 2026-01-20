@@ -125,7 +125,7 @@ export function Canvas() {
     onConfirm: () => {},
   });
 
-  const showConfirmDialog = (
+  const showConfirmDialog = useCallback((
     title: string,
     message: string,
     onConfirm: () => void,
@@ -138,7 +138,7 @@ export function Canvas() {
       variant,
       onConfirm,
     });
-  };
+  }, []);
 
   const closeConfirmDialog = () => {
     setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
@@ -564,6 +564,65 @@ export function Canvas() {
 
   // Persistence: track if initial load has completed
   const hasLoadedRef = useRef(false);
+
+  // Ref for keyboard handler state - prevents excessive event listener re-registration
+  // by allowing the handler to read current values without being in the dependency array
+  const keyboardStateRef = useRef<{
+    selectedElementId: string | null;
+    selectedElementIds: Set<string>;
+    selectedInstanceId: string | null;
+    elements: CanvasElement[];
+    componentGroups: ComponentGroup[];
+    elementGroups: ElementGroup[];
+    editingElementId: string | null;
+    selectedByClick: boolean;
+    isPromoteDialogOpen: boolean;
+    confirmDialogIsOpen: boolean;
+  }>({
+    selectedElementId: null,
+    selectedElementIds: new Set(),
+    selectedInstanceId: null,
+    elements: [],
+    componentGroups: [],
+    elementGroups: [],
+    editingElementId: null,
+    selectedByClick: false,
+    isPromoteDialogOpen: false,
+    confirmDialogIsOpen: false,
+  });
+
+  // Ref for keyboard handler callbacks - prevents dependency array changes
+  // All callbacks are stored in this ref and updated synchronously
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const keyboardCallbacksRef = useRef<Record<string, (...args: any[]) => void>>({});
+
+  // Keep keyboard state ref in sync with current state
+  // This allows the keyboard handler to access current values without re-registering
+  useEffect(() => {
+    keyboardStateRef.current = {
+      selectedElementId,
+      selectedElementIds,
+      selectedInstanceId,
+      elements,
+      componentGroups,
+      elementGroups,
+      editingElementId,
+      selectedByClick,
+      isPromoteDialogOpen,
+      confirmDialogIsOpen: confirmDialog.isOpen,
+    };
+  }, [
+    selectedElementId,
+    selectedElementIds,
+    selectedInstanceId,
+    elements,
+    componentGroups,
+    elementGroups,
+    editingElementId,
+    selectedByClick,
+    isPromoteDialogOpen,
+    confirmDialog.isOpen,
+  ]);
 
   // Listen for theme changes (class-based toggle or system preference)
   useEffect(() => {
@@ -2269,7 +2328,7 @@ export function Canvas() {
   };
 
   // Text editing helpers
-  const enterEditMode = (element: TextElement) => {
+  const enterEditMode = useCallback((element: TextElement) => {
     setEditingElementId(element.id);
     setEditingText(element.content || "");
     setIsNewTextElement(false); // Existing element, not new
@@ -2283,7 +2342,7 @@ export function Canvas() {
         textInputRef.current.setSelectionRange(len, len);
       }
     }, 0);
-  };
+  }, []);
 
   const commitTextEdit = () => {
     if (!editingElementId) return;
@@ -3767,680 +3826,6 @@ export function Canvas() {
     });
   }, [selectedElementId, selectedElementIds, recordSnapshot]);
 
-  // Keyboard event handler for deletion, grouping, and ungrouping
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Disable canvas keyboard shortcuts during text editing
-      // (text input handles its own keyboard events)
-      if (editingElementId) return;
-
-      // Don't handle shortcuts when focus is on input fields or dialogs are open
-      const activeElement = document.activeElement;
-      const isInputFocused = activeElement instanceof HTMLInputElement ||
-                             activeElement instanceof HTMLTextAreaElement ||
-                             activeElement?.getAttribute('contenteditable') === 'true';
-      if (isInputFocused) return;
-      if (isPromoteDialogOpen || confirmDialog.isOpen) return;
-
-      // Escape: deselect all and switch to select tool
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setSelectedElementId(null);
-        setSelectedElementIds(new Set());
-        setSelectedGroupId(null);
-        setCurrentTool("select");
-        return;
-      }
-
-      // Ctrl/Cmd+\: Toggle documentation panel
-      if ((e.ctrlKey || e.metaKey) && e.key === "\\") {
-        e.preventDefault();
-        toggleDocPanel();
-        return;
-      }
-
-      // Tool shortcuts (single letter without modifiers)
-      // Skip if a text element is selected - let type-to-edit handle it instead
-      const selectedTextElement = selectedElementId
-        ? elements.find(el => el.id === selectedElementId && el.type === "text")
-        : null;
-      const isTextElementSelected = selectedTextElement && selectedTextElement.locked !== true;
-
-      if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !isTextElementSelected) {
-        switch (e.key.toLowerCase()) {
-          case "v":
-            setCurrentTool("select");
-            return;
-          case "r":
-            setCurrentTool("rectangle");
-            return;
-          case "o":
-            setCurrentTool("ellipse");
-            return;
-          case "d":
-            setCurrentTool("diamond");
-            return;
-          case "a":
-            setCurrentTool("arrow");
-            return;
-          case "l":
-            setCurrentTool("line");
-            return;
-          case "p":
-            setCurrentTool("freedraw");
-            return;
-          case "t":
-            setCurrentTool("text");
-            return;
-          // Color shortcuts (Phase 1)
-          case "s":
-            // Open stroke color picker
-            setStrokePickerOpen(true);
-            setFillPickerOpen(false);
-            return;
-          case "g":
-            // Open fill color picker
-            setFillPickerOpen(true);
-            setStrokePickerOpen(false);
-            return;
-          // Layer shortcuts
-          case "h":
-            // Toggle visibility of selected element(s)
-            if (selectedElementId || selectedElementIds.size > 0) {
-              e.preventDefault();
-              const idsToToggle = selectedElementIds.size > 0
-                ? Array.from(selectedElementIds)
-                : [selectedElementId!];
-              idsToToggle.forEach(id => toggleElementVisibility(id));
-            }
-            return;
-        }
-      }
-
-      // "?" key (Shift + /) to show keyboard shortcuts
-      if (e.key === "?" && e.shiftKey) {
-        e.preventDefault();
-        setShortcutsOpen(true);
-        return;
-      }
-
-      // Ctrl/Cmd+A: Select all elements
-      if ((e.ctrlKey || e.metaKey) && e.key === "a") {
-        e.preventDefault();
-        if (elements.length > 0) {
-          setSelectedElementIds(new Set(elements.map((el) => el.id)));
-          setSelectedElementId(elements[0].id);
-        }
-        return;
-      }
-
-      // Ctrl/Cmd+Z: Undo
-      if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
-        e.preventDefault();
-        performUndo();
-        return;
-      }
-
-      // Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z: Redo
-      if (
-        ((e.ctrlKey || e.metaKey) && e.key === "y") ||
-        ((e.ctrlKey || e.metaKey) && e.key === "Z" && e.shiftKey)
-      ) {
-        e.preventDefault();
-        performRedo();
-        return;
-      }
-
-      // Ctrl/Cmd+C: Copy
-      if ((e.ctrlKey || e.metaKey) && e.key === "c") {
-        e.preventDefault();
-        copySelectedElements();
-        return;
-      }
-
-      // Ctrl/Cmd+V: Paste
-      if ((e.ctrlKey || e.metaKey) && e.key === "v") {
-        e.preventDefault();
-        pasteElements();
-        return;
-      }
-
-      // Ctrl/Cmd+D: Duplicate
-      if ((e.ctrlKey || e.metaKey) && e.key === "d") {
-        e.preventDefault();
-        duplicateSelectedElements();
-        return;
-      }
-
-      // Zoom shortcuts: Ctrl/Cmd++ to zoom in, Ctrl/Cmd+- to zoom out, Ctrl/Cmd+0 to reset
-      if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) {
-        e.preventDefault();
-        zoomIn();
-        return;
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === "-") {
-        e.preventDefault();
-        zoomOut();
-        return;
-      }
-      if ((e.ctrlKey || e.metaKey) && e.key === "0") {
-        e.preventDefault();
-        resetZoom();
-        return;
-      }
-
-      // Layer controls
-      // Ctrl/Cmd+]: Bring forward
-      if ((e.ctrlKey || e.metaKey) && e.key === "]" && !e.shiftKey) {
-        e.preventDefault();
-        bringForward();
-        return;
-      }
-      // Ctrl/Cmd+[: Send backward
-      if ((e.ctrlKey || e.metaKey) && e.key === "[" && !e.shiftKey) {
-        e.preventDefault();
-        sendBackward();
-        return;
-      }
-      // Ctrl/Cmd+Shift+]: Bring to front
-      if ((e.ctrlKey || e.metaKey) && e.key === "}" && e.shiftKey) {
-        e.preventDefault();
-        bringToFront();
-        return;
-      }
-      // Ctrl/Cmd+Shift+[: Send to back
-      if ((e.ctrlKey || e.metaKey) && e.key === "{" && e.shiftKey) {
-        e.preventDefault();
-        sendToBack();
-        return;
-      }
-      // Ctrl/Cmd+L: Toggle lock of selected element(s)
-      if ((e.ctrlKey || e.metaKey) && e.key === "l" && !e.shiftKey) {
-        if (selectedElementId || selectedElementIds.size > 0) {
-          e.preventDefault();
-          const idsToToggle = selectedElementIds.size > 0
-            ? Array.from(selectedElementIds)
-            : [selectedElementId!];
-          idsToToggle.forEach(id => toggleElementLock(id));
-        }
-        return;
-      }
-
-      // Check for Ctrl/Cmd+G to create group (needs multiple elements selected)
-      if ((e.ctrlKey || e.metaKey) && e.key === "g" && !e.shiftKey) {
-        if (selectedElementIds.size >= 2) {
-          e.preventDefault();
-          createElementGroup();
-        }
-        return;
-      }
-
-      // Check for Ctrl/Cmd+Shift+G to ungroup
-      if ((e.ctrlKey || e.metaKey) && e.key === "G" && e.shiftKey) {
-        e.preventDefault();
-        // Find if any selected element is in a user group
-        const selectedElement = selectedElementId
-          ? elements.find((el) => el.id === selectedElementId)
-          : null;
-
-        if (selectedElement?.elementGroupId) {
-          ungroupElements(selectedElement.elementGroupId);
-        } else if (selectedElement?.groupId) {
-          // Also allow ungrouping component groups with this shortcut
-          ungroupComponent(selectedElement.groupId);
-        }
-        return;
-      }
-
-      // Check for Ctrl/Cmd+Shift+C to promote group to component
-      if ((e.ctrlKey || e.metaKey) && e.key === "C" && e.shiftKey) {
-        // Find if any selected element is in a user group
-        const selectedElement = selectedElementId
-          ? elements.find((el) => el.id === selectedElementId)
-          : null;
-
-        if (selectedElement?.elementGroupId) {
-          e.preventDefault();
-          startPromoteGroupToComponent(selectedElement.elementGroupId);
-        }
-        return;
-      }
-
-      // Text formatting shortcuts (when text element is selected)
-      if (selectedElementId) {
-        const selectedElement = elements.find(
-          (el) => el.id === selectedElementId,
-        );
-        if (selectedElement?.type === "text") {
-          const textEl = selectedElement as TextElement;
-
-          // Ctrl/Cmd+B: Toggle bold
-          if ((e.ctrlKey || e.metaKey) && e.key === "b") {
-            e.preventDefault();
-            const newWeight = textEl.fontWeight === "bold" ? "normal" : "bold";
-            setElements(
-              elements.map((el) =>
-                el.id === selectedElementId
-                  ? { ...el, fontWeight: newWeight, preset: undefined }
-                  : el,
-              ),
-            );
-            return;
-          }
-
-          // Ctrl/Cmd+I: Toggle italic
-          if ((e.ctrlKey || e.metaKey) && e.key === "i") {
-            e.preventDefault();
-            const newStyle =
-              textEl.fontStyle === "italic" ? "normal" : "italic";
-            setElements(
-              elements.map((el) =>
-                el.id === selectedElementId
-                  ? { ...el, fontStyle: newStyle }
-                  : el,
-              ),
-            );
-            return;
-          }
-
-          // Ctrl/Cmd+Shift+L: Align left
-          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "L") {
-            e.preventDefault();
-            setElements(
-              elements.map((el) =>
-                el.id === selectedElementId
-                  ? { ...el, textAlign: "left" as const }
-                  : el,
-              ),
-            );
-            return;
-          }
-
-          // Ctrl/Cmd+Shift+E: Align center
-          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "E") {
-            e.preventDefault();
-            setElements(
-              elements.map((el) =>
-                el.id === selectedElementId
-                  ? { ...el, textAlign: "center" as const }
-                  : el,
-              ),
-            );
-            return;
-          }
-
-          // Ctrl/Cmd+Shift+R: Align right
-          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "R") {
-            e.preventDefault();
-            setElements(
-              elements.map((el) =>
-                el.id === selectedElementId
-                  ? { ...el, textAlign: "right" as const }
-                  : el,
-              ),
-            );
-            return;
-          }
-
-          // Ctrl/Cmd+Alt+1: Apply H1 preset
-          if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === "1") {
-            e.preventDefault();
-            setElements(
-              elements.map((el) =>
-                el.id === selectedElementId
-                  ? {
-                      ...el,
-                      fontSize: 32,
-                      fontWeight: "bold" as const,
-                      lineHeight: Math.round(32 * 1.2),
-                      preset: "heading1" as const,
-                    }
-                  : el,
-              ),
-            );
-            return;
-          }
-
-          // Ctrl/Cmd+Alt+2: Apply H2 preset
-          if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === "2") {
-            e.preventDefault();
-            setElements(
-              elements.map((el) =>
-                el.id === selectedElementId
-                  ? {
-                      ...el,
-                      fontSize: 24,
-                      fontWeight: "bold" as const,
-                      lineHeight: Math.round(24 * 1.25),
-                      preset: "heading2" as const,
-                    }
-                  : el,
-              ),
-            );
-            return;
-          }
-
-          // Ctrl/Cmd+Alt+3: Apply H3 preset
-          if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === "3") {
-            e.preventDefault();
-            setElements(
-              elements.map((el) =>
-                el.id === selectedElementId
-                  ? {
-                      ...el,
-                      fontSize: 20,
-                      fontWeight: "bold" as const,
-                      lineHeight: Math.round(20 * 1.3),
-                      preset: "heading3" as const,
-                    }
-                  : el,
-              ),
-            );
-            return;
-          }
-
-          // Ctrl/Cmd+Alt+0: Apply Body preset
-          if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === "0") {
-            e.preventDefault();
-            setElements(
-              elements.map((el) =>
-                el.id === selectedElementId
-                  ? {
-                      ...el,
-                      fontSize: 16,
-                      fontWeight: "normal" as const,
-                      lineHeight: Math.round(16 * 1.5),
-                      preset: "body" as const,
-                    }
-                  : el,
-              ),
-            );
-            return;
-          }
-
-          // Enter: Enter edit mode for text element (accessibility - WCAG 2.1.1)
-          if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
-            if (textEl.locked !== true) {
-              e.preventDefault();
-              enterEditMode(textEl);
-            }
-            return;
-          }
-
-          // Type-to-edit: Printable character starts editing and replaces content
-          // Matches Excalidraw behavior - typing on selected text replaces it
-          if (
-            e.key.length === 1 &&
-            !e.ctrlKey &&
-            !e.metaKey &&
-            !e.altKey &&
-            textEl.locked !== true
-          ) {
-            e.preventDefault();
-            setEditingElementId(textEl.id);
-            setEditingText(e.key);
-            setIsNewTextElement(false);
-            setSelectedByClick(false);
-            // Focus input after React renders it
-            setTimeout(() => {
-              textInputRef.current?.focus();
-              // Move cursor to end (after the typed character)
-              if (textInputRef.current) {
-                const len = textInputRef.current.value.length;
-                textInputRef.current.setSelectionRange(len, len);
-              }
-            }, 0);
-            return;
-          }
-        }
-      }
-
-      // Handle instance deletion
-      if (selectedInstanceId) {
-        if (e.key === "Delete" || (e.key === "Backspace" && selectedByClick)) {
-          e.preventDefault();
-          deleteComponentInstance(selectedInstanceId);
-          setSelectedByClick(false);
-        }
-        return;
-      }
-
-      // Only handle deletion if an element is selected
-      if (!selectedElementId) return;
-
-      const element = elements.find((el) => el.id === selectedElementId);
-      if (!element) return;
-
-      // Check for Delete or Backspace key
-      // Backspace only deletes if element was selected by clicking (not after editing text)
-      if (e.key === "Delete" || (e.key === "Backspace" && selectedByClick)) {
-        // Prevent default browser behavior (e.g., navigate back)
-        e.preventDefault();
-
-        // Handle multi-selection deletion (including groups)
-        if (selectedElementIds.size > 1) {
-          // Collect all selected elements
-          const selectedElements = elements.filter((el) =>
-            selectedElementIds.has(el.id)
-          );
-
-          // Collect unique group IDs from selected elements
-          const componentGroupIds = new Set<string>();
-          const elementGroupIds = new Set<string>();
-          let ungroupedCount = 0;
-
-          selectedElements.forEach((el) => {
-            if (el.groupId) {
-              componentGroupIds.add(el.groupId);
-            } else if (el.elementGroupId) {
-              elementGroupIds.add(el.elementGroupId);
-            } else {
-              ungroupedCount++;
-            }
-          });
-
-          const totalGroups = componentGroupIds.size + elementGroupIds.size;
-
-          // If any groups are involved, show confirmation dialog
-          if (totalGroups > 0) {
-            // Build message parts
-            const parts: string[] = [];
-            if (componentGroupIds.size > 0) {
-              parts.push(
-                `${componentGroupIds.size} component${componentGroupIds.size > 1 ? "s" : ""}`
-              );
-            }
-            if (elementGroupIds.size > 0) {
-              parts.push(
-                `${elementGroupIds.size} group${elementGroupIds.size > 1 ? "s" : ""}`
-              );
-            }
-            if (ungroupedCount > 0) {
-              parts.push(
-                `${ungroupedCount} element${ungroupedCount > 1 ? "s" : ""}`
-              );
-            }
-
-            const title =
-              totalGroups === 1 && ungroupedCount === 0
-                ? componentGroupIds.size > 0
-                  ? "Delete component?"
-                  : "Delete group?"
-                : "Delete selection?";
-
-            const message =
-              `This will delete ${parts.join(" and ")}. This action cannot be undone.`;
-
-            showConfirmDialog(
-              title,
-              message,
-              () => {
-                recordSnapshot(); // Record for undo
-
-                // Delete all selected elements
-                setElements(
-                  elements.filter((el) => !selectedElementIds.has(el.id))
-                );
-
-                // Clean up component group records
-                if (componentGroupIds.size > 0) {
-                  setComponentGroups(
-                    componentGroups.filter(
-                      (grp) => !componentGroupIds.has(grp.id)
-                    )
-                  );
-                }
-
-                // Clean up element group records
-                if (elementGroupIds.size > 0) {
-                  setElementGroups(
-                    elementGroups.filter(
-                      (grp) => !elementGroupIds.has(grp.id)
-                    )
-                  );
-                }
-
-                // Clear all selections
-                setSelectedElementIds(new Set());
-                setSelectedElementId(null);
-                setSelectedGroupId(null);
-                setSelectedByClick(false);
-
-                announce(
-                  `Deleted ${parts.join(" and ")}`
-                );
-              },
-              "danger"
-            );
-          } else {
-            // No groups, just delete individual elements
-            recordSnapshot(); // Record for undo
-            const count = selectedElementIds.size;
-            setElements(
-              elements.filter((el) => !selectedElementIds.has(el.id))
-            );
-            setSelectedElementIds(new Set());
-            setSelectedElementId(null);
-            setSelectedByClick(false);
-            announce(`Deleted ${count} elements`);
-          }
-        }
-        // If element is in a user-created element group, delete entire group
-        else if (element.elementGroupId) {
-          const groupId = element.elementGroupId;
-          showConfirmDialog(
-            "Delete group?",
-            "This will delete all elements in this group. This action cannot be undone.",
-            () => {
-              deleteElementGroup(groupId);
-              setSelectedByClick(false);
-            },
-            "danger",
-          );
-        }
-        // If element is in a component group, delete entire component group with confirmation
-        else if (element.groupId) {
-          const componentName = element.componentType || "grouped";
-          const groupId = element.groupId;
-          showConfirmDialog(
-            `Delete ${componentName} component?`,
-            "This will delete the entire component and all its elements. This action cannot be undone.",
-            () => {
-              deleteGroup(groupId);
-              setSelectedByClick(false);
-            },
-            "danger",
-          );
-        }
-        // Remove single element from state
-        else {
-          recordSnapshot(); // Record for undo
-          const elementType = element.type;
-
-          // Collect IDs to delete (element + any bound text if container)
-          const idsToDelete = new Set<string>([selectedElementId]);
-
-          // If this is a container with bound text, also delete the bound text
-          if (isContainerElement(element) && element.boundElements) {
-            element.boundElements.forEach(be => {
-              idsToDelete.add(be.id);
-            });
-          }
-
-          // If this is a bound text element, remove reference from container
-          const textEl = element as TextElement;
-          if (textEl.containerId) {
-            // Update the container to remove the bound element reference
-            const container = elements.find(el => el.id === textEl.containerId);
-            if (container && container.boundElements) {
-              const updatedContainer = {
-                ...container,
-                boundElements: container.boundElements.filter(be => be.id !== selectedElementId)
-              };
-              setElements(
-                elements
-                  .filter((el) => !idsToDelete.has(el.id))
-                  .map(el => el.id === textEl.containerId ? updatedContainer : el)
-              );
-              setSelectedElementId(null);
-              setSelectedByClick(false);
-              announce(`Deleted ${elementType}`);
-              return;
-            }
-          }
-
-          setElements(elements.filter((el) => !idsToDelete.has(el.id)));
-          setSelectedElementId(null);
-          setSelectedByClick(false);
-          announce(`Deleted ${elementType}`);
-        }
-      }
-
-      // Check for 'G' key (without modifiers) to ungroup component groups (legacy behavior)
-      if (e.key === "g" && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
-        if (element.groupId) {
-          e.preventDefault();
-          ungroupComponent(element.groupId);
-        } else if (element.elementGroupId) {
-          e.preventDefault();
-          ungroupElements(element.elementGroupId);
-        }
-      }
-    };
-
-    // Add event listener
-    window.addEventListener("keydown", handleKeyDown);
-
-    // Cleanup on unmount
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [
-    selectedElementId,
-    selectedElementIds,
-    elements,
-    componentGroups,
-    elementGroups,
-    editingElementId,
-    selectedByClick,
-    performUndo,
-    performRedo,
-    recordSnapshot,
-    copySelectedElements,
-    pasteElements,
-    duplicateSelectedElements,
-    zoomIn,
-    zoomOut,
-    resetZoom,
-    bringToFront,
-    sendToBack,
-    bringForward,
-    sendBackward,
-    isPromoteDialogOpen,
-    confirmDialog.isOpen,
-    toggleDocPanel,
-  ]);
-
   // Frame management handlers
   const handleCreateFrame = (type: FrameType) => {
     const newFrame: Frame = {
@@ -4818,7 +4203,7 @@ export function Canvas() {
     `egrp_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
   // Create a new user element group from selected elements
-  const createElementGroup = () => {
+  const createElementGroup = useCallback(() => {
     // Need at least 2 elements selected to create a group
     if (selectedElementIds.size < 2) return;
 
@@ -4861,10 +4246,10 @@ export function Canvas() {
 
     // Keep the elements selected (now as a group)
     // selectedElementIds already contains all elements
-  };
+  }, [selectedElementIds, elements, recordSnapshot, activeFrameId, elementGroups]);
 
   // Ungroup a user-created element group
-  const ungroupElements = (elementGroupId: string) => {
+  const ungroupElements = useCallback((elementGroupId: string) => {
     recordSnapshot(); // Record for undo
     // Remove group reference from all elements
     setElements(
@@ -4880,10 +4265,10 @@ export function Canvas() {
 
     // Keep elements selected individually
     // selectedElementIds remains unchanged
-  };
+  }, [recordSnapshot, elements, elementGroups]);
 
   // Delete all elements in a user-created element group
-  const deleteElementGroup = (elementGroupId: string) => {
+  const deleteElementGroup = useCallback((elementGroupId: string) => {
     recordSnapshot(); // Record for undo
     setElements(elements.filter((el) => el.elementGroupId !== elementGroupId));
     setElementGroups(elementGroups.filter((grp) => grp.id !== elementGroupId));
@@ -4891,9 +4276,9 @@ export function Canvas() {
     // Clear selections
     setSelectedElementIds(new Set());
     setSelectedElementId(null);
-  };
+  }, [recordSnapshot, elements, elementGroups]);
 
-  const ungroupComponent = (groupId: string) => {
+  const ungroupComponent = useCallback((groupId: string) => {
     recordSnapshot(); // Record for undo
     // Remove group reference from all elements
     setElements(
@@ -4911,9 +4296,9 @@ export function Canvas() {
     if (selectedGroupId === groupId) {
       setSelectedGroupId(null);
     }
-  };
+  }, [recordSnapshot, elements, componentGroups, selectedGroupId]);
 
-  const deleteGroup = (groupId: string) => {
+  const deleteGroup = useCallback((groupId: string) => {
     recordSnapshot(); // Record for undo
     setElements(elements.filter((el) => el.groupId !== groupId));
     setComponentGroups(componentGroups.filter((grp) => grp.id !== groupId));
@@ -4921,7 +4306,7 @@ export function Canvas() {
     // Clear selections
     setSelectedGroupId(null);
     setSelectedElementId(null);
-  };
+  }, [recordSnapshot, elements, componentGroups]);
 
   // Generate unique user component ID
   const generateUserComponentId = () =>
@@ -5070,11 +4455,11 @@ export function Canvas() {
   };
 
   // Start the promote flow by opening the name dialog
-  const startPromoteGroupToComponent = (elementGroupId: string) => {
+  const startPromoteGroupToComponent = useCallback((elementGroupId: string) => {
     setPendingPromoteGroupId(elementGroupId);
     setNewComponentName('');
     setIsPromoteDialogOpen(true);
-  };
+  }, []);
 
   // Handle the promote dialog confirmation
   const handlePromoteDialogConfirm = () => {
@@ -5114,13 +4499,721 @@ export function Canvas() {
   };
 
   // Delete a component instance
-  const deleteComponentInstance = (instanceId: string) => {
+  const deleteComponentInstance = useCallback((instanceId: string) => {
     recordSnapshot(); // Record for undo
     setComponentInstances(componentInstances.filter(i => i.id !== instanceId));
     if (selectedInstanceId === instanceId) {
       setSelectedInstanceId(null);
     }
+  }, [recordSnapshot, componentInstances, selectedInstanceId]);
+
+  // Keep keyboard callbacks ref in sync - this runs synchronously before useEffect
+  // Allows the keyboard handler to access latest callbacks without re-registering the listener
+  keyboardCallbacksRef.current = {
+    performUndo,
+    performRedo,
+    recordSnapshot,
+    copySelectedElements,
+    pasteElements,
+    duplicateSelectedElements,
+    zoomIn,
+    zoomOut,
+    resetZoom,
+    bringToFront,
+    sendToBack,
+    bringForward,
+    sendBackward,
+    toggleDocPanel,
+    toggleElementVisibility,
+    toggleElementLock,
+    announce,
+    enterEditMode,
+    createElementGroup,
+    ungroupElements,
+    ungroupComponent,
+    deleteElementGroup,
+    deleteGroup,
+    startPromoteGroupToComponent,
+    deleteComponentInstance,
+    showConfirmDialog,
   };
+
+  // Keyboard event handler for deletion, grouping, and ungrouping
+  // Uses keyboardStateRef and keyboardCallbacksRef to read current values without causing re-registration
+  // This significantly reduces event listener churn when state changes frequently
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Read current state from ref to avoid closure stale values
+      const {
+        selectedElementId: currentSelectedElementId,
+        selectedElementIds: currentSelectedElementIds,
+        selectedInstanceId: currentSelectedInstanceId,
+        elements: currentElements,
+        componentGroups: currentComponentGroups,
+        elementGroups: currentElementGroups,
+        editingElementId: currentEditingElementId,
+        selectedByClick: currentSelectedByClick,
+        isPromoteDialogOpen: currentIsPromoteDialogOpen,
+        confirmDialogIsOpen: currentConfirmDialogIsOpen,
+      } = keyboardStateRef.current;
+
+      // Read current callbacks from ref
+      const callbacks = keyboardCallbacksRef.current;
+
+      // Disable canvas keyboard shortcuts during text editing
+      // (text input handles its own keyboard events)
+      if (currentEditingElementId) return;
+
+      // Don't handle shortcuts when focus is on input fields or dialogs are open
+      const activeElement = document.activeElement;
+      const isInputFocused = activeElement instanceof HTMLInputElement ||
+                             activeElement instanceof HTMLTextAreaElement ||
+                             activeElement?.getAttribute('contenteditable') === 'true';
+      if (isInputFocused) return;
+      if (currentIsPromoteDialogOpen || currentConfirmDialogIsOpen) return;
+
+      // Escape: deselect all and switch to select tool
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setSelectedElementId(null);
+        setSelectedElementIds(new Set());
+        setSelectedGroupId(null);
+        setCurrentTool("select");
+        return;
+      }
+
+      // Ctrl/Cmd+\: Toggle documentation panel
+      if ((e.ctrlKey || e.metaKey) && e.key === "\\") {
+        e.preventDefault();
+        callbacks.toggleDocPanel();
+        return;
+      }
+
+      // Tool shortcuts (single letter without modifiers)
+      // Skip if a text element is selected - let type-to-edit handle it instead
+      const selectedTextElement = currentSelectedElementId
+        ? currentElements.find(el => el.id === currentSelectedElementId && el.type === "text")
+        : null;
+      const isTextElementSelected = selectedTextElement && selectedTextElement.locked !== true;
+
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !isTextElementSelected) {
+        switch (e.key.toLowerCase()) {
+          case "v":
+            setCurrentTool("select");
+            return;
+          case "r":
+            setCurrentTool("rectangle");
+            return;
+          case "o":
+            setCurrentTool("ellipse");
+            return;
+          case "d":
+            setCurrentTool("diamond");
+            return;
+          case "a":
+            setCurrentTool("arrow");
+            return;
+          case "l":
+            setCurrentTool("line");
+            return;
+          case "p":
+            setCurrentTool("freedraw");
+            return;
+          case "t":
+            setCurrentTool("text");
+            return;
+          // Color shortcuts (Phase 1)
+          case "s":
+            // Open stroke color picker
+            setStrokePickerOpen(true);
+            setFillPickerOpen(false);
+            return;
+          case "g":
+            // Open fill color picker
+            setFillPickerOpen(true);
+            setStrokePickerOpen(false);
+            return;
+          // Layer shortcuts
+          case "h":
+            // Toggle visibility of selected element(s)
+            if (currentSelectedElementId || currentSelectedElementIds.size > 0) {
+              e.preventDefault();
+              const idsToToggle = currentSelectedElementIds.size > 0
+                ? Array.from(currentSelectedElementIds)
+                : [currentSelectedElementId!];
+              idsToToggle.forEach(id => callbacks.toggleElementVisibility(id));
+            }
+            return;
+        }
+      }
+
+      // "?" key (Shift + /) to show keyboard shortcuts
+      if (e.key === "?" && e.shiftKey) {
+        e.preventDefault();
+        setShortcutsOpen(true);
+        return;
+      }
+
+      // Ctrl/Cmd+A: Select all elements
+      if ((e.ctrlKey || e.metaKey) && e.key === "a") {
+        e.preventDefault();
+        if (currentElements.length > 0) {
+          setSelectedElementIds(new Set(currentElements.map((el) => el.id)));
+          setSelectedElementId(currentElements[0].id);
+        }
+        return;
+      }
+
+      // Ctrl/Cmd+Z: Undo
+      if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        callbacks.performUndo();
+        return;
+      }
+
+      // Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z: Redo
+      if (
+        ((e.ctrlKey || e.metaKey) && e.key === "y") ||
+        ((e.ctrlKey || e.metaKey) && e.key === "Z" && e.shiftKey)
+      ) {
+        e.preventDefault();
+        callbacks.performRedo();
+        return;
+      }
+
+      // Ctrl/Cmd+C: Copy
+      if ((e.ctrlKey || e.metaKey) && e.key === "c") {
+        e.preventDefault();
+        callbacks.copySelectedElements();
+        return;
+      }
+
+      // Ctrl/Cmd+V: Paste
+      if ((e.ctrlKey || e.metaKey) && e.key === "v") {
+        e.preventDefault();
+        callbacks.pasteElements();
+        return;
+      }
+
+      // Ctrl/Cmd+D: Duplicate
+      if ((e.ctrlKey || e.metaKey) && e.key === "d") {
+        e.preventDefault();
+        callbacks.duplicateSelectedElements();
+        return;
+      }
+
+      // Zoom shortcuts: Ctrl/Cmd++ to zoom in, Ctrl/Cmd+- to zoom out, Ctrl/Cmd+0 to reset
+      if ((e.ctrlKey || e.metaKey) && (e.key === "+" || e.key === "=")) {
+        e.preventDefault();
+        callbacks.zoomIn();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "-") {
+        e.preventDefault();
+        callbacks.zoomOut();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "0") {
+        e.preventDefault();
+        callbacks.resetZoom();
+        return;
+      }
+
+      // Layer controls
+      // Ctrl/Cmd+]: Bring forward
+      if ((e.ctrlKey || e.metaKey) && e.key === "]" && !e.shiftKey) {
+        e.preventDefault();
+        callbacks.bringForward();
+        return;
+      }
+      // Ctrl/Cmd+[: Send backward
+      if ((e.ctrlKey || e.metaKey) && e.key === "[" && !e.shiftKey) {
+        e.preventDefault();
+        callbacks.sendBackward();
+        return;
+      }
+      // Ctrl/Cmd+Shift+]: Bring to front
+      if ((e.ctrlKey || e.metaKey) && e.key === "}" && e.shiftKey) {
+        e.preventDefault();
+        callbacks.bringToFront();
+        return;
+      }
+      // Ctrl/Cmd+Shift+[: Send to back
+      if ((e.ctrlKey || e.metaKey) && e.key === "{" && e.shiftKey) {
+        e.preventDefault();
+        callbacks.sendToBack();
+        return;
+      }
+      // Ctrl/Cmd+L: Toggle lock of selected element(s)
+      if ((e.ctrlKey || e.metaKey) && e.key === "l" && !e.shiftKey) {
+        if (currentSelectedElementId || currentSelectedElementIds.size > 0) {
+          e.preventDefault();
+          const idsToToggle = currentSelectedElementIds.size > 0
+            ? Array.from(currentSelectedElementIds)
+            : [currentSelectedElementId!];
+          idsToToggle.forEach(id => callbacks.toggleElementLock(id));
+        }
+        return;
+      }
+
+      // Check for Ctrl/Cmd+G to create group (needs multiple elements selected)
+      if ((e.ctrlKey || e.metaKey) && e.key === "g" && !e.shiftKey) {
+        if (currentSelectedElementIds.size >= 2) {
+          e.preventDefault();
+          callbacks.createElementGroup();
+        }
+        return;
+      }
+
+      // Check for Ctrl/Cmd+Shift+G to ungroup
+      if ((e.ctrlKey || e.metaKey) && e.key === "G" && e.shiftKey) {
+        e.preventDefault();
+        // Find if any selected element is in a user group
+        const selectedElement = currentSelectedElementId
+          ? currentElements.find((el) => el.id === currentSelectedElementId)
+          : null;
+
+        if (selectedElement?.elementGroupId) {
+          callbacks.ungroupElements(selectedElement.elementGroupId);
+        } else if (selectedElement?.groupId) {
+          // Also allow ungrouping component groups with this shortcut
+          callbacks.ungroupComponent(selectedElement.groupId);
+        }
+        return;
+      }
+
+      // Check for Ctrl/Cmd+Shift+C to promote group to component
+      if ((e.ctrlKey || e.metaKey) && e.key === "C" && e.shiftKey) {
+        // Find if any selected element is in a user group
+        const selectedElement = currentSelectedElementId
+          ? currentElements.find((el) => el.id === currentSelectedElementId)
+          : null;
+
+        if (selectedElement?.elementGroupId) {
+          e.preventDefault();
+          callbacks.startPromoteGroupToComponent(selectedElement.elementGroupId);
+        }
+        return;
+      }
+
+      // Text formatting shortcuts (when text element is selected)
+      if (currentSelectedElementId) {
+        const selectedElement = currentElements.find(
+          (el) => el.id === currentSelectedElementId,
+        );
+        if (selectedElement?.type === "text") {
+          const textEl = selectedElement as TextElement;
+
+          // Ctrl/Cmd+B: Toggle bold
+          if ((e.ctrlKey || e.metaKey) && e.key === "b") {
+            e.preventDefault();
+            const newWeight = textEl.fontWeight === "bold" ? "normal" : "bold";
+            setElements(
+              currentElements.map((el) =>
+                el.id === currentSelectedElementId
+                  ? { ...el, fontWeight: newWeight, preset: undefined }
+                  : el,
+              ),
+            );
+            return;
+          }
+
+          // Ctrl/Cmd+I: Toggle italic
+          if ((e.ctrlKey || e.metaKey) && e.key === "i") {
+            e.preventDefault();
+            const newStyle =
+              textEl.fontStyle === "italic" ? "normal" : "italic";
+            setElements(
+              currentElements.map((el) =>
+                el.id === currentSelectedElementId
+                  ? { ...el, fontStyle: newStyle }
+                  : el,
+              ),
+            );
+            return;
+          }
+
+          // Ctrl/Cmd+Shift+L: Align left
+          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "L") {
+            e.preventDefault();
+            setElements(
+              currentElements.map((el) =>
+                el.id === currentSelectedElementId
+                  ? { ...el, textAlign: "left" as const }
+                  : el,
+              ),
+            );
+            return;
+          }
+
+          // Ctrl/Cmd+Shift+E: Align center
+          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "E") {
+            e.preventDefault();
+            setElements(
+              currentElements.map((el) =>
+                el.id === currentSelectedElementId
+                  ? { ...el, textAlign: "center" as const }
+                  : el,
+              ),
+            );
+            return;
+          }
+
+          // Ctrl/Cmd+Shift+R: Align right
+          if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "R") {
+            e.preventDefault();
+            setElements(
+              currentElements.map((el) =>
+                el.id === currentSelectedElementId
+                  ? { ...el, textAlign: "right" as const }
+                  : el,
+              ),
+            );
+            return;
+          }
+
+          // Ctrl/Cmd+Alt+1: Apply H1 preset
+          if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === "1") {
+            e.preventDefault();
+            setElements(
+              currentElements.map((el) =>
+                el.id === currentSelectedElementId
+                  ? {
+                      ...el,
+                      fontSize: 32,
+                      fontWeight: "bold" as const,
+                      lineHeight: Math.round(32 * 1.2),
+                      preset: "heading1" as const,
+                    }
+                  : el,
+              ),
+            );
+            return;
+          }
+
+          // Ctrl/Cmd+Alt+2: Apply H2 preset
+          if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === "2") {
+            e.preventDefault();
+            setElements(
+              currentElements.map((el) =>
+                el.id === currentSelectedElementId
+                  ? {
+                      ...el,
+                      fontSize: 24,
+                      fontWeight: "bold" as const,
+                      lineHeight: Math.round(24 * 1.25),
+                      preset: "heading2" as const,
+                    }
+                  : el,
+              ),
+            );
+            return;
+          }
+
+          // Ctrl/Cmd+Alt+3: Apply H3 preset
+          if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === "3") {
+            e.preventDefault();
+            setElements(
+              currentElements.map((el) =>
+                el.id === currentSelectedElementId
+                  ? {
+                      ...el,
+                      fontSize: 20,
+                      fontWeight: "bold" as const,
+                      lineHeight: Math.round(20 * 1.3),
+                      preset: "heading3" as const,
+                    }
+                  : el,
+              ),
+            );
+            return;
+          }
+
+          // Ctrl/Cmd+Alt+0: Apply Body preset
+          if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === "0") {
+            e.preventDefault();
+            setElements(
+              currentElements.map((el) =>
+                el.id === currentSelectedElementId
+                  ? {
+                      ...el,
+                      fontSize: 16,
+                      fontWeight: "normal" as const,
+                      lineHeight: Math.round(16 * 1.5),
+                      preset: "body" as const,
+                    }
+                  : el,
+              ),
+            );
+            return;
+          }
+
+          // Enter: Enter edit mode for text element (accessibility - WCAG 2.1.1)
+          if (e.key === "Enter" && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+            if (textEl.locked !== true) {
+              e.preventDefault();
+              callbacks.enterEditMode(textEl);
+            }
+            return;
+          }
+
+          // Type-to-edit: Printable character starts editing and replaces content
+          // Matches Excalidraw behavior - typing on selected text replaces it
+          if (
+            e.key.length === 1 &&
+            !e.ctrlKey &&
+            !e.metaKey &&
+            !e.altKey &&
+            textEl.locked !== true
+          ) {
+            e.preventDefault();
+            setEditingElementId(textEl.id);
+            setEditingText(e.key);
+            setIsNewTextElement(false);
+            setSelectedByClick(false);
+            // Focus input after React renders it
+            setTimeout(() => {
+              textInputRef.current?.focus();
+              // Move cursor to end (after the typed character)
+              if (textInputRef.current) {
+                const len = textInputRef.current.value.length;
+                textInputRef.current.setSelectionRange(len, len);
+              }
+            }, 0);
+            return;
+          }
+        }
+      }
+
+      // Handle instance deletion
+      if (currentSelectedInstanceId) {
+        if (e.key === "Delete" || (e.key === "Backspace" && currentSelectedByClick)) {
+          e.preventDefault();
+          callbacks.deleteComponentInstance(currentSelectedInstanceId);
+          setSelectedByClick(false);
+        }
+        return;
+      }
+
+      // Only handle deletion if an element is selected
+      if (!currentSelectedElementId) return;
+
+      const element = currentElements.find((el) => el.id === currentSelectedElementId);
+      if (!element) return;
+
+      // Check for Delete or Backspace key
+      // Backspace only deletes if element was selected by clicking (not after editing text)
+      if (e.key === "Delete" || (e.key === "Backspace" && currentSelectedByClick)) {
+        // Prevent default browser behavior (e.g., navigate back)
+        e.preventDefault();
+
+        // Handle multi-selection deletion (including groups)
+        if (currentSelectedElementIds.size > 1) {
+          // Collect all selected elements
+          const selectedElements = currentElements.filter((el) =>
+            currentSelectedElementIds.has(el.id)
+          );
+
+          // Collect unique group IDs from selected elements
+          const componentGroupIds = new Set<string>();
+          const elementGroupIds = new Set<string>();
+          let ungroupedCount = 0;
+
+          selectedElements.forEach((el) => {
+            if (el.groupId) {
+              componentGroupIds.add(el.groupId);
+            } else if (el.elementGroupId) {
+              elementGroupIds.add(el.elementGroupId);
+            } else {
+              ungroupedCount++;
+            }
+          });
+
+          const totalGroups = componentGroupIds.size + elementGroupIds.size;
+
+          // If any groups are involved, show confirmation dialog
+          if (totalGroups > 0) {
+            // Build message parts
+            const parts: string[] = [];
+            if (componentGroupIds.size > 0) {
+              parts.push(
+                `${componentGroupIds.size} component${componentGroupIds.size > 1 ? "s" : ""}`
+              );
+            }
+            if (elementGroupIds.size > 0) {
+              parts.push(
+                `${elementGroupIds.size} group${elementGroupIds.size > 1 ? "s" : ""}`
+              );
+            }
+            if (ungroupedCount > 0) {
+              parts.push(
+                `${ungroupedCount} element${ungroupedCount > 1 ? "s" : ""}`
+              );
+            }
+
+            const title =
+              totalGroups === 1 && ungroupedCount === 0
+                ? componentGroupIds.size > 0
+                  ? "Delete component?"
+                  : "Delete group?"
+                : "Delete selection?";
+
+            const message =
+              `This will delete ${parts.join(" and ")}. This action cannot be undone.`;
+
+            callbacks.showConfirmDialog(
+              title,
+              message,
+              () => {
+                // Re-read current state for the callback (state may have changed)
+                const latestState = keyboardStateRef.current;
+                const latestCallbacks = keyboardCallbacksRef.current;
+                latestCallbacks.recordSnapshot(); // Record for undo
+
+                // Delete all selected elements
+                setElements(
+                  latestState.elements.filter((el) => !currentSelectedElementIds.has(el.id))
+                );
+
+                // Clean up component group records
+                if (componentGroupIds.size > 0) {
+                  setComponentGroups(
+                    latestState.componentGroups.filter(
+                      (grp) => !componentGroupIds.has(grp.id)
+                    )
+                  );
+                }
+
+                // Clean up element group records
+                if (elementGroupIds.size > 0) {
+                  setElementGroups(
+                    latestState.elementGroups.filter(
+                      (grp) => !elementGroupIds.has(grp.id)
+                    )
+                  );
+                }
+
+                // Clear all selections
+                setSelectedElementIds(new Set());
+                setSelectedElementId(null);
+                setSelectedGroupId(null);
+                setSelectedByClick(false);
+
+                latestCallbacks.announce(
+                  `Deleted ${parts.join(" and ")}`
+                );
+              },
+              "danger"
+            );
+          } else {
+            // No groups, just delete individual elements
+            callbacks.recordSnapshot(); // Record for undo
+            const count = currentSelectedElementIds.size;
+            setElements(
+              currentElements.filter((el) => !currentSelectedElementIds.has(el.id))
+            );
+            setSelectedElementIds(new Set());
+            setSelectedElementId(null);
+            setSelectedByClick(false);
+            callbacks.announce(`Deleted ${count} elements`);
+          }
+        }
+        // If element is in a user-created element group, delete entire group
+        else if (element.elementGroupId) {
+          const groupId = element.elementGroupId;
+          callbacks.showConfirmDialog(
+            "Delete group?",
+            "This will delete all elements in this group. This action cannot be undone.",
+            () => {
+              keyboardCallbacksRef.current.deleteElementGroup(groupId);
+              setSelectedByClick(false);
+            },
+            "danger",
+          );
+        }
+        // If element is in a component group, delete entire component group with confirmation
+        else if (element.groupId) {
+          const componentName = element.componentType || "grouped";
+          const groupId = element.groupId;
+          callbacks.showConfirmDialog(
+            `Delete ${componentName} component?`,
+            "This will delete the entire component and all its elements. This action cannot be undone.",
+            () => {
+              keyboardCallbacksRef.current.deleteGroup(groupId);
+              setSelectedByClick(false);
+            },
+            "danger",
+          );
+        }
+        // Remove single element from state
+        else {
+          callbacks.recordSnapshot(); // Record for undo
+          const elementType = element.type;
+
+          // Collect IDs to delete (element + any bound text if container)
+          const idsToDelete = new Set<string>([currentSelectedElementId]);
+
+          // If this is a container with bound text, also delete the bound text
+          if (isContainerElement(element) && element.boundElements) {
+            element.boundElements.forEach(be => {
+              idsToDelete.add(be.id);
+            });
+          }
+
+          // If this is a bound text element, remove reference from container
+          const textEl = element as TextElement;
+          if (textEl.containerId) {
+            // Update the container to remove the bound element reference
+            const container = currentElements.find(el => el.id === textEl.containerId);
+            if (container && container.boundElements) {
+              const updatedContainer = {
+                ...container,
+                boundElements: container.boundElements.filter(be => be.id !== currentSelectedElementId)
+              };
+              setElements(
+                currentElements
+                  .filter((el) => !idsToDelete.has(el.id))
+                  .map(el => el.id === textEl.containerId ? updatedContainer : el)
+              );
+              setSelectedElementId(null);
+              setSelectedByClick(false);
+              callbacks.announce(`Deleted ${elementType}`);
+              return;
+            }
+          }
+
+          setElements(currentElements.filter((el) => !idsToDelete.has(el.id)));
+          setSelectedElementId(null);
+          setSelectedByClick(false);
+          callbacks.announce(`Deleted ${elementType}`);
+        }
+      }
+
+      // Check for 'G' key (without modifiers) to ungroup component groups (legacy behavior)
+      if (e.key === "g" && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        if (element.groupId) {
+          e.preventDefault();
+          callbacks.ungroupComponent(element.groupId);
+        } else if (element.elementGroupId) {
+          e.preventDefault();
+          callbacks.ungroupElements(element.elementGroupId);
+        }
+      }
+    };
+
+    // Add event listener
+    window.addEventListener("keydown", handleKeyDown);
+
+    // Cleanup on unmount
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  // Empty dependency array - all state and callbacks are accessed via refs
+  // This completely eliminates event listener re-registration on state changes
+  // The refs (keyboardStateRef and keyboardCallbacksRef) are updated synchronously
+  // during render, so the handler always has access to current values
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Get instances for the current frame
   const getFrameInstances = useCallback(

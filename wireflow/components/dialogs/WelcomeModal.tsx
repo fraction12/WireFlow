@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { X, ArrowRight } from 'lucide-react';
 
 const WELCOME_SHOWN_KEY = 'wireflow-welcome-shown';
@@ -11,20 +11,84 @@ interface WelcomeModalProps {
 
 export function WelcomeModal({ onDismiss }: WelcomeModalProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const previousActiveElement = useRef<Element | null>(null);
+  const startButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     // Check if user has seen the welcome modal before
     const hasSeenWelcome = localStorage.getItem(WELCOME_SHOWN_KEY);
     if (!hasSeenWelcome) {
+      // Store the currently focused element to restore focus later
+      previousActiveElement.current = document.activeElement;
       setIsOpen(true);
     }
   }, []);
 
-  const handleDismiss = () => {
+  // Auto-focus the "Start creating" button when modal opens
+  useEffect(() => {
+    if (isOpen && startButtonRef.current) {
+      startButtonRef.current.focus();
+    }
+  }, [isOpen]);
+
+  const handleDismiss = useCallback(() => {
     localStorage.setItem(WELCOME_SHOWN_KEY, 'true');
     setIsOpen(false);
+    // Return focus to the previously focused element
+    if (previousActiveElement.current instanceof HTMLElement) {
+      previousActiveElement.current.focus();
+    }
     onDismiss?.();
-  };
+  }, [onDismiss]);
+
+  // Handle Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        handleDismiss();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, handleDismiss]);
+
+  // Focus trap implementation
+  useEffect(() => {
+    if (!isOpen || !modalRef.current) return;
+
+    const modal = modalRef.current;
+    const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+
+    const handleTabKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
+
+      const focusableElements = modal.querySelectorAll(focusableSelector);
+      const firstElement = focusableElements[0] as HTMLElement;
+      const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+
+      if (e.shiftKey) {
+        // Shift + Tab: if focus is on first element, wrap to last
+        if (document.activeElement === firstElement) {
+          e.preventDefault();
+          lastElement?.focus();
+        }
+      } else {
+        // Tab: if focus is on last element, wrap to first
+        if (document.activeElement === lastElement) {
+          e.preventDefault();
+          firstElement?.focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleTabKey);
+    return () => document.removeEventListener('keydown', handleTabKey);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -43,7 +107,10 @@ export function WelcomeModal({ onDismiss }: WelcomeModalProps) {
       />
 
       {/* Modal */}
-      <div className="relative bg-white dark:bg-zinc-900 rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-700 w-full max-w-lg mx-4 overflow-hidden animate-scale-in">
+      <div
+        ref={modalRef}
+        className="relative bg-white dark:bg-zinc-900 rounded-xl shadow-2xl border border-zinc-200 dark:border-zinc-700 w-full max-w-lg mx-4 overflow-hidden animate-scale-in"
+      >
         {/* Close button */}
         <button
           onClick={handleDismiss}
@@ -87,6 +154,7 @@ export function WelcomeModal({ onDismiss }: WelcomeModalProps) {
 
           {/* CTA */}
           <button
+            ref={startButtonRef}
             onClick={handleDismiss}
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
           >

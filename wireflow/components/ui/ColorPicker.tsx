@@ -28,6 +28,7 @@ export function ColorPicker({
 }: ColorPickerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const colorButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
   const [showCustomPicker, setShowCustomPicker] = useState(false);
 
@@ -61,6 +62,13 @@ export function ColorPicker({
       setShowCustomPicker(false);
     }
   }, [isOpen, selectedColor, colors]);
+
+  // Actually focus the button when focusedIndex changes (roving tabindex)
+  useEffect(() => {
+    if (isOpen && focusedIndex >= 0 && colorButtonRefs.current[focusedIndex]) {
+      colorButtonRefs.current[focusedIndex]?.focus();
+    }
+  }, [isOpen, focusedIndex]);
 
   // Handle keyboard navigation in dropdown
   const handleDropdownKeyDown = (e: React.KeyboardEvent) => {
@@ -166,11 +174,9 @@ export function ColorPicker({
         role="listbox"
         aria-label={`Select ${label.toLowerCase()} color`}
         aria-activedescendant={focusedIndex >= 0 ? getOptionId(focusedIndex) : undefined}
-        onKeyDown={handleDropdownKeyDown}
-        tabIndex={-1}
       >
         {/* Preset Color Grid */}
-        <div className="grid grid-cols-5 gap-2">
+        <div className="grid grid-cols-5 gap-2" role="presentation">
           {colors.map((color, index) => {
             const isSelected = color.hex.toLowerCase() === selectedColor.toLowerCase();
             const isFocused = index === focusedIndex;
@@ -180,11 +186,13 @@ export function ColorPicker({
               <button
                 id={getOptionId(index)}
                 key={color.hex}
+                ref={(el) => { colorButtonRefs.current[index] = el; }}
                 onClick={() => handleColorSelect(color)}
+                onKeyDown={handleDropdownKeyDown}
                 className={`
                   w-8 h-8 rounded-lg flex items-center justify-center
                   transition-all duration-150 ease-out
-                  focus:outline-none
+                  focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2
                   hover:scale-105 active:scale-95
                   ${isSelected
                     ? 'ring-2 ring-blue-500 ring-offset-1'
@@ -200,7 +208,7 @@ export function ColorPicker({
                 aria-label={color.name}
                 role="option"
                 aria-selected={isSelected}
-                tabIndex={-1}
+                tabIndex={isFocused ? 0 : -1}
               >
                 {/* Transparent indicator */}
                 {isTransparent && (
@@ -229,7 +237,15 @@ export function ColorPicker({
         {/* Custom Color Toggle */}
         <button
           onClick={() => setShowCustomPicker(!showCustomPicker)}
-          className="w-full text-xs text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 py-1 px-2 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              onOpenChange(false);
+              triggerRef.current?.focus();
+            }
+          }}
+          className="w-full text-xs text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 py-1 px-2 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
+          aria-expanded={showCustomPicker}
         >
           {showCustomPicker ? 'Hide custom color' : 'Custom color...'}
         </button>
@@ -252,7 +268,15 @@ export function ColorPicker({
                     onColorChange(val || '#000000');
                   }
                 }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    onOpenChange(false);
+                    triggerRef.current?.focus();
+                  }
+                }}
                 placeholder="#000000"
+                aria-label="Custom hex color value"
                 className="flex-1 px-2 py-1 text-xs border border-zinc-200 dark:border-zinc-700 rounded bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </div>

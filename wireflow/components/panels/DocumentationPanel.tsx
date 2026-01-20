@@ -82,7 +82,7 @@ export function DocumentationPanel({
           className="w-8 h-8 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95"
           title="Hide panel (Ctrl+\)"
           aria-label="Hide documentation panel"
-          aria-expanded="true"
+          aria-expanded={isExpanded}
         >
           <ChevronRight size={18} />
         </button>

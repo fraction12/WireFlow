@@ -3,6 +3,79 @@ import type { WorkspaceState, Frame, ComponentGroup, ElementGroup, UserComponent
 const STORAGE_KEY = 'wireflow-workspace';
 const CURRENT_VERSION = 1;
 
+// Minimum version we can migrate from (older versions are truly incompatible)
+const MIN_SUPPORTED_VERSION = 0;
+
+/**
+ * Migration functions to upgrade data from one version to the next.
+ * Each function takes data at version N and returns data at version N+1.
+ * Add new migrations here when incrementing CURRENT_VERSION.
+ */
+type MigrationFn = (data: Record<string, unknown>) => Record<string, unknown>;
+
+const migrations: Record<number, MigrationFn> = {
+  // Migration from version 0 (pre-versioned data) to version 1
+  // Version 0 was the initial schema, so this is mostly just adding the version field
+  0: (data) => {
+    return {
+      ...data,
+      version: 1,
+      // Ensure optional arrays exist (these were added in v1)
+      elementGroups: data.elementGroups || [],
+      userComponents: data.userComponents || [],
+      componentInstances: data.componentInstances || [],
+    };
+  },
+  // Future migrations go here:
+  // 1: (data) => { /* migrate v1 -> v2 */ return { ...data, version: 2 }; },
+};
+
+/**
+ * Migrate data from its current version to CURRENT_VERSION.
+ * Returns the migrated data, or null if migration is not possible.
+ */
+function migrateData(data: Record<string, unknown>): Record<string, unknown> | null {
+  let version = typeof data.version === 'number' ? data.version : 0;
+  let migratedData = { ...data };
+
+  // Cannot migrate from future versions
+  if (version > CURRENT_VERSION) {
+    console.warn(
+      `Cannot load data from future version ${version}. Current version is ${CURRENT_VERSION}. ` +
+      'Please update the application.'
+    );
+    return null;
+  }
+
+  // Cannot migrate from versions older than minimum supported
+  if (version < MIN_SUPPORTED_VERSION) {
+    console.warn(
+      `Cannot migrate data from version ${version}. Minimum supported version is ${MIN_SUPPORTED_VERSION}.`
+    );
+    return null;
+  }
+
+  // Apply migrations sequentially
+  while (version < CURRENT_VERSION) {
+    const migrationFn = migrations[version];
+    if (!migrationFn) {
+      console.warn(`Missing migration function for version ${version} to ${version + 1}`);
+      return null;
+    }
+
+    try {
+      migratedData = migrationFn(migratedData);
+      version++;
+      console.info(`Migrated workspace data from version ${version - 1} to ${version}`);
+    } catch (error) {
+      console.warn(`Migration from version ${version} failed:`, error);
+      return null;
+    }
+  }
+
+  return migratedData;
+}
+
 /** Result type for save operations with detailed error information */
 export type SaveResult =
   | { success: true }
@@ -71,6 +144,7 @@ export function saveWorkspaceSimple(state: WorkspaceState): boolean {
 
 /**
  * Load workspace state from localStorage with detailed error reporting.
+ * Automatically migrates older versions to the current schema.
  * Returns result object with data on success or error details on failure.
  */
 export function loadWorkspaceWithResult(): LoadResult {
@@ -92,17 +166,29 @@ export function loadWorkspaceWithResult(): LoadResult {
       return { success: false, error: 'invalid_json', message: 'Saved data is corrupted and cannot be parsed' };
     }
 
-    // Validate basic structure
-    if (!isValidWorkspaceState(data)) {
-      return { success: false, error: 'invalid_schema', message: 'Saved data has invalid structure. Starting fresh.' };
+    // Validate and migrate to current version
+    const migratedData = validateAndMigrateWorkspaceState(data);
+    if (!migratedData) {
+      // Check if it's a future version to give a more helpful error message
+      if (typeof data === 'object' && data !== null) {
+        const obj = data as Record<string, unknown>;
+        if (typeof obj.version === 'number' && obj.version > CURRENT_VERSION) {
+          return {
+            success: false,
+            error: 'invalid_schema',
+            message: `Saved data is from a newer version (v${obj.version}). Please update the application to load this data.`
+          };
+        }
+      }
+      return { success: false, error: 'invalid_schema', message: 'Saved data has invalid structure and cannot be migrated. Starting fresh.' };
     }
 
-    // Ensure all arrays exist (backward compatibility)
+    // Ensure all optional arrays exist (migration should handle this, but be safe)
     const result: WorkspaceState = {
-      ...data,
-      elementGroups: data.elementGroups || [],
-      userComponents: data.userComponents || [],
-      componentInstances: data.componentInstances || [],
+      ...migratedData,
+      elementGroups: migratedData.elementGroups || [],
+      userComponents: migratedData.userComponents || [],
+      componentInstances: migratedData.componentInstances || [],
     };
     return { success: true, data: result };
   } catch (error) {
@@ -133,65 +219,54 @@ export function clearWorkspace(): void {
 }
 
 /**
- * Validate that data has the expected workspace state structure.
- * Validates frames, elements, and component groups to ensure safe restore.
+ * Validate that data has the expected workspace state structure (post-migration).
+ * This validates the current schema only - version migration happens before this is called.
  */
-function isValidWorkspaceState(data: unknown): data is WorkspaceState {
-  if (typeof data !== 'object' || data === null) {
+function isValidWorkspaceStructure(data: Record<string, unknown>): boolean {
+  if (!Array.isArray(data.frames)) {
     return false;
   }
 
-  const obj = data as Record<string, unknown>;
-
-  // Check version matches current schema to avoid loading incompatible data
-  if (typeof obj.version !== 'number' || obj.version !== CURRENT_VERSION) {
-    return false;
-  }
-
-  if (!Array.isArray(obj.frames)) {
-    return false;
-  }
-
-  if (!Array.isArray(obj.componentGroups)) {
+  if (!Array.isArray(data.componentGroups)) {
     return false;
   }
 
   // elementGroups is optional for backward compatibility (defaults to [])
-  if (obj.elementGroups !== undefined && !Array.isArray(obj.elementGroups)) {
+  if (data.elementGroups !== undefined && !Array.isArray(data.elementGroups)) {
     return false;
   }
 
   // userComponents is optional for backward compatibility (defaults to [])
-  if (obj.userComponents !== undefined && !Array.isArray(obj.userComponents)) {
+  if (data.userComponents !== undefined && !Array.isArray(data.userComponents)) {
     return false;
   }
 
   // componentInstances is optional for backward compatibility (defaults to [])
-  if (obj.componentInstances !== undefined && !Array.isArray(obj.componentInstances)) {
+  if (data.componentInstances !== undefined && !Array.isArray(data.componentInstances)) {
     return false;
   }
 
-  if (typeof obj.activeFrameId !== 'string') {
+  if (typeof data.activeFrameId !== 'string') {
     return false;
   }
 
   // Validate frames have required structure
-  for (const frame of obj.frames) {
+  for (const frame of data.frames) {
     if (!isValidFrame(frame)) {
       return false;
     }
   }
 
   // Validate component groups have required structure
-  for (const group of obj.componentGroups) {
+  for (const group of data.componentGroups) {
     if (!isValidComponentGroup(group)) {
       return false;
     }
   }
 
   // Validate element groups have required structure (if present)
-  if (Array.isArray(obj.elementGroups)) {
-    for (const group of obj.elementGroups) {
+  if (Array.isArray(data.elementGroups)) {
+    for (const group of data.elementGroups) {
       if (!isValidElementGroup(group)) {
         return false;
       }
@@ -199,8 +274,8 @@ function isValidWorkspaceState(data: unknown): data is WorkspaceState {
   }
 
   // Validate user components have required structure (if present)
-  if (Array.isArray(obj.userComponents)) {
-    for (const component of obj.userComponents) {
+  if (Array.isArray(data.userComponents)) {
+    for (const component of data.userComponents) {
       if (!isValidUserComponent(component)) {
         return false;
       }
@@ -208,8 +283,8 @@ function isValidWorkspaceState(data: unknown): data is WorkspaceState {
   }
 
   // Validate component instances have required structure (if present)
-  if (Array.isArray(obj.componentInstances)) {
-    for (const instance of obj.componentInstances) {
+  if (Array.isArray(data.componentInstances)) {
+    for (const instance of data.componentInstances) {
       if (!isValidComponentInstance(instance)) {
         return false;
       }
@@ -217,6 +292,32 @@ function isValidWorkspaceState(data: unknown): data is WorkspaceState {
   }
 
   return true;
+}
+
+/**
+ * Validate and migrate data to the current workspace state structure.
+ * Attempts migration for older versions before validation.
+ * Returns the migrated data if valid, or null if migration/validation fails.
+ */
+function validateAndMigrateWorkspaceState(data: unknown): WorkspaceState | null {
+  if (typeof data !== 'object' || data === null) {
+    return null;
+  }
+
+  const obj = data as Record<string, unknown>;
+
+  // Attempt to migrate data to current version
+  const migratedData = migrateData(obj);
+  if (!migratedData) {
+    return null;
+  }
+
+  // Validate the migrated structure
+  if (!isValidWorkspaceStructure(migratedData)) {
+    return null;
+  }
+
+  return migratedData as unknown as WorkspaceState;
 }
 
 /**
