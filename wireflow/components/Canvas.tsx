@@ -5648,8 +5648,8 @@ export function Canvas() {
                     }
                   }}
                   onKeyDown={(e) => {
-                    // Shift+Enter for newline, Enter alone commits
-                    if (e.key === "Enter" && !e.shiftKey) {
+                    // Enter for newline (default), Shift+Enter or Ctrl/Cmd+Enter commits
+                    if (e.key === "Enter" && (e.shiftKey || e.ctrlKey || e.metaKey)) {
                       e.preventDefault();
                       commitTextEdit();
                     } else if (e.key === "Escape") {
