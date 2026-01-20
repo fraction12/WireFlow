@@ -58,14 +58,12 @@ export function DocumentationPanel({
   // Character count for notes
   const notesCharCount = notes.length;
 
-  // Collapsed state - toggle button now lives in ComponentPanel
-  if (!isExpanded) {
-    return null;
-  }
-
-  // Expanded state
   return (
-    <div className="w-80 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-700 flex flex-col h-full">
+    <div
+      className={`bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-700 flex flex-col h-full transition-all duration-200 motion-reduce:transition-none overflow-hidden ${
+        isExpanded ? 'w-80' : 'w-0 border-l-0'
+      }`}
+    >
       {/* Header */}
       <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 flex justify-between items-center">
         <div className="flex items-center gap-2">

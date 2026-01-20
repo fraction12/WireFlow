@@ -470,16 +470,14 @@ export function LayersPanel({
     );
   };
 
-  if (!isExpanded) {
-    return null;
-  }
-
   // Count groups
   const groupCount = componentGroups.length + elementGroups.length;
 
   return (
     <div
-      className="w-64 bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-700 flex flex-col h-full"
+      className={`bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-700 flex flex-col h-full transition-all duration-200 motion-reduce:transition-none overflow-hidden ${
+        isExpanded ? 'w-64' : 'w-0 border-l-0'
+      }`}
       role="region"
       aria-label="Layers panel"
     >
