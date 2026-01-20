@@ -3675,7 +3675,13 @@ export function Canvas() {
       }
 
       // Tool shortcuts (single letter without modifiers)
-      if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+      // Skip if a text element is selected - let type-to-edit handle it instead
+      const selectedTextElement = selectedElementId
+        ? elements.find(el => el.id === selectedElementId && el.type === "text")
+        : null;
+      const isTextElementSelected = selectedTextElement && selectedTextElement.locked !== true;
+
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && !isTextElementSelected) {
         switch (e.key.toLowerCase()) {
           case "v":
             setCurrentTool("select");
@@ -4033,6 +4039,32 @@ export function Canvas() {
               e.preventDefault();
               enterEditMode(textEl);
             }
+            return;
+          }
+
+          // Type-to-edit: Printable character starts editing and replaces content
+          // Matches Excalidraw behavior - typing on selected text replaces it
+          if (
+            e.key.length === 1 &&
+            !e.ctrlKey &&
+            !e.metaKey &&
+            !e.altKey &&
+            textEl.locked !== true
+          ) {
+            e.preventDefault();
+            setEditingElementId(textEl.id);
+            setEditingText(e.key);
+            setIsNewTextElement(false);
+            setSelectedByClick(false);
+            // Focus input after React renders it
+            setTimeout(() => {
+              textInputRef.current?.focus();
+              // Move cursor to end (after the typed character)
+              if (textInputRef.current) {
+                const len = textInputRef.current.value.length;
+                textInputRef.current.setSelectionRange(len, len);
+              }
+            }, 0);
             return;
           }
         }
@@ -5527,7 +5559,7 @@ export function Canvas() {
                   ? hoveredHandle
                     ? `absolute inset-0 ${getHandleCursor(hoveredHandle)}`
                     : hoveredElementId
-                      ? "absolute inset-0 cursor-move"
+                      ? `absolute inset-0 ${elements.find(el => el.id === hoveredElementId)?.type === "text" ? "cursor-text" : "cursor-move"}`
                       : "absolute inset-0 cursor-default"
                   : "absolute inset-0 cursor-crosshair"
             }
