@@ -202,9 +202,7 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
 
   // Render elements to canvas
   const renderToCanvas = (ctx: CanvasRenderingContext2D, offsetX: number, offsetY: number) => {
-    const sketchColor = '#6b7280';
-    ctx.strokeStyle = sketchColor;
-    ctx.fillStyle = sketchColor;
+    const defaultSketchColor = '#6b7280';
     ctx.lineWidth = 1.5;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -213,6 +211,12 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
       const seed = parseInt(element.id.split('_')[1] || '0', 10) % 1000;
       const x = element.x - offsetX;
       const y = element.y - offsetY;
+
+      // Read element-specific colors or fall back to defaults
+      const elementStrokeColor = element.style?.strokeColor || defaultSketchColor;
+      const elementFillColor = element.style?.fillColor || 'transparent';
+      ctx.strokeStyle = elementStrokeColor;
+      ctx.fillStyle = elementStrokeColor;
 
       // Apply rotation for rotatable elements
       const rotation = element.rotation || 0;
@@ -228,10 +232,47 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
       }
 
       if (element.type === 'rectangle') {
+        // Fill rectangle first if fill color is set
+        if (elementFillColor && elementFillColor !== 'transparent') {
+          ctx.fillStyle = elementFillColor;
+          ctx.fillRect(x, y, element.width, element.height);
+        }
+        // Then draw the stroke
+        ctx.strokeStyle = elementStrokeColor;
         drawSketchRect(ctx, x, y, element.width, element.height, seed);
       } else if (element.type === 'ellipse') {
+        // Fill ellipse first if fill color is set
+        if (elementFillColor && elementFillColor !== 'transparent') {
+          ctx.fillStyle = elementFillColor;
+          ctx.beginPath();
+          ctx.ellipse(
+            x + element.width / 2,
+            y + element.height / 2,
+            element.width / 2,
+            element.height / 2,
+            0, 0, Math.PI * 2
+          );
+          ctx.fill();
+        }
+        // Then draw the stroke
+        ctx.strokeStyle = elementStrokeColor;
         drawSketchEllipse(ctx, x, y, element.width, element.height, seed);
       } else if (element.type === 'diamond') {
+        // Fill diamond first if fill color is set
+        if (elementFillColor && elementFillColor !== 'transparent') {
+          ctx.fillStyle = elementFillColor;
+          const cx = x + element.width / 2;
+          const cy = y + element.height / 2;
+          ctx.beginPath();
+          ctx.moveTo(cx, y); // Top
+          ctx.lineTo(x + element.width, cy); // Right
+          ctx.lineTo(cx, y + element.height); // Bottom
+          ctx.lineTo(x, cy); // Left
+          ctx.closePath();
+          ctx.fill();
+        }
+        // Then draw the stroke
+        ctx.strokeStyle = elementStrokeColor;
         drawSketchDiamond(ctx, x, y, element.width, element.height, seed);
       }
 
@@ -262,6 +303,8 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
             textX = x + 8;
         }
 
+        // Use element's stroke color for text fill (matches Canvas.tsx behavior)
+        ctx.fillStyle = elementStrokeColor;
         ctx.fillText(textEl.content || '', textX, y + 8);
       } else if (element.type === 'arrow') {
         const arrowEl = element as ArrowElement;
@@ -368,16 +411,22 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
 
     try {
       const bounds = getBoundingBox();
-      const sketchColor = '#6b7280';
+      const defaultSketchColor = '#6b7280';
 
       let svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${bounds.width} ${bounds.height}" width="${bounds.width}" height="${bounds.height}">
   <rect width="100%" height="100%" fill="white"/>
-  <g stroke="${sketchColor}" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <g stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
 `;
 
       elements.forEach((element) => {
         const x = element.x - bounds.x;
         const y = element.y - bounds.y;
+
+        // Read element-specific colors or fall back to defaults
+        const elementStrokeColor = element.style?.strokeColor || defaultSketchColor;
+        const elementFillColor = element.style?.fillColor || 'transparent';
+        // SVG uses "none" for transparent fill
+        const svgFillColor = elementFillColor === 'transparent' ? 'none' : elementFillColor;
 
         // Calculate rotation transform for SVG
         const rotation = element.rotation || 0;
@@ -388,13 +437,13 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
         const rotateAttr = hasRotation ? ` transform="rotate(${rotationDegrees.toFixed(2)} ${centerX.toFixed(2)} ${centerY.toFixed(2)})"` : '';
 
         if (element.type === 'rectangle') {
-          svgContent += `    <rect x="${x}" y="${y}" width="${element.width}" height="${element.height}"${rotateAttr}/>\n`;
+          svgContent += `    <rect x="${x}" y="${y}" width="${element.width}" height="${element.height}" stroke="${elementStrokeColor}" fill="${svgFillColor}"${rotateAttr}/>\n`;
         } else if (element.type === 'ellipse') {
           const cx = x + element.width / 2;
           const cy = y + element.height / 2;
           const rx = element.width / 2;
           const ry = element.height / 2;
-          svgContent += `    <ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}"${rotateAttr}/>\n`;
+          svgContent += `    <ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" stroke="${elementStrokeColor}" fill="${svgFillColor}"${rotateAttr}/>\n`;
         } else if (element.type === 'diamond') {
           const topX = x + element.width / 2;
           const topY = y;
@@ -404,7 +453,7 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
           const bottomY = y + element.height;
           const leftX = x;
           const leftY = y + element.height / 2;
-          svgContent += `    <polygon points="${topX},${topY} ${rightX},${rightY} ${bottomX},${bottomY} ${leftX},${leftY}"${rotateAttr}/>\n`;
+          svgContent += `    <polygon points="${topX},${topY} ${rightX},${rightY} ${bottomX},${bottomY} ${leftX},${leftY}" stroke="${elementStrokeColor}" fill="${svgFillColor}"${rotateAttr}/>\n`;
         } else if (element.type === 'text') {
           const textEl = element as TextElement;
           const fontSize = textEl.fontSize || 16;
@@ -431,7 +480,7 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
           const textY = y + fontSize + 8;
           const style = `font-size:${fontSize}px;font-weight:${fontWeight};font-style:${fontStyle};font-family:sans-serif`;
           const escapedContent = (textEl.content || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-          svgContent += `    <text x="${textX}" y="${textY}" fill="${sketchColor}" text-anchor="${anchor}" style="${style}">${escapedContent}</text>\n`;
+          svgContent += `    <text x="${textX}" y="${textY}" fill="${elementStrokeColor}" text-anchor="${anchor}" style="${style}">${escapedContent}</text>\n`;
         } else if (element.type === 'arrow') {
           const arrowEl = element as ArrowElement;
           const startX = arrowEl.startX - bounds.x;
@@ -439,7 +488,7 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
           const endX = arrowEl.endX - bounds.x;
           const endY = arrowEl.endY - bounds.y;
 
-          svgContent += `    <line x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}"/>\n`;
+          svgContent += `    <line x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}" stroke="${elementStrokeColor}"/>\n`;
 
           // Arrowhead
           const angle = Math.atan2(endY - startY, endX - startX);
@@ -448,8 +497,8 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
           const head2X = endX - ARROW_HEAD_LENGTH * Math.cos(angle + Math.PI / 6);
           const head2Y = endY - ARROW_HEAD_LENGTH * Math.sin(angle + Math.PI / 6);
 
-          svgContent += `    <line x1="${endX}" y1="${endY}" x2="${head1X}" y2="${head1Y}"/>\n`;
-          svgContent += `    <line x1="${endX}" y1="${endY}" x2="${head2X}" y2="${head2Y}"/>\n`;
+          svgContent += `    <line x1="${endX}" y1="${endY}" x2="${head1X}" y2="${head1Y}" stroke="${elementStrokeColor}"/>\n`;
+          svgContent += `    <line x1="${endX}" y1="${endY}" x2="${head2X}" y2="${head2Y}" stroke="${elementStrokeColor}"/>\n`;
         } else if (element.type === 'line') {
           const lineEl = element as LineElement;
           const startX = lineEl.startX - bounds.x;
@@ -457,7 +506,7 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
           const endX = lineEl.endX - bounds.x;
           const endY = lineEl.endY - bounds.y;
 
-          svgContent += `    <line x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}"/>\n`;
+          svgContent += `    <line x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}" stroke="${elementStrokeColor}"/>\n`;
         } else if (element.type === 'freedraw') {
           const freedrawEl = element as FreedrawElement;
           if (freedrawEl.points.length >= 2) {
@@ -466,7 +515,7 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
               const py = p.y - bounds.y;
               return i === 0 ? `M${px},${py}` : `L${px},${py}`;
             }).join(' ');
-            svgContent += `    <path d="${pathPoints}"/>\n`;
+            svgContent += `    <path d="${pathPoints}" stroke="${elementStrokeColor}" fill="none"/>\n`;
           }
         }
       });

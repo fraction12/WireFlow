@@ -1728,22 +1728,7 @@ export function Canvas() {
       ctx.font = "11px sans-serif";
       ctx.fillText(component.name, instance.x, instance.y - 8);
 
-      // Draw resize handles for selected instance
-      if (isSelected) {
-        ctx.fillStyle = canvasTheme.handle;
-        const corners = [
-          { x: instance.x - 3, y: instance.y - 3 },
-          { x: instance.x + component.width + 3, y: instance.y - 3 },
-          { x: instance.x - 3, y: instance.y + component.height + 3 },
-          { x: instance.x + component.width + 3, y: instance.y + component.height + 3 },
-        ];
-
-        corners.forEach((corner) => {
-          ctx.beginPath();
-          ctx.arc(corner.x, corner.y, HANDLE_SIZE / 2, 0, Math.PI * 2);
-          ctx.fill();
-        });
-      }
+      // Note: No resize handles for component instances - they are atomic units with fixed dimensions
     });
 
     // Draw multi-selection bounding box (when multiple ungrouped elements are selected)

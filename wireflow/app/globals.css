@@ -25,7 +25,7 @@
   --canvas-marquee-stroke: #3b82f6;
   --canvas-handle: #3b82f6;
   --canvas-handle-fill: #ffffff;
-  --canvas-grid: rgba(150, 150, 150, 0.3);
+  --canvas-grid: rgba(200, 200, 200, 0.2);
 }
 
 @theme inline {
