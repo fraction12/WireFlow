@@ -402,15 +402,18 @@ export function Canvas() {
   const [alignmentGuides, setAlignmentGuides] = useState<{ type: 'h' | 'v'; pos: number }[]>([]);
 
   // Right panel states (Phase 1) - only one panel can be open at a time
+  // Right panels state - only one can be open at a time
   const [componentPanelExpanded, setComponentPanelExpanded] = useState(true);
   const [docPanelExpanded, setDocPanelExpanded] = useState(false);
+  const [layersPanelExpanded, setLayersPanelExpanded] = useState(false);
 
   // Toggle handlers that ensure only one right panel is open at a time
   const toggleComponentPanel = useCallback(() => {
     setComponentPanelExpanded(prev => {
       const newState = !prev;
       if (newState) {
-        setDocPanelExpanded(false); // Close doc panel when opening component panel
+        setDocPanelExpanded(false);
+        setLayersPanelExpanded(false);
       }
       return newState;
     });
@@ -420,7 +423,19 @@ export function Canvas() {
     setDocPanelExpanded(prev => {
       const newState = !prev;
       if (newState) {
-        setComponentPanelExpanded(false); // Close component panel when opening doc panel
+        setComponentPanelExpanded(false);
+        setLayersPanelExpanded(false);
+      }
+      return newState;
+    });
+  }, []);
+
+  const toggleLayersPanel = useCallback(() => {
+    setLayersPanelExpanded(prev => {
+      const newState = !prev;
+      if (newState) {
+        setComponentPanelExpanded(false);
+        setDocPanelExpanded(false);
       }
       return newState;
     });
@@ -428,14 +443,9 @@ export function Canvas() {
 
   // Left panels state
   const [frameListExpanded, setFrameListExpanded] = useState(true);
-  const [layersPanelExpanded, setLayersPanelExpanded] = useState(true);
 
   const toggleFrameList = useCallback(() => {
     setFrameListExpanded(prev => !prev);
-  }, []);
-
-  const toggleLayersPanel = useCallback(() => {
-    setLayersPanelExpanded(prev => !prev);
   }, []);
 
   // Layers panel handlers

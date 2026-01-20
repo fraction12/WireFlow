@@ -109,6 +109,7 @@ export function LayersPanel({
   // Drag-drop state
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
+  const [dropPosition, setDropPosition] = useState<'above' | 'below'>('above');
 
   // Collapsed groups state
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
@@ -175,28 +176,46 @@ export function LayersPanel({
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     setDropTargetIndex(displayIndex);
+
+    // Detect if cursor is in top or bottom half of the element
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midpoint = rect.top + rect.height / 2;
+    setDropPosition(e.clientY < midpoint ? 'above' : 'below');
   }, []);
 
   const handleDragLeave = useCallback(() => {
     setDropTargetIndex(null);
+    setDropPosition('above');
   }, []);
 
-  const handleDrop = useCallback((toDisplayIndex: number) => (e: React.DragEvent) => {
+  const handleDrop = useCallback((toDisplayIndex: number, position: 'above' | 'below' = dropPosition) => (e: React.DragEvent) => {
     e.preventDefault();
     if (draggedIndex !== null && draggedIndex !== toDisplayIndex) {
       // Convert display indices (reversed) back to actual array indices
       const actualFromIndex = elements.length - 1 - draggedIndex;
-      const actualToIndex = elements.length - 1 - toDisplayIndex;
-      onReorderElements(actualFromIndex, actualToIndex);
+      let actualToIndex = elements.length - 1 - toDisplayIndex;
+
+      // Adjust target index based on drop position
+      // If dropping below, we need to adjust the target index
+      if (position === 'below') {
+        actualToIndex = Math.max(0, actualToIndex - 1);
+      }
+
+      // Don't reorder if it would result in no change
+      if (actualFromIndex !== actualToIndex) {
+        onReorderElements(actualFromIndex, actualToIndex);
+      }
     }
     setDraggedIndex(null);
     setDropTargetIndex(null);
+    setDropPosition('above');
     document.body.classList.remove('dragging-layer');
-  }, [draggedIndex, elements.length, onReorderElements]);
+  }, [draggedIndex, dropPosition, elements.length, onReorderElements]);
 
   const handleDragEnd = useCallback(() => {
     setDraggedIndex(null);
     setDropTargetIndex(null);
+    setDropPosition('above');
     document.body.classList.remove('dragging-layer');
   }, []);
 
@@ -268,6 +287,8 @@ export function LayersPanel({
     const isLocked = element.locked === true;
     const isDragging = displayIndex === draggedIndex;
     const isDropTarget = displayIndex === dropTargetIndex && draggedIndex !== null && displayIndex !== draggedIndex;
+    const isDropAbove = isDropTarget && dropPosition === 'above';
+    const isDropBelow = isDropTarget && dropPosition === 'below';
 
     const Icon = ELEMENT_TYPE_ICONS[element.type] || Square;
 
@@ -291,9 +312,11 @@ export function LayersPanel({
           }
           ${isHidden ? 'opacity-50' : ''}
           ${isDragging ? 'opacity-50 bg-zinc-100 dark:bg-zinc-800' : ''}
-          ${isDropTarget ? 'border-t-2 border-t-blue-500' : ''}
+          ${isDropAbove ? 'border-t-2 border-t-blue-500' : ''}
+          ${isDropBelow ? 'border-b-2 border-b-blue-500' : ''}
         `}
         role="listitem"
+        tabIndex={0}
         aria-selected={isSelected}
         aria-label={`Layer: ${getElementDisplayName(element)}${isHidden ? ', hidden' : ''}${isLocked ? ', locked' : ''}`}
       >
@@ -469,9 +492,11 @@ export function LayersPanel({
         <button
           onClick={onToggle}
           className="w-8 h-8 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95"
-          aria-label="Collapse layers panel"
+          title="Hide panel (Ctrl+L)"
+          aria-label="Hide layers panel"
+          aria-expanded="true"
         >
-          <ChevronDown size={18} />
+          <ChevronRight size={18} />
         </button>
       </div>
 
@@ -496,53 +521,75 @@ export function LayersPanel({
             No elements yet
           </div>
         ) : (
-          layerItems.map((item, idx) => {
-            if (item.type === 'element') {
-              return renderElementRow(item.element, item.displayIndex, false);
-            }
+          <>
+            {layerItems.map((item, idx) => {
+              if (item.type === 'element') {
+                return renderElementRow(item.element, item.displayIndex, false);
+              }
 
-            if (item.type === 'componentGroup') {
-              const { group, elements: groupElements } = item;
-              const isCollapsed = collapsedGroups.has(group.id);
-              const isAllSelected = groupElements.every(el =>
-                el.id === selectedElementId || selectedElementIds.has(el.id)
-              );
-              const groupName = group.componentType.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+              if (item.type === 'componentGroup') {
+                const { group, elements: groupElements } = item;
+                const isCollapsed = collapsedGroups.has(group.id);
+                const isAllSelected = groupElements.every(el =>
+                  el.id === selectedElementId || selectedElementIds.has(el.id)
+                );
+                const groupName = group.componentType.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
-              return (
-                <div key={group.id} role="group">
-                  {renderGroupHeader(group.id, 'component', groupName, groupElements.length, isAllSelected)}
-                  {!isCollapsed && groupElements.map((el, elIdx) =>
-                    renderElementRow(el, idx * 100 + elIdx, true)
-                  )}
-                </div>
-              );
-            }
+                return (
+                  <div key={group.id} role="group">
+                    {renderGroupHeader(group.id, 'component', groupName, groupElements.length, isAllSelected)}
+                    {!isCollapsed && groupElements.map((el, elIdx) =>
+                      renderElementRow(el, idx * 100 + elIdx, true)
+                    )}
+                  </div>
+                );
+              }
 
-            if (item.type === 'elementGroup') {
-              const { group, elements: groupElements } = item;
-              const isCollapsed = collapsedGroups.has(group.id);
-              const isAllSelected = groupElements.every(el =>
-                el.id === selectedElementId || selectedElementIds.has(el.id)
-              );
+              if (item.type === 'elementGroup') {
+                const { group, elements: groupElements } = item;
+                const isCollapsed = collapsedGroups.has(group.id);
+                const isAllSelected = groupElements.every(el =>
+                  el.id === selectedElementId || selectedElementIds.has(el.id)
+                );
 
-              return (
-                <div key={group.id} role="group">
-                  {renderGroupHeader(group.id, 'element', `Group`, groupElements.length, isAllSelected)}
-                  {!isCollapsed && groupElements.map((el, elIdx) =>
-                    renderElementRow(el, idx * 100 + elIdx, true)
-                  )}
-                </div>
-              );
-            }
+                return (
+                  <div key={group.id} role="group">
+                    {renderGroupHeader(group.id, 'element', `Group`, groupElements.length, isAllSelected)}
+                    {!isCollapsed && groupElements.map((el, elIdx) =>
+                      renderElementRow(el, idx * 100 + elIdx, true)
+                    )}
+                  </div>
+                );
+              }
 
-            return null;
-          })
+              return null;
+            })}
+            {/* Bottom drop zone for moving to the end of the list */}
+            {draggedIndex !== null && (
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  setDropTargetIndex(elements.length);
+                  setDropPosition('below');
+                }}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop(elements.length, 'below')}
+                className={`
+                  h-8 flex items-center justify-center text-xs text-zinc-400 dark:text-zinc-500
+                  transition-all duration-150
+                  ${dropTargetIndex === elements.length ? 'bg-blue-50 dark:bg-blue-950 border-t-2 border-t-blue-500' : ''}
+                `}
+              >
+                {dropTargetIndex === elements.length ? 'Drop here to move to bottom' : ''}
+              </div>
+            )}
+          </>
         )}
       </div>
 
       {/* Footer with keyboard hints */}
-      <div className="px-4 py-2 border-t border-zinc-200 dark:border-zinc-700 text-xs text-zinc-400 dark:text-zinc-500">
+      <div className="px-4 py-2 border-t border-zinc-200 dark:border-zinc-700 text-xs text-zinc-500 dark:text-zinc-400">
         <span className="font-medium">H</span> hide · <span className="font-medium">Ctrl+L</span> lock
       </div>
     </div>

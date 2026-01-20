@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import type { Frame, FrameType } from '@/lib/types';
-import { Trash2, Plus, ChevronDown, ChevronLeft, ChevronRight, LayoutGrid } from 'lucide-react';
+import { Trash2, Plus, ChevronDown, ChevronLeft, AppWindow } from 'lucide-react';
 
 interface FrameListProps {
   /** Whether the panel is expanded */
@@ -88,26 +88,27 @@ export function FrameList({
   if (!isExpanded) {
     return (
       <nav
-        className="w-12 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-700 flex flex-col items-center py-3 shrink-0"
+        className="w-12 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-700 flex flex-col items-center py-3 shrink-0 transition-all duration-200 motion-reduce:transition-none"
         aria-label="Frames navigation (collapsed)"
       >
         <button
           onClick={onToggle}
-          className="w-9 h-9 flex items-center justify-center text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          className="w-10 h-10 flex items-center justify-center text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95"
           title="Expand frames panel"
           aria-label="Expand frames panel"
+          aria-expanded={false}
         >
-          <LayoutGrid size={20} />
+          <AppWindow size={20} />
         </button>
-        <span className="text-xs text-zinc-400 dark:text-zinc-500 mt-1 writing-mode-vertical" style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>
-          Frames
-        </span>
       </nav>
     );
   }
 
   return (
-    <nav className="w-64 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-700 flex flex-col max-h-[50%] shrink-0" aria-label="Frames navigation">
+    <nav
+      className="w-64 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-700 flex flex-col max-h-[50%] shrink-0 transition-all duration-200 motion-reduce:transition-none"
+      aria-label="Frames navigation"
+    >
       {/* Header with "Add Frame" dropdown */}
       <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700">
         <div className="flex items-center justify-between mb-2">
@@ -117,6 +118,7 @@ export function FrameList({
             className="w-7 h-7 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             title="Collapse frames panel"
             aria-label="Collapse frames panel"
+            aria-expanded={true}
           >
             <ChevronLeft size={16} />
           </button>
@@ -144,7 +146,7 @@ export function FrameList({
           {/* Dropdown menu */}
           {isDropdownOpen && (
             <div
-              className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg overflow-hidden z-50 animate-slide-in-down"
+              className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg overflow-hidden z-50 opacity-100 transition-opacity duration-150"
               role="menu"
               aria-label="Frame types"
             >
@@ -152,7 +154,7 @@ export function FrameList({
                 <button
                   key={frameType.type}
                   onClick={() => handleCreateFrame(frameType.type)}
-                  className="w-full px-3 py-2.5 text-left hover:bg-blue-50 dark:hover:bg-blue-950 transition-colors duration-150 focus:outline-none focus-visible:bg-blue-50 dark:focus-visible:bg-blue-950 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 group"
+                  className="w-full px-3 py-2.5 text-left hover:bg-blue-50 dark:hover:bg-blue-950 transition-all duration-150 focus:outline-none focus-visible:bg-blue-50 dark:focus-visible:bg-blue-950 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 group"
                   role="menuitem"
                 >
                   <div className="flex items-start gap-2">
@@ -173,7 +175,7 @@ export function FrameList({
       </div>
 
       {/* Frame list */}
-      <div className="flex-1 overflow-y-auto" role="list" aria-label="Frame list">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden" role="list" aria-label="Frame list">
         {frames.map((frame) => {
           const isActive = frame.id === activeFrameId;
           const isEditing = frame.id === editingFrameId;
@@ -181,14 +183,22 @@ export function FrameList({
           return (
             <div
               key={frame.id}
-              className={`px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 transition-all duration-150 ${
+              className={`group px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 transition-all duration-150 cursor-pointer ${
                 isActive
                   ? 'bg-blue-50 dark:bg-blue-950 border-l-4 border-l-blue-500'
                   : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
               }`}
               onClick={() => !isEditing && onSwitchFrame(frame.id)}
-              role="listitem"
+              onKeyDown={(e) => {
+                if ((e.key === 'Enter' || e.key === ' ') && !isEditing) {
+                  e.preventDefault();
+                  onSwitchFrame(frame.id);
+                }
+              }}
+              role="button"
+              tabIndex={0}
               aria-current={isActive ? 'page' : undefined}
+              aria-label={`Frame: ${frame.name}`}
             >
               {/* Frame name (editable) */}
               <div className="mb-1">
@@ -227,7 +237,7 @@ export function FrameList({
                 <div className="flex items-center gap-2">
                   {/* Frame type badge */}
                   <span
-                    className={`px-2 py-0.5 rounded-md capitalize font-medium ${
+                    className={`px-2 py-0.5 rounded-md capitalize font-medium select-none ${
                       frame.type === 'page'
                         ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
                         : frame.type === 'modal'
@@ -240,17 +250,17 @@ export function FrameList({
                   </span>
 
                   {/* Element count */}
-                  <span className="text-zinc-600 dark:text-zinc-400" aria-label={`${frame.elements.length} elements in frame`}>
+                  <span className="text-zinc-600 dark:text-zinc-400 select-none" aria-label={`${frame.elements.length} elements in frame`}>
                     {frame.elements.length} {frame.elements.length === 1 ? 'element' : 'elements'}
                   </span>
                 </div>
 
-                {/* Delete button (only if not last frame) */}
+                {/* Delete button (only if not last frame) - shows on hover/focus */}
                 {frames.length > 1 && (
                   <button
                     type="button"
                     onClick={(e) => handleDeleteClick(e, frame)}
-                    className="p-1.5 text-zinc-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 rounded-md transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 active:scale-95"
+                    className="p-1.5 text-zinc-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 rounded-md transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 active:scale-95 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                     title="Delete frame"
                     aria-label={`Delete frame ${frame.name}`}
                   >
