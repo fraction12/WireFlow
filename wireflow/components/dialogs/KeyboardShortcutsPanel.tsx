@@ -66,6 +66,13 @@ const shortcutGroups: ShortcutGroup[] = [
     ],
   },
   {
+    title: 'Layers',
+    shortcuts: [
+      { keys: 'H', description: 'Toggle visibility' },
+      { keys: 'Ctrl/⌘ + L', description: 'Toggle lock' },
+    ],
+  },
+  {
     title: 'Grouping',
     shortcuts: [
       { keys: 'Ctrl/⌘ + G', description: 'Group selected elements' },

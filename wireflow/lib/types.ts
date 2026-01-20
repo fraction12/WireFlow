@@ -104,6 +104,13 @@ export interface BaseElement {
   elementGroupId?: string;
   // Bound elements (e.g., text inside shapes) - Excalidraw-style
   boundElements?: BoundElement[];
+  // Layers panel properties
+  /** Custom display name for element in layers panel */
+  name?: string;
+  /** Whether element is visible on canvas (default: true) */
+  visible?: boolean;
+  /** Whether element is locked from editing (default: false) */
+  locked?: boolean;
 }
 
 export interface RectangleElement extends BaseElement {

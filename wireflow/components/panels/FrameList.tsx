@@ -2,9 +2,13 @@
 
 import { useState, useRef, useEffect } from 'react';
 import type { Frame, FrameType } from '@/lib/types';
-import { Trash2, Plus, ChevronDown } from 'lucide-react';
+import { Trash2, Plus, ChevronDown, ChevronLeft, ChevronRight, LayoutGrid } from 'lucide-react';
 
 interface FrameListProps {
+  /** Whether the panel is expanded */
+  isExpanded: boolean;
+  /** Callback when panel is toggled */
+  onToggle: () => void;
   frames: Frame[];
   activeFrameId: string | null;
   onSwitchFrame: (frameId: string) => void;
@@ -15,6 +19,8 @@ interface FrameListProps {
 }
 
 export function FrameList({
+  isExpanded,
+  onToggle,
   frames,
   activeFrameId,
   onSwitchFrame,
@@ -78,11 +84,43 @@ export function FrameList({
     { type: 'flyout', label: 'Flyout', description: 'Side panel or drawer' },
   ];
 
+  // Collapsed state - show slim strip with icon
+  if (!isExpanded) {
+    return (
+      <nav
+        className="w-12 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-700 flex flex-col items-center py-3 shrink-0"
+        aria-label="Frames navigation (collapsed)"
+      >
+        <button
+          onClick={onToggle}
+          className="w-9 h-9 flex items-center justify-center text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          title="Expand frames panel"
+          aria-label="Expand frames panel"
+        >
+          <LayoutGrid size={20} />
+        </button>
+        <span className="text-xs text-zinc-400 dark:text-zinc-500 mt-1 writing-mode-vertical" style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>
+          Frames
+        </span>
+      </nav>
+    );
+  }
+
   return (
-    <nav className="w-64 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-700 flex flex-col h-full" aria-label="Frames navigation">
+    <nav className="w-64 bg-white dark:bg-zinc-900 border-r border-zinc-200 dark:border-zinc-700 flex flex-col max-h-[50%] shrink-0" aria-label="Frames navigation">
       {/* Header with "Add Frame" dropdown */}
       <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700">
-        <h2 className="font-semibold text-zinc-900 dark:text-zinc-100 mb-2">Frames</h2>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="font-semibold text-zinc-900 dark:text-zinc-100">Frames</h2>
+          <button
+            onClick={onToggle}
+            className="w-7 h-7 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-md transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            title="Collapse frames panel"
+            aria-label="Collapse frames panel"
+          >
+            <ChevronLeft size={16} />
+          </button>
+        </div>
 
         {/* Custom dropdown */}
         <div className="relative" ref={dropdownRef}>

@@ -146,6 +146,17 @@ This external folder contains task tracking and documentation (not in git). **Yo
 - **Decisions**: Document architecture decisions in `WFLocal/docs/decisions/`
 - **Changelog**: Update `WFLocal/releases/changelog.md` when features ship
 
+### Task Format
+**CRITICAL: Tasks MUST start with `## [P#]` (with ##) for automation scripts to detect them.**
+
+```markdown
+## [P2] Task Title {#task-001}
+- **Added**: YYYY-MM-DD
+- **Owner**: Claude | User
+- **Status**: Not Started | In Progress | Blocked | Done
+- **Notes**: Context, subtasks, blockers
+```
+
 **At session start**: Check `WFLocal/tasks/active.md` for in-progress work
 **At session end**: Update task statuses and document any decisions made
 

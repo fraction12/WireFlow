@@ -38,7 +38,12 @@
       "mcp__wireflow__create_rectangle",
       "mcp__wireflow__create_text",
       "mcp__wireflow__create_arrow",
-      "mcp__wireflow__create_line"
+      "mcp__wireflow__create_line",
+      "Bash(Get-Process -Name \"claude\" -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object Id, StartTime)",
+      "WebFetch(domain:excalidraw.com)",
+      "WebSearch",
+      "WebFetch(domain:github.com)"
     ]
   }
 }

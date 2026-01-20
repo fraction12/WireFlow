@@ -38,6 +38,7 @@ import {
   ComponentPanel,
   DocumentationPanel,
   FrameList,
+  LayersPanel,
   RightPanelStrip,
   UnifiedStyleBar,
 } from "./panels";
@@ -424,6 +425,57 @@ export function Canvas() {
       return newState;
     });
   }, []);
+
+  // Left panels state
+  const [frameListExpanded, setFrameListExpanded] = useState(true);
+  const [layersPanelExpanded, setLayersPanelExpanded] = useState(true);
+
+  const toggleFrameList = useCallback(() => {
+    setFrameListExpanded(prev => !prev);
+  }, []);
+
+  const toggleLayersPanel = useCallback(() => {
+    setLayersPanelExpanded(prev => !prev);
+  }, []);
+
+  // Layers panel handlers
+  const toggleElementVisibility = useCallback((elementId: string) => {
+    recordSnapshot();
+    setElements(prev => prev.map(el =>
+      el.id === elementId
+        ? { ...el, visible: el.visible === false ? true : false }
+        : el
+    ));
+  }, [recordSnapshot]);
+
+  const toggleElementLock = useCallback((elementId: string) => {
+    recordSnapshot();
+    setElements(prev => prev.map(el =>
+      el.id === elementId
+        ? { ...el, locked: !el.locked }
+        : el
+    ));
+  }, [recordSnapshot]);
+
+  const renameElement = useCallback((elementId: string, newName: string) => {
+    recordSnapshot();
+    setElements(prev => prev.map(el =>
+      el.id === elementId
+        ? { ...el, name: newName.trim() || undefined }
+        : el
+    ));
+  }, [recordSnapshot]);
+
+  const reorderElement = useCallback((fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return;
+    recordSnapshot();
+    setElements(prev => {
+      const newElements = [...prev];
+      const [removed] = newElements.splice(fromIndex, 1);
+      newElements.splice(toIndex, 0, removed);
+      return newElements;
+    });
+  }, [recordSnapshot]);
 
   // Colors state (Phase 1)
   const [currentStrokeColor, setCurrentStrokeColor] = useState(DEFAULT_STROKE_COLOR);
@@ -946,6 +998,9 @@ export function Canvas() {
 
     // Draw all elements
     elements.forEach((element) => {
+      // Skip hidden elements
+      if (element.visible === false) return;
+
       // Use element's custom colors or fall back to theme sketch color
       const elementStrokeColor = element.style?.strokeColor || canvasTheme.sketch;
       const elementFillColor = element.style?.fillColor || 'transparent';
@@ -1781,6 +1836,10 @@ export function Canvas() {
     // Search in reverse order (top element first)
     for (let i = elements.length - 1; i >= 0; i--) {
       const el = elements[i];
+
+      // Skip hidden elements (not clickable on canvas)
+      if (el.visible === false) continue;
+
       let isHit = false;
 
       if (el.type === "arrow" || el.type === "line") {
@@ -2267,16 +2326,22 @@ export function Canvas() {
     const { element: clickedElement } = findElementAtPoint(x, y);
 
     if (clickedElement && clickedElement.type === "text") {
-      // Edit existing text element (including bound text)
-      enterEditMode(clickedElement as TextElement);
+      // Edit existing text element (including bound text) - skip if locked
+      if (clickedElement.locked !== true) {
+        enterEditMode(clickedElement as TextElement);
+      }
     } else if (clickedElement && isContainerElement(clickedElement)) {
       // Double-click on container shape (rectangle, ellipse, diamond)
-      // Create new bound text or edit existing bound text
+      // Create new bound text or edit existing bound text - skip if locked
+      if (clickedElement.locked === true) return;
+
       const existingBoundText = getBoundTextElement(clickedElement, elements);
 
       if (existingBoundText) {
-        // Edit existing bound text
-        enterEditMode(existingBoundText);
+        // Edit existing bound text (also check if bound text is locked)
+        if (existingBoundText.locked !== true) {
+          enterEditMode(existingBoundText);
+        }
       } else {
         // Create new bound text element
         recordSnapshot(); // Record for undo
@@ -2368,8 +2433,9 @@ export function Canvas() {
         const selectedElement = elements.find((el) => el.id === selectedElementId);
         if (selectedElement) {
           const isInGroup = selectedElement.groupId || selectedElement.elementGroupId;
-          if (!isInGroup) {
-            // Check rotation handle first
+          const isLocked = selectedElement.locked === true;
+          if (!isInGroup && !isLocked) {
+            // Check rotation handle first (skip if locked)
             if (isOnRotationHandle(x, y, selectedElement)) {
               recordSnapshot();
               const centerX = selectedElement.x + selectedElement.width / 2;
@@ -2503,11 +2569,13 @@ export function Canvas() {
           setSelectedGroupId(null);
         }
 
-        // Start dragging the clicked element
+        // Start dragging the clicked element (unless locked)
         // (Handle checks for selected element are done earlier, before findElementAtPoint)
-        recordSnapshot();
-        setDragOffset({ x: x - clickedElement.x, y: y - clickedElement.y });
-        setIsDrawing(true);
+        if (clickedElement.locked !== true) {
+          recordSnapshot();
+          setDragOffset({ x: x - clickedElement.x, y: y - clickedElement.y });
+          setIsDrawing(true);
+        }
       } else {
         // Clicked on empty space - start marquee selection
         // Clear previous selections unless Shift is held (to add to selection)
@@ -3634,6 +3702,17 @@ export function Canvas() {
             setFillPickerOpen(true);
             setStrokePickerOpen(false);
             return;
+          // Layer shortcuts
+          case "h":
+            // Toggle visibility of selected element(s)
+            if (selectedElementId || selectedElementIds.size > 0) {
+              e.preventDefault();
+              const idsToToggle = selectedElementIds.size > 0
+                ? Array.from(selectedElementIds)
+                : [selectedElementId!];
+              idsToToggle.forEach(id => toggleElementVisibility(id));
+            }
+            return;
         }
       }
 
@@ -3732,6 +3811,17 @@ export function Canvas() {
       if ((e.ctrlKey || e.metaKey) && e.key === "{" && e.shiftKey) {
         e.preventDefault();
         sendToBack();
+        return;
+      }
+      // Ctrl/Cmd+L: Toggle lock of selected element(s)
+      if ((e.ctrlKey || e.metaKey) && e.key === "l" && !e.shiftKey) {
+        if (selectedElementId || selectedElementIds.size > 0) {
+          e.preventDefault();
+          const idsToToggle = selectedElementIds.size > 0
+            ? Array.from(selectedElementIds)
+            : [selectedElementId!];
+          idsToToggle.forEach(id => toggleElementLock(id));
+        }
         return;
       }
 
@@ -5233,7 +5323,10 @@ export function Canvas() {
         Skip to canvas
       </a>
 
+      {/* Left sidebar: Frames */}
       <FrameList
+        isExpanded={frameListExpanded}
+        onToggle={toggleFrameList}
         frames={frames}
         activeFrameId={activeFrameId}
         onSwitchFrame={handleSwitchFrame}
@@ -5653,8 +5746,46 @@ export function Canvas() {
         onElementAnnotationChange={handleElementAnnotationChange}
       />
 
+      {/* Layers Panel */}
+      <LayersPanel
+        isExpanded={layersPanelExpanded}
+        onToggle={toggleLayersPanel}
+        elements={elements}
+        componentGroups={componentGroups}
+        elementGroups={elementGroups}
+        selectedElementId={selectedElementId}
+        selectedElementIds={selectedElementIds}
+        onSelectElement={(elementId, addToSelection) => {
+          if (addToSelection) {
+            setSelectedElementIds(prev => new Set([...prev, elementId]));
+          } else {
+            setSelectedElementId(elementId);
+            setSelectedElementIds(new Set());
+          }
+          setSelectedByClick(true);
+        }}
+        onSelectGroup={(groupId, groupType) => {
+          // Select all elements in the group
+          const groupElementIds = groupType === 'component'
+            ? componentGroups.find(g => g.id === groupId)?.elementIds || []
+            : elementGroups.find(g => g.id === groupId)?.elementIds || [];
+
+          if (groupElementIds.length > 0) {
+            setSelectedElementId(groupElementIds[0]);
+            setSelectedElementIds(new Set(groupElementIds));
+            setSelectedByClick(true);
+          }
+        }}
+        onReorderElements={reorderElement}
+        onToggleVisibility={toggleElementVisibility}
+        onToggleLock={toggleElementLock}
+        onRenameElement={renameElement}
+      />
+
       {/* Right panel collapsed strip - shows toggle buttons when panels are collapsed */}
       <RightPanelStrip
+        layersPanelExpanded={layersPanelExpanded}
+        onToggleLayersPanel={toggleLayersPanel}
         componentPanelExpanded={componentPanelExpanded}
         onToggleComponentPanel={toggleComponentPanel}
         docPanelExpanded={docPanelExpanded}
