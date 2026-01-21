@@ -578,6 +578,8 @@ export function Canvas() {
     selectedByClick: boolean;
     isPromoteDialogOpen: boolean;
     confirmDialogIsOpen: boolean;
+    showGrid: boolean;
+    snapToGrid: boolean;
   }>({
     selectedElementId: null,
     selectedElementIds: new Set(),
@@ -589,6 +591,8 @@ export function Canvas() {
     selectedByClick: false,
     isPromoteDialogOpen: false,
     confirmDialogIsOpen: false,
+    showGrid: false,
+    snapToGrid: false,
   });
 
   // Ref for keyboard handler callbacks - prevents dependency array changes
@@ -755,7 +759,7 @@ export function Canvas() {
     }, 500); // 500ms debounce
 
     return () => clearTimeout(timeoutId);
-  }, [frames, componentGroups, elementGroups, userComponents, componentInstances, activeFrameId]);
+  }, [frames, componentGroups, elementGroups, userComponents, componentInstances, activeFrameId, addToast]);
 
   // MCP Bridge integration - enables Claude Code to control the canvas
   const mcpBridgeCallbacks: MCPBridgeCallbacks = {
@@ -1529,6 +1533,38 @@ export function Canvas() {
           ctx.lineWidth = 1.5;
           ctx.stroke();
         }
+      }
+
+      // Draw lock icon overlay for locked selected elements
+      if (element.id === selectedElementId && element.locked && isSingleSelection) {
+        const lockSize = 16;
+        const lockX = element.x + element.width + SELECTION_PADDING + 4;
+        const lockY = element.y - SELECTION_PADDING - lockSize - 4;
+
+        // Draw lock icon background circle
+        ctx.beginPath();
+        ctx.arc(lockX + lockSize / 2, lockY + lockSize / 2, lockSize / 2 + 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#ef4444'; // Red background
+        ctx.fill();
+
+        // Draw lock icon (simplified padlock shape)
+        ctx.strokeStyle = '#ffffff';
+        ctx.fillStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+
+        // Lock body (rounded rectangle)
+        const bodyX = lockX + 3;
+        const bodyY = lockY + 7;
+        const bodyW = lockSize - 6;
+        const bodyH = lockSize - 8;
+        ctx.beginPath();
+        ctx.roundRect(bodyX, bodyY, bodyW, bodyH, 2);
+        ctx.fill();
+
+        // Lock shackle (arc on top)
+        ctx.beginPath();
+        ctx.arc(lockX + lockSize / 2, lockY + 7, 4, Math.PI, 0);
+        ctx.stroke();
       }
     });
 
@@ -2468,11 +2504,26 @@ export function Canvas() {
       // Edit existing text element (including bound text) - skip if locked
       if (clickedElement.locked !== true) {
         enterEditMode(clickedElement as TextElement);
+      } else {
+        addToast({
+          type: 'warning',
+          title: 'Element is locked',
+          message: 'Unlock the element to edit it',
+          duration: 2000
+        });
       }
     } else if (clickedElement && isContainerElement(clickedElement)) {
       // Double-click on container shape (rectangle, ellipse, diamond)
       // Create new bound text or edit existing bound text - skip if locked
-      if (clickedElement.locked === true) return;
+      if (clickedElement.locked === true) {
+        addToast({
+          type: 'warning',
+          title: 'Element is locked',
+          message: 'Unlock the element to edit it',
+          duration: 2000
+        });
+        return;
+      }
 
       const existingBoundText = getBoundTextElement(clickedElement, elements);
 
@@ -2480,6 +2531,13 @@ export function Canvas() {
         // Edit existing bound text (also check if bound text is locked)
         if (existingBoundText.locked !== true) {
           enterEditMode(existingBoundText);
+        } else {
+          addToast({
+            type: 'warning',
+            title: 'Text is locked',
+            message: 'Unlock the text to edit it',
+            duration: 2000
+          });
         }
       } else {
         // Create new bound text element
@@ -2573,6 +2631,22 @@ export function Canvas() {
         if (selectedElement) {
           const isInGroup = selectedElement.groupId || selectedElement.elementGroupId;
           const isLocked = selectedElement.locked === true;
+
+          // Show toast if trying to interact with handles of a locked element
+          if (isLocked && !isInGroup) {
+            const clickedRotationHandle = isOnRotationHandle(x, y, selectedElement);
+            const clickedResizeHandle = getResizeHandle(x, y, selectedElement);
+            if (clickedRotationHandle || clickedResizeHandle) {
+              addToast({
+                type: 'warning',
+                title: 'Element is locked',
+                message: 'Unlock the element to modify it',
+                duration: 2000
+              });
+              return;
+            }
+          }
+
           if (!isInGroup && !isLocked) {
             // Check rotation handle first (skip if locked)
             if (isOnRotationHandle(x, y, selectedElement)) {
@@ -2714,6 +2788,14 @@ export function Canvas() {
           recordSnapshot();
           setDragOffset({ x: x - clickedElement.x, y: y - clickedElement.y });
           setIsDrawing(true);
+        } else {
+          // Show toast when trying to drag a locked element
+          addToast({
+            type: 'warning',
+            title: 'Element is locked',
+            message: 'Unlock the element to move it',
+            duration: 2000
+          });
         }
       } else {
         // Clicked on empty space - start marquee selection
@@ -5922,9 +6004,18 @@ export function Canvas() {
                 ? "absolute inset-0 cursor-grabbing"
                 : currentTool === "select"
                   ? hoveredHandle
-                    ? `absolute inset-0 ${getHandleCursor(hoveredHandle)}`
+                    ? `absolute inset-0 ${(() => {
+                        // Show not-allowed cursor if the selected element is locked
+                        const selectedEl = elements.find(el => el.id === selectedElementId);
+                        if (selectedEl?.locked) return "cursor-not-allowed";
+                        return getHandleCursor(hoveredHandle);
+                      })()}`
                     : hoveredElementId
-                      ? `absolute inset-0 ${elements.find(el => el.id === hoveredElementId)?.type === "text" ? "cursor-text" : "cursor-move"}`
+                      ? `absolute inset-0 ${(() => {
+                          const hoveredEl = elements.find(el => el.id === hoveredElementId);
+                          if (hoveredEl?.locked) return "cursor-not-allowed";
+                          return hoveredEl?.type === "text" ? "cursor-text" : "cursor-move";
+                        })()}`
                       : "absolute inset-0 cursor-default"
                   : "absolute inset-0 cursor-crosshair"
             }

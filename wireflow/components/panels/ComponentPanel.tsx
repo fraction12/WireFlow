@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useRef, memo } from 'react';
+import { useState, useEffect, useRef, memo, useCallback } from 'react';
 import type { ComponentTemplate, ComponentType, UserComponent } from '@/lib/types';
 import { COMPONENT_TEMPLATES } from '@/lib/componentTemplates';
 import { usePanelAnimation } from '@/lib/usePanelAnimation';
+import { ConfirmDialog } from '@/components/dialogs';
 import {
   ChevronRight,
   ChevronDown,
@@ -61,6 +62,7 @@ export function ComponentPanel({
   const [editingComponentId, setEditingComponentId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [pendingDeleteComponent, setPendingDeleteComponent] = useState<UserComponent | null>(null);
 
   const categories: Array<{ id: 'all' | 'my' | ComponentType; label: string }> = [
     { id: 'all', label: 'All' },
@@ -106,6 +108,27 @@ export function ComponentPanel({
     e.dataTransfer.setData('application/x-user-component', componentId);
     e.dataTransfer.effectAllowed = 'copy';
   };
+
+  // Delete confirmation handlers
+  const handleRequestDelete = useCallback((component: UserComponent) => {
+    setPendingDeleteComponent(component);
+  }, []);
+
+  const handleConfirmDelete = useCallback(() => {
+    if (pendingDeleteComponent && onDeleteUserComponent) {
+      onDeleteUserComponent(pendingDeleteComponent.id);
+    }
+    setPendingDeleteComponent(null);
+  }, [pendingDeleteComponent, onDeleteUserComponent]);
+
+  const handleCancelDelete = useCallback(() => {
+    setPendingDeleteComponent(null);
+  }, []);
+
+  // Get instance count for pending delete component
+  const pendingDeleteInstanceCount = pendingDeleteComponent
+    ? getInstanceCount?.(pendingDeleteComponent.id) || 0
+    : 0;
 
   return (
     <div
@@ -250,7 +273,7 @@ export function ComponentPanel({
                           onSaveRename={handleSaveRename}
                           onCancelRename={handleCancelRename}
                           onStartRename={handleStartRename}
-                          onDelete={onDeleteUserComponent}
+                          onRequestDelete={handleRequestDelete}
                           onInsert={onInsertUserComponent}
                           onDragStart={handleDragStart}
                           instanceCount={getInstanceCount?.(component.id) || 0}
@@ -315,6 +338,22 @@ export function ComponentPanel({
           </div>
         </>
       )}
+
+      {/* Delete confirmation dialog */}
+      <ConfirmDialog
+        isOpen={pendingDeleteComponent !== null}
+        title="Delete Component"
+        message={
+          pendingDeleteInstanceCount > 0
+            ? `"${pendingDeleteComponent?.name}" is used in ${pendingDeleteInstanceCount} ${pendingDeleteInstanceCount === 1 ? 'place' : 'places'}. Deleting it will remove all instances from the canvas. This cannot be undone.`
+            : `Are you sure you want to delete "${pendingDeleteComponent?.name}"? This cannot be undone.`
+        }
+        confirmLabel="Delete"
+        cancelLabel="Keep"
+        variant="danger"
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+      />
     </div>
   );
 }
@@ -327,7 +366,7 @@ interface UserComponentCardProps {
   onSaveRename: () => void;
   onCancelRename: () => void;
   onStartRename: (component: UserComponent) => void;
-  onDelete?: (componentId: string) => void;
+  onRequestDelete?: (component: UserComponent) => void;
   onInsert?: (componentId: string, x: number, y: number) => void;
   onDragStart: (e: React.DragEvent, componentId: string) => void;
   instanceCount: number;
@@ -343,7 +382,7 @@ const UserComponentCard = memo(function UserComponentCard({
   onSaveRename,
   onCancelRename,
   onStartRename,
-  onDelete,
+  onRequestDelete,
   onInsert,
   onDragStart,
   instanceCount,
@@ -492,11 +531,11 @@ const UserComponentCard = memo(function UserComponentCard({
                 <Edit2 size={14} />
                 Rename
               </button>
-              {onDelete && (
+              {onRequestDelete && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    onDelete(component.id);
+                    onRequestDelete(component);
                     onMenuToggle(false);
                   }}
                   className="w-full px-3 py-1.5 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 flex items-center gap-2 focus:outline-none focus-visible:bg-red-50 dark:focus-visible:bg-red-950"

@@ -8,9 +8,11 @@ export const AUTO_WIDTH_BUFFER = 8;
 let measureCanvas: HTMLCanvasElement | null = null;
 
 // Cache for text measurements keyed by content+font
-// Uses LRU-style eviction when cache gets too large
+// Uses proper LRU eviction: Map maintains insertion order, and we
+// re-insert on access to move entries to the end (most recently used)
 const measurementCache = new Map<string, number>();
 const MAX_CACHE_SIZE = 500;
+const EVICTION_BATCH_SIZE = 100;
 
 /**
  * Creates a cache key from text content and font options
@@ -20,12 +22,14 @@ function createCacheKey(text: string, options: MeasureTextOptions): string {
 }
 
 /**
- * Clears oldest entries when cache exceeds max size
+ * Evicts oldest (least recently used) entries when cache exceeds max size.
+ * In a Map, iteration order is insertion order, and we re-insert on access,
+ * so the first entries are the least recently used.
  */
-function trimCache(): void {
+function evictOldestEntries(): void {
   if (measurementCache.size > MAX_CACHE_SIZE) {
-    // Delete first 100 entries (oldest)
-    const keysToDelete = Array.from(measurementCache.keys()).slice(0, 100);
+    // Delete first N entries (least recently used)
+    const keysToDelete = Array.from(measurementCache.keys()).slice(0, EVICTION_BATCH_SIZE);
     keysToDelete.forEach(key => measurementCache.delete(key));
   }
 }
@@ -39,7 +43,7 @@ export interface MeasureTextOptions {
 /**
  * Measures the width of text using canvas measureText API
  * This ensures accurate measurement matching the canvas rendering
- * Results are cached by content+font for performance
+ * Results are cached by content+font for performance with proper LRU eviction
  */
 export function measureTextWidth(
   text: string,
@@ -49,6 +53,9 @@ export function measureTextWidth(
   const cacheKey = createCacheKey(text, options);
   const cached = measurementCache.get(cacheKey);
   if (cached !== undefined) {
+    // LRU update: delete and re-insert to move to end (most recently used)
+    measurementCache.delete(cacheKey);
+    measurementCache.set(cacheKey, cached);
     return cached;
   }
 
@@ -73,7 +80,7 @@ export function measureTextWidth(
 
   // Cache the result
   measurementCache.set(cacheKey, maxWidth);
-  trimCache();
+  evictOldestEntries();
 
   return maxWidth;
 }
@@ -87,4 +94,20 @@ export function calculateAutoWidth(
 ): number {
   const measuredWidth = measureTextWidth(text, options);
   return Math.max(MIN_TEXT_WIDTH, measuredWidth + TEXT_PADDING * 2 + AUTO_WIDTH_BUFFER);
+}
+
+/**
+ * Cleans up the module-level canvas to free memory.
+ * Call this when the application unmounts or during cleanup.
+ */
+export function cleanupMeasureCanvas(): void {
+  measureCanvas = null;
+}
+
+/**
+ * Clears the measurement cache.
+ * Useful for testing or when font metrics might have changed.
+ */
+export function clearMeasurementCache(): void {
+  measurementCache.clear();
 }
