@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 
 export interface HistoryState<T> {
   past: T[];
@@ -158,78 +158,83 @@ export function useHistoryManager<T>(
     future: [],
   });
 
+  // Use a ref to track the current history state synchronously.
+  // This prevents race conditions where setHistoryState's callback
+  // hasn't executed yet when we try to return the undo/redo result.
+  const historyRef = useRef<HistoryManagerState<T>>({
+    past: [],
+    future: [],
+  });
+
   const recordSnapshot = useCallback(
     (state: T) => {
-      setHistoryState((prev) => {
-        const newPast = [...prev.past, state];
-        if (newPast.length > maxLength) {
-          newPast.shift();
-        }
-        return {
-          past: newPast,
-          future: [], // Clear redo stack on new action
-        };
-      });
+      const newPast = [...historyRef.current.past, state];
+      if (newPast.length > maxLength) {
+        newPast.shift();
+      }
+      const newState = {
+        past: newPast,
+        future: [], // Clear redo stack on new action
+      };
+      historyRef.current = newState;
+      setHistoryState(newState);
     },
     [maxLength]
   );
 
-  // undo and redo use refs to avoid stale closure issues
-  // The actual state check happens inside the caller after receiving null/value
-  const undoRef = useCallback(
+  // undo and redo use the ref to read current state synchronously,
+  // avoiding the race condition where setHistoryState's callback
+  // hasn't executed yet when returning the result.
+  const undo = useCallback(
     (currentState: T): T | null => {
-      let result: T | null = null;
+      const current = historyRef.current;
+      if (current.past.length === 0) {
+        return null;
+      }
 
-      setHistoryState((prev) => {
-        if (prev.past.length === 0) {
-          return prev; // No change, return same reference
-        }
+      const previous = current.past[current.past.length - 1];
+      const newState = {
+        past: current.past.slice(0, -1),
+        future: [currentState, ...current.future],
+      };
+      historyRef.current = newState;
+      setHistoryState(newState);
 
-        const previous = prev.past[prev.past.length - 1];
-        result = previous;
-
-        return {
-          past: prev.past.slice(0, -1),
-          future: [currentState, ...prev.future],
-        };
-      });
-
-      return result;
+      return previous;
     },
     []
   );
 
-  const redoRef = useCallback(
+  const redo = useCallback(
     (currentState: T): T | null => {
-      let result: T | null = null;
+      const current = historyRef.current;
+      if (current.future.length === 0) {
+        return null;
+      }
 
-      setHistoryState((prev) => {
-        if (prev.future.length === 0) {
-          return prev; // No change, return same reference
-        }
+      const next = current.future[0];
+      const newState = {
+        past: [...current.past, currentState],
+        future: current.future.slice(1),
+      };
+      historyRef.current = newState;
+      setHistoryState(newState);
 
-        const next = prev.future[0];
-        result = next;
-
-        return {
-          past: [...prev.past, currentState],
-          future: prev.future.slice(1),
-        };
-      });
-
-      return result;
+      return next;
     },
     []
   );
 
   const clear = useCallback(() => {
-    setHistoryState({ past: [], future: [] });
+    const newState = { past: [], future: [] };
+    historyRef.current = newState;
+    setHistoryState(newState);
   }, []);
 
   return {
     recordSnapshot,
-    undo: undoRef,
-    redo: redoRef,
+    undo,
+    redo,
     canUndo: historyState.past.length > 0,
     canRedo: historyState.future.length > 0,
     undoCount: historyState.past.length,

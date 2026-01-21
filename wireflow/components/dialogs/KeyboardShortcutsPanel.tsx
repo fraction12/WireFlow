@@ -73,6 +73,13 @@ const shortcutGroups: ShortcutGroup[] = [
     ],
   },
   {
+    title: 'Colors',
+    shortcuts: [
+      { keys: 'S', description: 'Open stroke color picker' },
+      { keys: 'F', description: 'Open fill color picker' },
+    ],
+  },
+  {
     title: 'Grouping',
     shortcuts: [
       { keys: 'Ctrl/⌘ + G', description: 'Group selected elements' },

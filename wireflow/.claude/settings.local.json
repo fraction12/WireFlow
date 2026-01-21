@@ -44,7 +44,8 @@
       "WebFetch(domain:excalidraw.com)",
       "WebSearch",
       "WebFetch(domain:github.com)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "WebFetch(domain:dushyantg.substack.com)"
     ]
   }
 }

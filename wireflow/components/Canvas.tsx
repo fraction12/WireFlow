@@ -610,6 +610,8 @@ export function Canvas() {
       selectedByClick,
       isPromoteDialogOpen,
       confirmDialogIsOpen: confirmDialog.isOpen,
+      showGrid,
+      snapToGrid,
     };
   }, [
     selectedElementId,
@@ -622,6 +624,8 @@ export function Canvas() {
     selectedByClick,
     isPromoteDialogOpen,
     confirmDialog.isOpen,
+    showGrid,
+    snapToGrid,
   ]);
 
   // Listen for theme changes (class-based toggle or system preference)
@@ -4563,6 +4567,8 @@ export function Canvas() {
     startPromoteGroupToComponent,
     deleteComponentInstance,
     showConfirmDialog,
+    setShowGrid,
+    setSnapToGrid,
   };
 
   // Keyboard event handler for deletion, grouping, and ungrouping
@@ -4582,6 +4588,8 @@ export function Canvas() {
         selectedByClick: currentSelectedByClick,
         isPromoteDialogOpen: currentIsPromoteDialogOpen,
         confirmDialogIsOpen: currentConfirmDialogIsOpen,
+        showGrid: currentShowGrid,
+        snapToGrid: currentSnapToGrid,
       } = keyboardStateRef.current;
 
       // Read current callbacks from ref
@@ -4649,13 +4657,18 @@ export function Canvas() {
           case "t":
             setCurrentTool("text");
             return;
-          // Color shortcuts (Phase 1)
+          // View shortcuts
+          case "g":
+            // Toggle grid visibility
+            callbacks.setShowGrid(!currentShowGrid);
+            return;
+          // Color shortcuts
           case "s":
             // Open stroke color picker
             setStrokePickerOpen(true);
             setFillPickerOpen(false);
             return;
-          case "g":
+          case "f":
             // Open fill color picker
             setFillPickerOpen(true);
             setStrokePickerOpen(false);
@@ -4678,6 +4691,13 @@ export function Canvas() {
       if (e.key === "?" && e.shiftKey) {
         e.preventDefault();
         setShortcutsOpen(true);
+        return;
+      }
+
+      // Shift+G: Toggle snap to grid
+      if (e.key === "G" && e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        callbacks.setSnapToGrid(!currentSnapToGrid);
         return;
       }
 
