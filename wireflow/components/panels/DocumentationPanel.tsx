@@ -25,6 +25,10 @@ interface DocumentationPanelProps {
   elementAnnotation: ElementAnnotation | undefined;
   /** Callback when element annotation changes */
   onElementAnnotationChange: (annotation: ElementAnnotation) => void;
+  /** Total number of elements in the frame */
+  totalElements: number;
+  /** Number of elements with annotations */
+  annotatedCount: number;
 }
 
 /** Default empty annotation */
@@ -43,6 +47,8 @@ export function DocumentationPanel({
   selectedElementId,
   elementAnnotation,
   onElementAnnotationChange,
+  totalElements,
+  annotatedCount,
 }: DocumentationPanelProps) {
   // Manage content visibility timing for smooth animation
   const contentVisible = usePanelAnimation(isExpanded);
@@ -76,11 +82,25 @@ export function DocumentationPanel({
         <div className="flex items-center gap-2">
           <FileText size={18} className="text-zinc-500 dark:text-zinc-400" />
           <h2 className="font-semibold text-zinc-900 dark:text-zinc-100">Documentation</h2>
+          {totalElements > 0 && (
+            <span
+              className={`text-xs px-1.5 py-0.5 rounded-full ${
+                annotatedCount === totalElements
+                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                  : annotatedCount > 0
+                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                    : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
+              }`}
+              title={`${annotatedCount} of ${totalElements} elements annotated`}
+            >
+              {annotatedCount}/{totalElements}
+            </span>
+          )}
         </div>
         <button
           onClick={onToggle}
           className="w-8 h-8 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95"
-          title="Hide panel (Ctrl+\)"
+          title="Hide panel"
           aria-label="Hide documentation panel"
           aria-expanded={isExpanded}
         >

@@ -204,21 +204,23 @@ export function KeyboardShortcutsPanel({ isOpen, onClose }: KeyboardShortcutsPan
                 <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 uppercase tracking-wide">
                   {group.title}
                 </h3>
-                <div className="space-y-1">
+                <dl className="space-y-1">
                   {group.shortcuts.map((shortcut) => (
                     <div
                       key={shortcut.keys}
                       className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                     >
-                      <span className="text-sm text-zinc-600 dark:text-zinc-400">
+                      <dt className="text-sm text-zinc-600 dark:text-zinc-400">
                         {shortcut.description}
-                      </span>
-                      <kbd className="ml-2 px-2 py-0.5 text-xs font-mono bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded border border-zinc-200 dark:border-zinc-700 whitespace-nowrap">
-                        {shortcut.keys}
-                      </kbd>
+                      </dt>
+                      <dd className="ml-2">
+                        <kbd className="px-2 py-0.5 text-xs font-mono bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded border border-zinc-200 dark:border-zinc-700 whitespace-nowrap">
+                          {shortcut.keys}
+                        </kbd>
+                      </dd>
                     </div>
                   ))}
-                </div>
+                </dl>
               </div>
             ))}
           </div>

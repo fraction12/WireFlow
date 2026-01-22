@@ -91,6 +91,41 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
+/* Theme transition - smooth fade when switching between light/dark */
+:root {
+  --theme-transition-duration: 150ms;
+}
+
+html,
+body,
+/* Common UI elements that should transition smoothly */
+.bg-white,
+.bg-zinc-50,
+.bg-zinc-100,
+.bg-zinc-800,
+.bg-zinc-900,
+.dark\:bg-zinc-800,
+.dark\:bg-zinc-900,
+/* Borders and text */
+[class*="border-"],
+[class*="text-zinc"],
+[class*="text-gray"] {
+  transition:
+    background-color var(--theme-transition-duration) ease-in-out,
+    border-color var(--theme-transition-duration) ease-in-out,
+    color var(--theme-transition-duration) ease-in-out;
+}
+
+/* Disable theme transitions for elements that shouldn't animate */
+canvas,
+textarea,
+input,
+/* Skip transitions during initial page load */
+.no-theme-transition,
+.no-theme-transition * {
+  transition: none !important;
+}
+
 /* Focus-visible styles for accessibility */
 *:focus-visible {
   outline: 2px solid var(--canvas-selected);

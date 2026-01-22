@@ -145,7 +145,6 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
         ${isExiting ? 'animate-fade-out' : 'animate-slide-in-up'}
       `}
       role="status"
-      aria-live="off"
     >
       <Icon size={20} className={`flex-shrink-0 mt-0.5 ${iconColors}`} />
       <div className="flex-1 min-w-0">

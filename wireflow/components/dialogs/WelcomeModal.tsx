@@ -7,23 +7,35 @@ import { useFocusRestore } from '@/lib/useFocusRestore';
 
 const WELCOME_SHOWN_KEY = 'wireflow-welcome-shown';
 
-interface WelcomeModalProps {
-  onDismiss?: () => void;
+/** Reset the "don't show again" preference so the welcome modal appears again */
+export function resetWelcomePreference(): void {
+  localStorage.removeItem(WELCOME_SHOWN_KEY);
 }
 
-export function WelcomeModal({ onDismiss }: WelcomeModalProps) {
-  const [isOpen, setIsOpen] = useState(false);
+interface WelcomeModalProps {
+  /** External trigger to open the modal (used for manual re-open) */
+  externalOpen?: boolean;
+  /** Callback when modal is closed */
+  onClose?: () => void;
+}
+
+export function WelcomeModal({ externalOpen, onClose }: WelcomeModalProps) {
+  const [autoShowOpen, setAutoShowOpen] = useState(false);
+  const [dontShowAgain, setDontShowAgain] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
   const startButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Modal is open if auto-show triggered OR external open triggered
+  const isOpen = autoShowOpen || (externalOpen ?? false);
 
   // Restore focus to previously focused element when modal closes
   useFocusRestore(isOpen);
 
   useEffect(() => {
-    // Check if user has seen the welcome modal before
+    // Auto-show for first-time users (only if not already suppressed)
     const hasSeenWelcome = localStorage.getItem(WELCOME_SHOWN_KEY);
     if (!hasSeenWelcome) {
-      setIsOpen(true);
+      setAutoShowOpen(true);
     }
   }, []);
 
@@ -35,10 +47,14 @@ export function WelcomeModal({ onDismiss }: WelcomeModalProps) {
   }, [isOpen]);
 
   const handleDismiss = useCallback(() => {
-    localStorage.setItem(WELCOME_SHOWN_KEY, 'true');
-    setIsOpen(false);
-    onDismiss?.();
-  }, [onDismiss]);
+    // Only save preference if checkbox is checked
+    if (dontShowAgain) {
+      localStorage.setItem(WELCOME_SHOWN_KEY, 'true');
+    }
+    // Close both internal and external state
+    setAutoShowOpen(false);
+    onClose?.();
+  }, [dontShowAgain, onClose]);
 
   // Focus trap
   useFocusTrap(modalRef, isOpen);
@@ -107,8 +123,12 @@ export function WelcomeModal({ onDismiss }: WelcomeModalProps) {
               description="Select, Rectangle, Ellipse, Diamond, Arrow, Line, Pencil, Text tools"
             />
             <Tip
-              shortcut="Ctrl/⌘ + Z / Y"
-              description="Undo and redo your changes"
+              shortcut="Ctrl/⌘ + Z"
+              description="Undo your last change"
+            />
+            <Tip
+              shortcut="Ctrl/⌘ + Y"
+              description="Redo your last change"
             />
             <Tip
               shortcut="Delete / Backspace"
@@ -132,7 +152,18 @@ export function WelcomeModal({ onDismiss }: WelcomeModalProps) {
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 bg-zinc-50 dark:bg-zinc-800/50 border-t border-zinc-200 dark:border-zinc-700">
+        <div className="px-6 py-3 bg-zinc-50 dark:bg-zinc-800/50 border-t border-zinc-200 dark:border-zinc-700 space-y-2">
+          <label className="flex items-center justify-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={dontShowAgain}
+              onChange={(e) => setDontShowAgain(e.target.checked)}
+              className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+            />
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+              Don&apos;t show this again
+            </span>
+          </label>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 text-center">
             Press <kbd className="px-1.5 py-0.5 font-mono bg-zinc-200 dark:bg-zinc-700 rounded">?</kbd> anytime to see keyboard shortcuts
           </p>

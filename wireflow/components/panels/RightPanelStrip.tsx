@@ -67,7 +67,7 @@ export function RightPanelStrip({
         <button
           onClick={onToggleDocPanel}
           className="w-10 h-10 flex items-center justify-center text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95"
-          title="Show Documentation (Ctrl+\)"
+          title="Show Documentation"
           aria-label="Show documentation panel"
           aria-expanded="false"
         >

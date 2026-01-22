@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import type { Frame, FrameType } from '@/lib/types';
 import { usePanelAnimation } from '@/lib/usePanelAnimation';
-import { Trash2, Plus, ChevronDown, ChevronLeft, AppWindow, Pencil } from 'lucide-react';
+import { Trash2, Plus, ChevronDown, ChevronLeft, AppWindow, Pencil, GripVertical } from 'lucide-react';
 
 interface FrameListProps {
   /** Whether the panel is expanded */
@@ -17,6 +17,8 @@ interface FrameListProps {
   onRenameFrame: (frameId: string, newName: string) => void;
   onDeleteFrame: (frameId: string) => void;
   onRequestDeleteFrame?: (frameId: string, frameName: string) => void;
+  /** Callback when frames are reordered via drag-drop */
+  onReorderFrames?: (fromIndex: number, toIndex: number) => void;
 }
 
 export function FrameList({
@@ -29,6 +31,7 @@ export function FrameList({
   onRenameFrame,
   onDeleteFrame,
   onRequestDeleteFrame,
+  onReorderFrames,
 }: FrameListProps) {
   // Manage content visibility timing for smooth animation
   const contentVisible = usePanelAnimation(isExpanded);
@@ -36,6 +39,11 @@ export function FrameList({
   const [editingFrameId, setEditingFrameId] = useState<string | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Drag-drop state for frame reordering
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
+  const [dropPosition, setDropPosition] = useState<'above' | 'below'>('above');
 
   const handleCreateFrame = (type: FrameType) => {
     onCreateFrame(type);
@@ -91,6 +99,59 @@ export function FrameList({
       }
     }
   };
+
+  // Drag handlers for frame reordering
+  const handleDragStart = useCallback((index: number) => (e: React.DragEvent) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+    document.body.classList.add('dragging-frame');
+  }, []);
+
+  const handleDragOver = useCallback((index: number) => (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDropTargetIndex(index);
+
+    // Detect if cursor is in top or bottom half of the element
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midpoint = rect.top + rect.height / 2;
+    setDropPosition(e.clientY < midpoint ? 'above' : 'below');
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setDropTargetIndex(null);
+    setDropPosition('above');
+  }, []);
+
+  const handleDrop = useCallback((toIndex: number) => (e: React.DragEvent) => {
+    e.preventDefault();
+    if (draggedIndex !== null && draggedIndex !== toIndex && onReorderFrames) {
+      // Adjust target index based on drop position
+      let actualToIndex = toIndex;
+      if (dropPosition === 'below') {
+        actualToIndex = toIndex + 1;
+      }
+      // Adjust for when dragging from above
+      if (draggedIndex < actualToIndex) {
+        actualToIndex -= 1;
+      }
+      if (draggedIndex !== actualToIndex) {
+        onReorderFrames(draggedIndex, actualToIndex);
+      }
+    }
+    setDraggedIndex(null);
+    setDropTargetIndex(null);
+    setDropPosition('above');
+    document.body.classList.remove('dragging-frame');
+  }, [draggedIndex, dropPosition, onReorderFrames]);
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedIndex(null);
+    setDropTargetIndex(null);
+    setDropPosition('above');
+    document.body.classList.remove('dragging-frame');
+  }, []);
 
   const frameTypes: Array<{ type: FrameType; label: string; description: string }> = [
     { type: 'page', label: 'Page', description: 'Full page layout' },
@@ -193,18 +254,28 @@ export function FrameList({
 
       {/* Frame list */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden" role="list" aria-label="Frame list">
-        {frames.map((frame) => {
+        {frames.map((frame, index) => {
           const isActive = frame.id === activeFrameId;
           const isEditing = frame.id === editingFrameId;
+          const isDragging = index === draggedIndex;
+          const isDropTarget = index === dropTargetIndex && draggedIndex !== null && index !== draggedIndex;
+          const isDropAbove = isDropTarget && dropPosition === 'above';
+          const isDropBelow = isDropTarget && dropPosition === 'below';
 
           return (
             <div
               key={frame.id}
-              className={`group px-4 py-3 border-b border-zinc-100 dark:border-zinc-800 transition-all duration-150 cursor-pointer ${
+              draggable={!isEditing && onReorderFrames !== undefined}
+              onDragStart={handleDragStart(index)}
+              onDragOver={handleDragOver(index)}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop(index)}
+              onDragEnd={handleDragEnd}
+              className={`group flex items-center gap-2 px-2 py-3 border-b border-zinc-100 dark:border-zinc-800 transition-all duration-150 cursor-pointer ${
                 isActive
                   ? 'bg-blue-50 dark:bg-blue-950 border-l-4 border-l-blue-500'
-                  : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
-              }`}
+                  : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/50 border-l-4 border-l-transparent'
+              } ${isDragging ? 'opacity-50 bg-zinc-100 dark:bg-zinc-800' : ''} ${isDropAbove ? 'border-t-2 border-t-blue-500' : ''} ${isDropBelow ? 'border-b-2 border-b-blue-500' : ''}`}
               onClick={() => !isEditing && onSwitchFrame(frame.id)}
               onDoubleClick={() => !isEditing && setEditingFrameId(frame.id)}
               onKeyDown={(e) => {
@@ -221,89 +292,102 @@ export function FrameList({
               role="button"
               tabIndex={0}
               aria-current={isActive ? 'page' : undefined}
-              aria-label={`Frame: ${frame.name}. Double-click or press F2 to rename.`}
+              aria-label={`Frame: ${frame.name}. Double-click or press F2 to rename.${onReorderFrames ? ' Drag to reorder.' : ''}`}
             >
-              {/* Frame name (editable) */}
-              <div className="mb-1">
-                {isEditing ? (
-                  <input
-                    type="text"
-                    value={frame.name}
-                    onChange={(e) => onRenameFrame(frame.id, e.target.value)}
-                    onBlur={() => setEditingFrameId(null)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') setEditingFrameId(null);
-                      if (e.key === 'Escape') setEditingFrameId(null);
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="w-full font-medium text-sm px-2 py-1 border border-blue-500 rounded-lg bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                    autoFocus
-                    aria-label="Rename frame"
-                  />
-                ) : (
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      className="font-medium text-sm text-zinc-900 dark:text-zinc-100 hover:text-blue-600 dark:hover:text-blue-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 rounded px-1 -mx-1"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingFrameId(frame.id);
-                      }}
-                      aria-label={`Rename frame ${frame.name}`}
-                    >
-                      {frame.name}
-                    </button>
-                    <button
-                      type="button"
-                      className="p-0.5 text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 rounded transition-all duration-150 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingFrameId(frame.id);
-                      }}
-                      title="Rename frame"
-                      aria-label={`Rename frame ${frame.name}`}
-                    >
-                      <Pencil size={12} />
-                    </button>
-                  </div>
-                )}
-              </div>
+              {/* Drag handle */}
+              {onReorderFrames && (
+                <div
+                  className="flex-shrink-0 cursor-grab active:cursor-grabbing text-zinc-400 dark:text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                  aria-label="Drag to reorder"
+                >
+                  <GripVertical size={14} />
+                </div>
+              )}
 
-              {/* Frame metadata */}
-              <div className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2">
-                  {/* Frame type badge */}
-                  <span
-                    className={`px-2 py-0.5 rounded-md capitalize font-medium select-none ${
-                      frame.type === 'page'
-                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
-                        : frame.type === 'modal'
-                        ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300'
-                        : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
-                    }`}
-                    aria-label={`Frame type: ${frame.type}`}
-                  >
-                    {frame.type}
-                  </span>
-
-                  {/* Element count */}
-                  <span className="text-zinc-600 dark:text-zinc-400 select-none" aria-label={`${frame.elements.length} elements in frame`}>
-                    {frame.elements.length} {frame.elements.length === 1 ? 'element' : 'elements'}
-                  </span>
+              {/* Frame content */}
+              <div className="flex-1 min-w-0">
+                {/* Frame name (editable) */}
+                <div className="mb-1">
+                  {isEditing ? (
+                    <input
+                      type="text"
+                      value={frame.name}
+                      onChange={(e) => onRenameFrame(frame.id, e.target.value)}
+                      onBlur={() => setEditingFrameId(null)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') setEditingFrameId(null);
+                        if (e.key === 'Escape') setEditingFrameId(null);
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="w-full font-medium text-sm px-2 py-1 border border-blue-500 rounded-lg bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                      autoFocus
+                      aria-label="Rename frame"
+                    />
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        className="font-medium text-sm text-zinc-900 dark:text-zinc-100 hover:text-blue-600 dark:hover:text-blue-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 rounded px-1 -mx-1"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingFrameId(frame.id);
+                        }}
+                        aria-label={`Rename frame ${frame.name}`}
+                      >
+                        {frame.name}
+                      </button>
+                      <button
+                        type="button"
+                        className="p-0.5 text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 rounded transition-all duration-150 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingFrameId(frame.id);
+                        }}
+                        title="Rename frame"
+                        aria-label={`Rename frame ${frame.name}`}
+                      >
+                        <Pencil size={12} />
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                {/* Delete button (only if not last frame) - shows on hover/focus */}
-                {frames.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={(e) => handleDeleteClick(e, frame)}
-                    className="p-1.5 text-zinc-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 rounded-md transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 active:scale-95 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-                    title="Delete frame"
-                    aria-label={`Delete frame ${frame.name}`}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                )}
+                {/* Frame metadata */}
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    {/* Frame type badge */}
+                    <span
+                      className={`px-2 py-0.5 rounded-md capitalize font-medium select-none ${
+                        frame.type === 'page'
+                          ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
+                          : frame.type === 'modal'
+                          ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-300'
+                          : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
+                      }`}
+                      aria-label={`Frame type: ${frame.type}`}
+                    >
+                      {frame.type}
+                    </span>
+
+                    {/* Element count */}
+                    <span className="text-zinc-600 dark:text-zinc-400 select-none" aria-label={`${frame.elements.length} elements in frame`}>
+                      {frame.elements.length} {frame.elements.length === 1 ? 'element' : 'elements'}
+                    </span>
+                  </div>
+
+                  {/* Delete button (only if not last frame) - shows on hover/focus */}
+                  {frames.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteClick(e, frame)}
+                      className="p-1.5 text-zinc-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950 rounded-md transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500 active:scale-95 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                      title="Delete frame"
+                      aria-label={`Delete frame ${frame.name}`}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           );

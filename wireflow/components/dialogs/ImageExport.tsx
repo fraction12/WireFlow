@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Image, FileCode, ChevronDown } from 'lucide-react';
 import type {
   CanvasElement,
@@ -21,9 +21,15 @@ interface ImageExportProps {
   frameName: string;
 }
 
+// Maximum preview thumbnail size
+const PREVIEW_MAX_WIDTH = 200;
+const PREVIEW_MAX_HEIGHT = 150;
+
 export function ImageExport({ elements, frameName }: ImageExportProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
+  const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
+  const [previewDimensions, setPreviewDimensions] = useState<{ width: number; height: number } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuItemRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -240,7 +246,7 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
   };
 
   // Calculate bounding box for all elements
-  const getBoundingBox = () => {
+  const getBoundingBox = useCallback(() => {
     if (elements.length === 0) {
       return { x: 0, y: 0, width: 800, height: 600 };
     }
@@ -263,10 +269,10 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
       width: maxX - minX + padding * 2,
       height: maxY - minY + padding * 2,
     };
-  };
+  }, [elements]);
 
   // Render elements to canvas
-  const renderToCanvas = (ctx: CanvasRenderingContext2D, offsetX: number, offsetY: number) => {
+  const renderToCanvas = useCallback((ctx: CanvasRenderingContext2D, offsetX: number, offsetY: number) => {
     const defaultSketchColor = '#6b7280';
     ctx.lineWidth = 1.5;
     ctx.lineCap = 'round';
@@ -416,7 +422,68 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
         drawFreedraw(ctx, adjustedPoints);
       }
     });
-  };
+  }, [elements]);
+
+  // Generate preview when dropdown opens
+  useEffect(() => {
+    if (!isOpen || elements.length === 0) {
+      setPreviewDataUrl(null);
+      setPreviewDimensions(null);
+      return;
+    }
+
+    // Generate preview asynchronously to avoid blocking UI
+    const generatePreview = () => {
+      try {
+        const bounds = getBoundingBox();
+
+        // Calculate thumbnail dimensions maintaining aspect ratio
+        const aspectRatio = bounds.width / bounds.height;
+        let previewWidth: number;
+        let previewHeight: number;
+
+        if (aspectRatio > PREVIEW_MAX_WIDTH / PREVIEW_MAX_HEIGHT) {
+          // Wider than tall - constrain by width
+          previewWidth = PREVIEW_MAX_WIDTH;
+          previewHeight = PREVIEW_MAX_WIDTH / aspectRatio;
+        } else {
+          // Taller than wide - constrain by height
+          previewHeight = PREVIEW_MAX_HEIGHT;
+          previewWidth = PREVIEW_MAX_HEIGHT * aspectRatio;
+        }
+
+        const scale = previewWidth / bounds.width;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = previewWidth;
+        canvas.height = previewHeight;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        // White background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Scale down for preview
+        ctx.scale(scale, scale);
+
+        // Render elements to preview canvas
+        renderToCanvas(ctx, bounds.x, bounds.y);
+
+        setPreviewDataUrl(canvas.toDataURL('image/png'));
+        setPreviewDimensions({ width: Math.round(bounds.width), height: Math.round(bounds.height) });
+      } catch {
+        // Silently fail - preview is not critical
+        setPreviewDataUrl(null);
+        setPreviewDimensions(null);
+      }
+    };
+
+    // Use requestAnimationFrame for smooth rendering
+    const rafId = requestAnimationFrame(generatePreview);
+    return () => cancelAnimationFrame(rafId);
+  }, [isOpen, elements, getBoundingBox, renderToCanvas]);
 
   const exportPNG = () => {
     if (elements.length === 0) {
@@ -687,11 +754,34 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
 
       {isOpen && (
         <div
-          className="absolute right-0 mt-1 w-40 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg z-50 overflow-hidden"
+          className="absolute right-0 mt-1 w-56 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-lg z-50 overflow-hidden"
           role="menu"
           aria-label="Image export options"
           aria-orientation="vertical"
         >
+          {/* Preview section */}
+          {previewDataUrl && previewDimensions ? (
+            <div className="p-3 border-b border-zinc-200 dark:border-zinc-700">
+              <div className="text-xs text-zinc-500 dark:text-zinc-400 mb-2">
+                Preview ({previewDimensions.width} × {previewDimensions.height}px)
+              </div>
+              <div className="flex justify-center bg-zinc-50 dark:bg-zinc-900 rounded border border-zinc-200 dark:border-zinc-700 p-2">
+                <img
+                  src={previewDataUrl}
+                  alt="Export preview"
+                  className="max-w-full h-auto rounded"
+                  style={{ maxHeight: PREVIEW_MAX_HEIGHT }}
+                />
+              </div>
+            </div>
+          ) : elements.length === 0 ? (
+            <div className="p-3 border-b border-zinc-200 dark:border-zinc-700">
+              <div className="text-xs text-zinc-500 dark:text-zinc-400 text-center">
+                No elements to export
+              </div>
+            </div>
+          ) : null}
+
           <button
             ref={(el) => { menuItemRefs.current[0] = el; }}
             onClick={exportPNG}

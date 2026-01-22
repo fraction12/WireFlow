@@ -97,6 +97,36 @@ function getElementDisplayName(element: CanvasElement): string {
   return ELEMENT_TYPE_NAMES[element.type] || 'Element';
 }
 
+/** Generate a meaningful display name for an element group */
+function getGroupDisplayName(
+  group: ElementGroup,
+  groupElements: CanvasElement[],
+  allElementGroups: ElementGroup[]
+): string {
+  // Try to derive name from first element with a custom name
+  const firstNamedElement = groupElements.find(el => el.name);
+  if (firstNamedElement?.name) {
+    return firstNamedElement.name;
+  }
+
+  // Try to use first text element's content as the group name
+  const firstTextElement = groupElements.find(
+    el => el.type === 'text' && 'content' in el && el.content
+  );
+  if (firstTextElement && 'content' in firstTextElement && firstTextElement.content) {
+    const preview = firstTextElement.content.slice(0, 15);
+    return preview.length < firstTextElement.content.length ? `${preview}...` : preview;
+  }
+
+  // Fall back to numbered group name
+  // Sort groups by creation date to get consistent numbering
+  const sortedGroups = [...allElementGroups].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+  const groupIndex = sortedGroups.findIndex(g => g.id === group.id);
+  return `Group ${groupIndex + 1}`;
+}
+
 export function LayersPanel({
   isExpanded,
   onToggle,
@@ -590,10 +620,11 @@ export function LayersPanel({
                 const isAllSelected = groupElements.every(el =>
                   el.id === selectedElementId || selectedElementIds.has(el.id)
                 );
+                const groupName = getGroupDisplayName(group, groupElements, elementGroups);
 
                 return (
                   <div key={group.id} role="group">
-                    {renderGroupHeader(group.id, 'element', `Group`, groupElements.length, isAllSelected)}
+                    {renderGroupHeader(group.id, 'element', groupName, groupElements.length, isAllSelected)}
                     {!isCollapsed && groupElements.map((el, elIdx) =>
                       renderElementRow(el, idx * 100 + elIdx, true)
                     )}

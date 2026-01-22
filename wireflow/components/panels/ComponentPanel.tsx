@@ -196,7 +196,11 @@ export function ComponentPanel({
         </svg>
         <p className="text-sm font-medium mb-1">No components yet</p>
         <p className="text-xs opacity-70">
-          Select elements and press{' '}
+          Select elements, press{' '}
+          <kbd className="px-1 py-0.5 text-[10px] bg-zinc-100 dark:bg-zinc-800 rounded border border-zinc-200 dark:border-zinc-700">
+            Ctrl+G
+          </kbd>{' '}
+          to group, then{' '}
           <kbd className="px-1 py-0.5 text-[10px] bg-zinc-100 dark:bg-zinc-800 rounded border border-zinc-200 dark:border-zinc-700">
             Ctrl+Shift+C
           </kbd>
@@ -346,7 +350,7 @@ export function ComponentPanel({
 
           {/* Footer hint */}
           <div className="px-4 py-3 border-t border-zinc-200 dark:border-zinc-700 text-xs text-zinc-600 dark:text-zinc-400">
-            Click to insert • Drag to position
+            Click to insert at center • Drag to precise position
           </div>
         </>
       )}

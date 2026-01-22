@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect, useCallback } from "react";
+import { Undo2, Redo2 } from "lucide-react";
 import type {
   CanvasElement,
   Tool,
@@ -405,6 +406,9 @@ export function Canvas() {
 
   // Keyboard shortcuts help panel state
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+  // Welcome modal state (for manual re-opening)
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
 
   // Alignment guides state (lines to show when elements align)
   const [alignmentGuides, setAlignmentGuides] = useState<{ type: 'h' | 'v'; pos: number }[]>([]);
@@ -4249,6 +4253,18 @@ export function Canvas() {
     }
   };
 
+  // Handler for reordering frames via drag-drop
+  const handleReorderFrames = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return;
+    if (fromIndex < 0 || fromIndex >= frames.length) return;
+    if (toIndex < 0 || toIndex >= frames.length) return;
+
+    const newFrames = [...frames];
+    const [movedFrame] = newFrames.splice(fromIndex, 1);
+    newFrames.splice(toIndex, 0, movedFrame);
+    setFrames(newFrames);
+  };
+
   // Handler for frame deletion request (shows confirm dialog)
   const handleRequestDeleteFrame = (frameId: string, frameName: string) => {
     if (frames.length === 1) {
@@ -5501,25 +5517,43 @@ export function Canvas() {
                 const latestCallbacks = keyboardCallbacksRef.current;
                 latestCallbacks.recordSnapshot(); // Record for undo
 
+                // Use fresh selectedElementIds from ref (not stale closure variable)
+                const freshSelectedIds = latestState.selectedElementIds;
+
+                // Recompute group IDs from fresh state to ensure consistency
+                const freshSelectedElements = latestState.elements.filter((el) =>
+                  freshSelectedIds.has(el.id)
+                );
+                const freshComponentGroupIds = new Set<string>();
+                const freshElementGroupIds = new Set<string>();
+
+                freshSelectedElements.forEach((el) => {
+                  if (el.groupId) {
+                    freshComponentGroupIds.add(el.groupId);
+                  } else if (el.elementGroupId) {
+                    freshElementGroupIds.add(el.elementGroupId);
+                  }
+                });
+
                 // Delete all selected elements
                 setElements(
-                  latestState.elements.filter((el) => !currentSelectedElementIds.has(el.id))
+                  latestState.elements.filter((el) => !freshSelectedIds.has(el.id))
                 );
 
                 // Clean up component group records
-                if (componentGroupIds.size > 0) {
+                if (freshComponentGroupIds.size > 0) {
                   setComponentGroups(
                     latestState.componentGroups.filter(
-                      (grp) => !componentGroupIds.has(grp.id)
+                      (grp) => !freshComponentGroupIds.has(grp.id)
                     )
                   );
                 }
 
                 // Clean up element group records
-                if (elementGroupIds.size > 0) {
+                if (freshElementGroupIds.size > 0) {
                   setElementGroups(
                     latestState.elementGroups.filter(
-                      (grp) => !elementGroupIds.has(grp.id)
+                      (grp) => !freshElementGroupIds.has(grp.id)
                     )
                   );
                 }
@@ -5530,7 +5564,7 @@ export function Canvas() {
                 setSelectedGroupId(null);
 
                 latestCallbacks.announce(
-                  `Deleted ${parts.join(" and ")}`
+                  `Deleted ${freshSelectedElements.length} element${freshSelectedElements.length !== 1 ? "s" : ""}`
                 );
               },
               "danger"
@@ -5904,6 +5938,16 @@ export function Canvas() {
     ? activeFrame?.documentation?.elementAnnotations?.[selectedElementId]
     : undefined;
 
+  // Calculate annotation count for documentation panel badge
+  const annotatedCount = (() => {
+    const annotations = activeFrame?.documentation?.elementAnnotations;
+    if (!annotations) return 0;
+    // Count elements with at least one non-empty annotation field
+    return Object.values(annotations).filter(
+      a => a.description.trim() || a.behavior.trim() || a.edgeCases.trim()
+    ).length;
+  })();
+
   // Get selected text element for unified style bar (null if non-text or nothing selected)
   const selectedTextElement = selectedElementId
     ? (elements.find(el => el.id === selectedElementId && el.type === 'text') as TextElement | undefined) || null
@@ -6206,6 +6250,7 @@ export function Canvas() {
         onRenameFrame={handleRenameFrame}
         onDeleteFrame={handleDeleteFrame}
         onRequestDeleteFrame={handleRequestDeleteFrame}
+        onReorderFrames={handleReorderFrames}
       />
 
       <Toolbar currentTool={currentTool} onToolChange={setCurrentTool} />
@@ -6243,6 +6288,34 @@ export function Canvas() {
                 aria-label="Zoom in"
               >
                 +
+              </button>
+            </div>
+            {/* Undo/Redo controls */}
+            <div className="flex items-center gap-1 border-l border-zinc-200 dark:border-zinc-700 pl-3 ml-2">
+              <button
+                onClick={performUndo}
+                disabled={!historyManager.canUndo}
+                className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent text-zinc-600 dark:text-zinc-400"
+                title={`Undo (Ctrl+Z)${historyManager.undoCount > 0 ? ` - ${historyManager.undoCount} available` : ''}`}
+                aria-label={`Undo${historyManager.undoCount > 0 ? `, ${historyManager.undoCount} steps available` : ', no actions to undo'}`}
+              >
+                <Undo2 size={16} strokeWidth={1.5} />
+              </button>
+              <span
+                className="text-xs text-zinc-400 dark:text-zinc-500 min-w-[32px] text-center tabular-nums"
+                aria-label={`${historyManager.undoCount} undos, ${historyManager.redoCount} redos available`}
+                title={`${historyManager.undoCount} undo${historyManager.undoCount !== 1 ? 's' : ''} / ${historyManager.redoCount} redo${historyManager.redoCount !== 1 ? 's' : ''}`}
+              >
+                {historyManager.undoCount}/{historyManager.redoCount}
+              </span>
+              <button
+                onClick={performRedo}
+                disabled={!historyManager.canRedo}
+                className="p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent text-zinc-600 dark:text-zinc-400"
+                title={`Redo (Ctrl+Y)${historyManager.redoCount > 0 ? ` - ${historyManager.redoCount} available` : ''}`}
+                aria-label={`Redo${historyManager.redoCount > 0 ? `, ${historyManager.redoCount} steps available` : ', no actions to redo'}`}
+              >
+                <Redo2 size={16} strokeWidth={1.5} />
               </button>
             </div>
             {/* Grid controls */}
@@ -6313,6 +6386,27 @@ export function Canvas() {
                 </span>
               </div>
             )}
+            {/* Welcome/help button */}
+            <button
+              onClick={() => setWelcomeOpen(true)}
+              className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              title="Show welcome guide"
+              aria-label="Open welcome guide"
+            >
+              <svg
+                className="w-4 h-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 16v-4" />
+                <path d="M12 8h.01" />
+              </svg>
+            </button>
             {/* Keyboard shortcuts button */}
             <button
               onClick={() => setShortcutsOpen(true)}
@@ -6663,6 +6757,8 @@ export function Canvas() {
         selectedElementId={selectedElementId}
         elementAnnotation={currentElementAnnotation}
         onElementAnnotationChange={handleElementAnnotationChange}
+        totalElements={elements.length}
+        annotatedCount={annotatedCount}
       />
 
       {/* Layers Panel */}
@@ -6726,6 +6822,7 @@ export function Canvas() {
         message={confirmDialog.message}
         variant={confirmDialog.variant}
         confirmLabel="Delete"
+        cancelLabel="Keep"
         onConfirm={() => {
           confirmDialog.onConfirm();
           closeConfirmDialog();
@@ -6739,8 +6836,11 @@ export function Canvas() {
         onClose={() => setShortcutsOpen(false)}
       />
 
-      {/* Welcome Modal for first-time users */}
-      <WelcomeModal />
+      {/* Welcome Modal - auto-shows for first-time users, can be manually re-opened */}
+      <WelcomeModal
+        externalOpen={welcomeOpen}
+        onClose={() => setWelcomeOpen(false)}
+      />
 
       {/* Promote to Component Dialog */}
       {isPromoteDialogOpen && (

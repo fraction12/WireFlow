@@ -281,6 +281,9 @@ export function ColorPicker({
               onChange={handleCustomColorChange}
               style={{ width: '100%', height: '150px' }}
             />
+            <p className="mt-1 text-[10px] text-zinc-500 dark:text-zinc-400">
+              Use arrow keys to adjust color
+            </p>
             <div className="mt-2 flex items-center gap-2">
               <input
                 type="text"
