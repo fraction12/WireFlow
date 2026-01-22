@@ -1,6 +1,6 @@
 'use client';
 
-import { Menu, FileText, Layers } from 'lucide-react';
+import { LayoutGrid, FileText, Layers } from 'lucide-react';
 
 interface RightPanelStripProps {
   /** Whether the layers panel is expanded */
@@ -58,7 +58,7 @@ export function RightPanelStrip({
           aria-label="Show components panel"
           aria-expanded="false"
         >
-          <Menu size={20} />
+          <LayoutGrid size={20} />
         </button>
       )}
 

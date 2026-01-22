@@ -345,6 +345,16 @@ export function Canvas() {
   const [editingText, setEditingText] = useState("");
   const [isNewTextElement, setIsNewTextElement] = useState(false);
   const textInputRef = useRef<HTMLTextAreaElement>(null);
+  const textFocusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Cleanup text focus timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (textFocusTimeoutRef.current) {
+        clearTimeout(textFocusTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Track if current selection was made by clicking (for Backspace delete behavior)
   // Backspace should only delete an element if the user clicked to select it,
@@ -702,11 +712,16 @@ export function Canvas() {
       );
       setComponentInstances(validInstances);
 
-      // Log cleanup if any orphans were found (for debugging)
-      if (validInstances.length < loadedInstances.length) {
-        console.warn(
-          `Cleaned up ${loadedInstances.length - validInstances.length} orphaned component instance(s)`
-        );
+      // Notify user if any orphaned instances were cleaned up
+      const orphanCount = loadedInstances.length - validInstances.length;
+      if (orphanCount > 0) {
+        console.warn(`Cleaned up ${orphanCount} orphaned component instance(s)`);
+        addToast({
+          type: 'info',
+          title: 'Cleanup Notice',
+          message: `Removed ${orphanCount} orphaned component instance${orphanCount === 1 ? '' : 's'} (source component${orphanCount === 1 ? ' was' : 's were'} deleted)`,
+          duration: 5000,
+        });
       }
 
       // Restore active frame, or fall back to first frame if saved frame no longer exists
@@ -2376,7 +2391,10 @@ export function Canvas() {
     setIsNewTextElement(false); // Existing element, not new
     setSelectedByClick(false); // Clear click-selection flag (prevents Backspace delete after editing)
     // Focus input after React renders it
-    setTimeout(() => {
+    if (textFocusTimeoutRef.current) {
+      clearTimeout(textFocusTimeoutRef.current);
+    }
+    textFocusTimeoutRef.current = setTimeout(() => {
       textInputRef.current?.focus();
       // Move cursor to end instead of selecting all (Excalidraw behavior)
       if (textInputRef.current) {
@@ -2565,7 +2583,10 @@ export function Canvas() {
         setEditingElementId(newTextElement.id);
         setEditingText("");
 
-        setTimeout(() => {
+        if (textFocusTimeoutRef.current) {
+          clearTimeout(textFocusTimeoutRef.current);
+        }
+        textFocusTimeoutRef.current = setTimeout(() => {
           textInputRef.current?.focus();
         }, 0);
       }
@@ -2590,7 +2611,10 @@ export function Canvas() {
       setEditingElementId(newElement.id);
       setEditingText("");
 
-      setTimeout(() => {
+      if (textFocusTimeoutRef.current) {
+        clearTimeout(textFocusTimeoutRef.current);
+      }
+      textFocusTimeoutRef.current = setTimeout(() => {
         textInputRef.current?.focus();
       }, 0);
     }
@@ -2847,7 +2871,10 @@ export function Canvas() {
         setIsNewTextElement(true);
 
         // Focus textarea after render
-        setTimeout(() => {
+        if (textFocusTimeoutRef.current) {
+          clearTimeout(textFocusTimeoutRef.current);
+        }
+        textFocusTimeoutRef.current = setTimeout(() => {
           textInputRef.current?.focus();
         }, 0);
       }
@@ -3968,6 +3995,126 @@ export function Canvas() {
     });
   }, [selectedElementId, selectedElementIds, recordSnapshot]);
 
+  // Nudge selected element(s) by dx, dy pixels (for arrow key navigation)
+  const nudgeSelectedElements = useCallback((dx: number, dy: number) => {
+    if (!selectedElementId && selectedElementIds.size === 0) return;
+
+    const idsToMove = selectedElementIds.size > 0
+      ? selectedElementIds
+      : new Set([selectedElementId!]);
+
+    // Check if any selected element is locked
+    const hasLockedElement = elements.some(
+      (el) => idsToMove.has(el.id) && el.locked
+    );
+    if (hasLockedElement) {
+      addToast({
+        type: "warning",
+        title: "Element locked",
+        message: "Cannot move locked elements.",
+      });
+      return;
+    }
+
+    recordSnapshot();
+
+    setElements((prev) =>
+      prev.map((el) => {
+        if (!idsToMove.has(el.id)) return el;
+
+        // Calculate new position
+        let newX = el.x + dx;
+        let newY = el.y + dy;
+
+        // Apply snap-to-grid if enabled
+        if (snapToGrid) {
+          newX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
+          newY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
+        }
+
+        return { ...el, x: newX, y: newY };
+      })
+    );
+
+    // Also move bound text elements for shapes
+    const boundTextIds = new Set<string>();
+    elements.forEach((el) => {
+      if (idsToMove.has(el.id) && el.type !== "text") {
+        const boundText = elements.find(
+          (t) => t.type === "text" && (t as TextElement).containerId === el.id
+        );
+        if (boundText) {
+          boundTextIds.add(boundText.id);
+        }
+      }
+    });
+
+    if (boundTextIds.size > 0) {
+      setElements((prev) =>
+        prev.map((el) => {
+          if (!boundTextIds.has(el.id)) return el;
+
+          let newX = el.x + dx;
+          let newY = el.y + dy;
+
+          if (snapToGrid) {
+            newX = Math.round(newX / GRID_SIZE) * GRID_SIZE;
+            newY = Math.round(newY / GRID_SIZE) * GRID_SIZE;
+          }
+
+          return { ...el, x: newX, y: newY };
+        })
+      );
+    }
+
+    const count = idsToMove.size;
+    const direction =
+      dy < 0 ? "up" : dy > 0 ? "down" : dx < 0 ? "left" : "right";
+    announce(
+      `Moved ${count} element${count > 1 ? "s" : ""} ${direction} by ${Math.abs(dx || dy)} pixels`
+    );
+  }, [selectedElementId, selectedElementIds, elements, snapToGrid, recordSnapshot, addToast, announce]);
+
+  // Cycle through elements for selection with Tab/Shift+Tab (accessibility)
+  const cycleElementSelection = useCallback((reverse: boolean) => {
+    if (elements.length === 0) return;
+
+    // Get visible (non-hidden) elements only
+    const visibleElements = elements.filter((el) => el.visible !== false);
+    if (visibleElements.length === 0) return;
+
+    let nextIndex: number;
+
+    if (!selectedElementId) {
+      // No selection: select first (or last if reverse) element
+      nextIndex = reverse ? visibleElements.length - 1 : 0;
+    } else {
+      // Find current selection index in visible elements
+      const currentIndex = visibleElements.findIndex((el) => el.id === selectedElementId);
+      if (currentIndex === -1) {
+        // Current selection is hidden, start from beginning
+        nextIndex = reverse ? visibleElements.length - 1 : 0;
+      } else {
+        // Move to next/previous
+        if (reverse) {
+          nextIndex = currentIndex === 0 ? visibleElements.length - 1 : currentIndex - 1;
+        } else {
+          nextIndex = currentIndex === visibleElements.length - 1 ? 0 : currentIndex + 1;
+        }
+      }
+    }
+
+    const nextElement = visibleElements[nextIndex];
+    setSelectedElementId(nextElement.id);
+    setSelectedElementIds(new Set([nextElement.id]));
+    setSelectedGroupId(null);
+    setSelectedByClick(true); // Enable deletion with Backspace
+
+    announce(
+      `Selected ${nextElement.type} element (${nextIndex + 1} of ${visibleElements.length})`
+    );
+  }, [elements, selectedElementId, announce]);
+
   // Frame management handlers
   const handleCreateFrame = (type: FrameType) => {
     const newFrame: Frame = {
@@ -4665,6 +4812,8 @@ export function Canvas() {
     sendToBack,
     bringForward,
     sendBackward,
+    nudgeSelectedElements,
+    cycleElementSelection,
     toggleDocPanel,
     toggleElementVisibility,
     toggleElementLock,
@@ -4874,6 +5023,38 @@ export function Canvas() {
       if ((e.ctrlKey || e.metaKey) && e.key === "0") {
         e.preventDefault();
         callbacks.resetZoom();
+        return;
+      }
+
+      // Arrow key navigation: move selected element(s)
+      // Shift+Arrow moves by 10px, plain Arrow moves by 1px
+      if (e.key === "ArrowUp" || e.key === "ArrowDown" || e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        // Only handle if we have selected elements (not instances)
+        if (currentSelectedElementId || currentSelectedElementIds.size > 0) {
+          e.preventDefault();
+          const step = e.shiftKey ? 10 : 1;
+          let dx = 0;
+          let dy = 0;
+
+          switch (e.key) {
+            case "ArrowUp": dy = -step; break;
+            case "ArrowDown": dy = step; break;
+            case "ArrowLeft": dx = -step; break;
+            case "ArrowRight": dx = step; break;
+          }
+
+          callbacks.nudgeSelectedElements(dx, dy);
+        }
+        return;
+      }
+
+      // Tab / Shift+Tab: Cycle through elements for selection (accessibility)
+      if (e.key === "Tab" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        // Only handle Tab when canvas is focused and we're not in a dialog
+        if (currentElements.length > 0) {
+          e.preventDefault();
+          callbacks.cycleElementSelection(e.shiftKey);
+        }
         return;
       }
 
@@ -5130,7 +5311,10 @@ export function Canvas() {
             setIsNewTextElement(false);
             setSelectedByClick(false);
             // Focus input after React renders it
-            setTimeout(() => {
+            if (textFocusTimeoutRef.current) {
+              clearTimeout(textFocusTimeoutRef.current);
+            }
+            textFocusTimeoutRef.current = setTimeout(() => {
               textInputRef.current?.focus();
               // Move cursor to end (after the typed character)
               if (textInputRef.current) {

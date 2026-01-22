@@ -520,7 +520,7 @@ export function LayersPanel({
             <button
               onClick={onToggle}
               className="w-8 h-8 flex items-center justify-center text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95"
-              title="Hide panel (Ctrl+L)"
+              title="Hide panel"
               aria-label="Hide layers panel"
               aria-expanded="true"
             >
@@ -665,7 +665,7 @@ export function LayersPanel({
 
           {/* Footer with keyboard hints */}
           <div className="px-4 py-2 border-t border-zinc-200 dark:border-zinc-700 text-xs text-zinc-500 dark:text-zinc-400">
-            <span className="font-medium">H</span> hide · <span className="font-medium">Ctrl+L</span> lock
+            <span className="font-medium">H</span> toggle visibility · <span className="font-medium">Ctrl+L</span> toggle lock
           </div>
         </>
       )}

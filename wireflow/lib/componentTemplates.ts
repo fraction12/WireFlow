@@ -6,7 +6,7 @@ import type { ComponentTemplate } from './types';
  */
 export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
   // ============================================================================
-  // 1. Button - Simple clickable button
+  // 1. Button - Simple clickable button (visual-only, no semantic tags)
   // ============================================================================
   {
     id: 'template-button',
@@ -22,7 +22,6 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
         offsetY: 0,
         width: 120,
         height: 40,
-        description: 'Primary action button',
       },
       {
         type: 'text',
@@ -76,47 +75,55 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
   },
 
   // ============================================================================
-  // 3. Dropdown - Select dropdown with indicator
+  // 3. Dropdown - Select dropdown with label (visual-only, no semantic tags)
+  // Unlike previous version, this is a simple visual group for sketch-first workflows.
+  // Users can manually add semantic tags if needed for export.
   // ============================================================================
   {
     id: 'template-dropdown',
     type: 'dropdown',
     name: 'Dropdown',
-    description: 'Select dropdown with chevron indicator',
-    width: 200,
-    height: 40,
+    description: 'Select dropdown with label above',
+    width: 240,
+    height: 68,
     elements: [
+      {
+        type: 'text',
+        offsetX: 0,
+        offsetY: 0,
+        width: 100,
+        height: 16,
+        content: 'Label',
+      },
       {
         type: 'rectangle',
         offsetX: 0,
-        offsetY: 0,
-        width: 200,
+        offsetY: 24,
+        width: 240,
         height: 40,
-        semanticTag: 'input',
-        description: 'Dropdown selector',
       },
       {
         type: 'text',
         offsetX: 12,
-        offsetY: 12,
-        width: 150,
+        offsetY: 36,
+        width: 190,
         height: 16,
         content: 'Select...',
       },
       {
         type: 'text',
-        offsetX: 176,
-        offsetY: 12,
+        offsetX: 212,
+        offsetY: 36,
         width: 16,
         height: 16,
-        content: '\u25BC',
+        content: '▼',
         textAlign: 'center',
       },
     ],
   },
 
   // ============================================================================
-  // 4. Card - Content container with header
+  // 4. Card - Content container with header (visual-only, no semantic tags)
   // ============================================================================
   {
     id: 'template-card',
@@ -132,8 +139,6 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
         offsetY: 0,
         width: 280,
         height: 200,
-        semanticTag: 'section',
-        description: 'Card container',
       },
       {
         type: 'line',
@@ -158,7 +163,7 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
   },
 
   // ============================================================================
-  // 5. Navigation Bar - Top navigation with logo and links
+  // 5. Navigation Bar - Top navigation with logo and links (visual-only, no semantic tags)
   // ============================================================================
   {
     id: 'template-navigation-bar',
@@ -174,8 +179,6 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
         offsetY: 0,
         width: 800,
         height: 60,
-        semanticTag: 'section',
-        description: 'Navigation bar container',
       },
       {
         type: 'rectangle',
@@ -183,7 +186,6 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
         offsetY: 14,
         width: 32,
         height: 32,
-        description: 'Logo placeholder',
       },
       {
         type: 'text',
@@ -229,7 +231,7 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
   },
 
   // ============================================================================
-  // 6. Modal Dialog - Overlay dialog with header and footer
+  // 6. Modal Dialog - Overlay dialog with header and footer (visual-only, no semantic tags)
   // ============================================================================
   {
     id: 'template-modal-dialog',
@@ -245,8 +247,6 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
         offsetY: 0,
         width: 400,
         height: 300,
-        semanticTag: 'section',
-        description: 'Modal container',
       },
       // Header area
       {
@@ -304,8 +304,6 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
         offsetY: 258,
         width: 80,
         height: 32,
-        semanticTag: 'button',
-        description: 'Cancel button',
       },
       {
         type: 'text',
@@ -322,8 +320,6 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
         offsetY: 258,
         width: 80,
         height: 32,
-        semanticTag: 'button',
-        description: 'Confirm button',
       },
       {
         type: 'text',
@@ -338,7 +334,7 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
   },
 
   // ============================================================================
-  // 7. Table 3x3 - Simple data table with header row
+  // 7. Table 3x3 - Simple data table with header row (visual-only, no semantic tags)
   // ============================================================================
   {
     id: 'template-table',
@@ -355,8 +351,6 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
         offsetY: 0,
         width: 450,
         height: 160,
-        semanticTag: 'section',
-        description: 'Table container',
       },
       // Header row background (using line for separator)
       {
@@ -532,7 +526,7 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
   },
 
   // ============================================================================
-  // 8. List Item - Single item with icon and text
+  // 8. List Item - Single item with icon and text (visual-only, no semantic tags)
   // ============================================================================
   {
     id: 'template-list-item',
@@ -548,7 +542,6 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
         offsetY: 0,
         width: 300,
         height: 48,
-        description: 'List item container',
       },
       // Icon placeholder
       {
@@ -557,7 +550,6 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
         offsetY: 12,
         width: 24,
         height: 24,
-        description: 'Icon placeholder',
       },
       {
         type: 'text',
@@ -580,7 +572,7 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
   },
 
   // ============================================================================
-  // 9. Header - Page header with logo, nav, and action
+  // 9. Header - Page header with logo, nav, and action (visual-only, no semantic tags)
   // ============================================================================
   {
     id: 'template-header',
@@ -596,8 +588,6 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
         offsetY: 0,
         width: 800,
         height: 80,
-        semanticTag: 'section',
-        description: 'Header container',
       },
       // Logo area
       {
@@ -606,7 +596,6 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
         offsetY: 20,
         width: 40,
         height: 40,
-        description: 'Logo placeholder',
       },
       {
         type: 'text',
@@ -656,8 +645,6 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
         offsetY: 24,
         width: 100,
         height: 36,
-        semanticTag: 'button',
-        description: 'CTA button',
       },
       {
         type: 'text',
@@ -672,7 +659,7 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
   },
 
   // ============================================================================
-  // 10. Footer - Page footer with 3 column links
+  // 10. Footer - Page footer with 3 column links (visual-only, no semantic tags)
   // ============================================================================
   {
     id: 'template-footer',
@@ -688,8 +675,6 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
         offsetY: 0,
         width: 800,
         height: 120,
-        semanticTag: 'section',
-        description: 'Footer container',
       },
       // Column 1
       {
