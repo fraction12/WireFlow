@@ -70,6 +70,16 @@ export function FrameList({
     }
   }, [isDropdownOpen]);
 
+  // Clear editing state when panel collapses or component unmounts
+  useEffect(() => {
+    if (!isExpanded) {
+      setEditingFrameId(null);
+    }
+    return () => {
+      setEditingFrameId(null);
+    };
+  }, [isExpanded]);
+
   const handleDeleteClick = (e: React.MouseEvent, frame: Frame) => {
     e.stopPropagation();
     if (onRequestDeleteFrame) {

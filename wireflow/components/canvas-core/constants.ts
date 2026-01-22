@@ -29,6 +29,12 @@ export const HANDLE_TOLERANCE = 10;
 /** Minimum size for any element in pixels */
 export const MIN_ELEMENT_SIZE = 20;
 
+/** Minimum drag distance required to create a shape (pixels) */
+export const MIN_DRAG_DISTANCE = 5;
+
+/** Default size for shapes created by clicking without dragging */
+export const DEFAULT_CLICK_SHAPE_SIZE = 50;
+
 /** Distance above element for the rotation handle */
 export const ROTATION_HANDLE_OFFSET = 25;
 

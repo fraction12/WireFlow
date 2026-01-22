@@ -58,6 +58,8 @@ import {
   HANDLE_SIZE,
   HANDLE_TOLERANCE,
   MIN_ELEMENT_SIZE,
+  MIN_DRAG_DISTANCE,
+  DEFAULT_CLICK_SHAPE_SIZE,
   ROTATION_HANDLE_OFFSET,
   SELECTION_PADDING,
   GROUP_SELECTION_PADDING,
@@ -3481,56 +3483,83 @@ export function Canvas() {
       }
 
       if (currentTool === "rectangle") {
-        if (Math.abs(width) > 5 && Math.abs(height) > 5) {
-          recordSnapshot(); // Record for undo
-          const newElement: RectangleElement = {
-            id: generateId(),
-            type: "rectangle",
-            x: width > 0 ? startPoint.x : startPoint.x + width,
-            y: height > 0 ? startPoint.y : startPoint.y + height,
-            width: Math.abs(width),
-            height: Math.abs(height),
-            style: { strokeColor: currentStrokeColor, fillColor: currentFillColor },
-          };
-          setElements([...elements, newElement]);
-          setSelectedElementId(newElement.id);
-          setCurrentTool("select");
-          announce('Created rectangle');
-        }
+        recordSnapshot(); // Record for undo
+        // Use default size if click without dragging, otherwise use dragged dimensions
+        const isDraggedEnough = Math.abs(width) > MIN_DRAG_DISTANCE && Math.abs(height) > MIN_DRAG_DISTANCE;
+        const finalWidth = isDraggedEnough ? Math.abs(width) : DEFAULT_CLICK_SHAPE_SIZE;
+        const finalHeight = isDraggedEnough ? Math.abs(height) : DEFAULT_CLICK_SHAPE_SIZE;
+        // Center shape on click point if no drag, otherwise position based on drag direction
+        const finalX = isDraggedEnough
+          ? (width > 0 ? startPoint.x : startPoint.x + width)
+          : startPoint.x - DEFAULT_CLICK_SHAPE_SIZE / 2;
+        const finalY = isDraggedEnough
+          ? (height > 0 ? startPoint.y : startPoint.y + height)
+          : startPoint.y - DEFAULT_CLICK_SHAPE_SIZE / 2;
+        const newElement: RectangleElement = {
+          id: generateId(),
+          type: "rectangle",
+          x: finalX,
+          y: finalY,
+          width: finalWidth,
+          height: finalHeight,
+          style: { strokeColor: currentStrokeColor, fillColor: currentFillColor },
+        };
+        setElements([...elements, newElement]);
+        setSelectedElementId(newElement.id);
+        setCurrentTool("select");
+        announce('Created rectangle');
       } else if (currentTool === "ellipse") {
-        if (Math.abs(width) > 5 && Math.abs(height) > 5) {
-          recordSnapshot(); // Record for undo
-          const newElement: EllipseElement = {
-            id: generateId(),
-            type: "ellipse",
-            x: width > 0 ? startPoint.x : startPoint.x + width,
-            y: height > 0 ? startPoint.y : startPoint.y + height,
-            width: Math.abs(width),
-            height: Math.abs(height),
-            style: { strokeColor: currentStrokeColor, fillColor: currentFillColor },
-          };
-          setElements([...elements, newElement]);
-          setSelectedElementId(newElement.id);
-          setCurrentTool("select");
-          announce('Created ellipse');
-        }
+        recordSnapshot(); // Record for undo
+        // Use default size if click without dragging, otherwise use dragged dimensions
+        const isDraggedEnough = Math.abs(width) > MIN_DRAG_DISTANCE && Math.abs(height) > MIN_DRAG_DISTANCE;
+        const finalWidth = isDraggedEnough ? Math.abs(width) : DEFAULT_CLICK_SHAPE_SIZE;
+        const finalHeight = isDraggedEnough ? Math.abs(height) : DEFAULT_CLICK_SHAPE_SIZE;
+        // Center shape on click point if no drag, otherwise position based on drag direction
+        const finalX = isDraggedEnough
+          ? (width > 0 ? startPoint.x : startPoint.x + width)
+          : startPoint.x - DEFAULT_CLICK_SHAPE_SIZE / 2;
+        const finalY = isDraggedEnough
+          ? (height > 0 ? startPoint.y : startPoint.y + height)
+          : startPoint.y - DEFAULT_CLICK_SHAPE_SIZE / 2;
+        const newElement: EllipseElement = {
+          id: generateId(),
+          type: "ellipse",
+          x: finalX,
+          y: finalY,
+          width: finalWidth,
+          height: finalHeight,
+          style: { strokeColor: currentStrokeColor, fillColor: currentFillColor },
+        };
+        setElements([...elements, newElement]);
+        setSelectedElementId(newElement.id);
+        setCurrentTool("select");
+        announce('Created ellipse');
       } else if (currentTool === "diamond") {
-        if (Math.abs(width) > 5 && Math.abs(height) > 5) {
-          recordSnapshot(); // Record for undo
-          const newElement: DiamondElement = {
-            id: generateId(),
-            type: "diamond",
-            x: width > 0 ? startPoint.x : startPoint.x + width,
-            y: height > 0 ? startPoint.y : startPoint.y + height,
-            width: Math.abs(width),
-            height: Math.abs(height),
-            style: { strokeColor: currentStrokeColor, fillColor: currentFillColor },
-          };
-          setElements([...elements, newElement]);
-          setSelectedElementId(newElement.id);
-          setCurrentTool("select");
-          announce('Created diamond');
-        }
+        recordSnapshot(); // Record for undo
+        // Use default size if click without dragging, otherwise use dragged dimensions
+        const isDraggedEnough = Math.abs(width) > MIN_DRAG_DISTANCE && Math.abs(height) > MIN_DRAG_DISTANCE;
+        const finalWidth = isDraggedEnough ? Math.abs(width) : DEFAULT_CLICK_SHAPE_SIZE;
+        const finalHeight = isDraggedEnough ? Math.abs(height) : DEFAULT_CLICK_SHAPE_SIZE;
+        // Center shape on click point if no drag, otherwise position based on drag direction
+        const finalX = isDraggedEnough
+          ? (width > 0 ? startPoint.x : startPoint.x + width)
+          : startPoint.x - DEFAULT_CLICK_SHAPE_SIZE / 2;
+        const finalY = isDraggedEnough
+          ? (height > 0 ? startPoint.y : startPoint.y + height)
+          : startPoint.y - DEFAULT_CLICK_SHAPE_SIZE / 2;
+        const newElement: DiamondElement = {
+          id: generateId(),
+          type: "diamond",
+          x: finalX,
+          y: finalY,
+          width: finalWidth,
+          height: finalHeight,
+          style: { strokeColor: currentStrokeColor, fillColor: currentFillColor },
+        };
+        setElements([...elements, newElement]);
+        setSelectedElementId(newElement.id);
+        setCurrentTool("select");
+        announce('Created diamond');
       } else if (currentTool === "arrow") {
         recordSnapshot(); // Record for undo
         // Handle Shift key for angle constraint

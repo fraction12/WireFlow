@@ -37,7 +37,9 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
   },
 
   // ============================================================================
-  // 2. Text Input - Labeled input field
+  // 2. Text Input - Labeled input field (visual-only, no semantic tags)
+  // Unlike Dropdown, this is a simple visual group for sketch-first workflows.
+  // Users can manually add semantic tags if needed for export.
   // ============================================================================
   {
     id: 'template-text-input',
@@ -61,8 +63,6 @@ export const COMPONENT_TEMPLATES: ComponentTemplate[] = [
         offsetY: 24,
         width: 240,
         height: 40,
-        semanticTag: 'input',
-        description: 'Text input field',
       },
       {
         type: 'text',
