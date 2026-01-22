@@ -12,6 +12,10 @@ import type {
 import { useToast } from '../ui/Toast';
 import { wrapText } from '../canvas-core/renderers';
 
+// Maximum canvas dimension supported by browsers
+// Most browsers support up to 32767 pixels per dimension
+const MAX_CANVAS_DIMENSION = 32767;
+
 interface ImageExportProps {
   elements: CanvasElement[];
   frameName: string;
@@ -19,8 +23,17 @@ interface ImageExportProps {
 
 export function ImageExport({ elements, frameName }: ImageExportProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [focusedIndex, setFocusedIndex] = useState(-1);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuItemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const { addToast } = useToast();
+
+  // Menu options for keyboard navigation
+  const menuOptions = [
+    { label: 'Export as PNG', action: () => exportPNG() },
+    { label: 'Export as SVG', action: () => exportSVG() },
+  ];
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -36,19 +49,68 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
 
-  // Close dropdown on Escape key
+  // Reset focus index when dropdown closes
   useEffect(() => {
+    if (!isOpen) {
+      setFocusedIndex(-1);
+    } else {
+      // Focus first item when dropdown opens
+      setFocusedIndex(0);
+    }
+  }, [isOpen]);
+
+  // Focus the menu item when focusedIndex changes
+  useEffect(() => {
+    if (isOpen && focusedIndex >= 0 && menuItemRefs.current[focusedIndex]) {
+      menuItemRefs.current[focusedIndex]?.focus();
+    }
+  }, [isOpen, focusedIndex]);
+
+  // Handle keyboard navigation in dropdown
+  const handleDropdownKeyDown = (e: React.KeyboardEvent) => {
     if (!isOpen) return;
 
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+    switch (e.key) {
+      case 'Escape':
+        e.preventDefault();
         setIsOpen(false);
-      }
-    };
+        triggerRef.current?.focus();
+        break;
 
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
-  }, [isOpen]);
+      case 'ArrowDown':
+        e.preventDefault();
+        setFocusedIndex(prev => (prev + 1) % menuOptions.length);
+        break;
+
+      case 'ArrowUp':
+        e.preventDefault();
+        setFocusedIndex(prev => (prev - 1 + menuOptions.length) % menuOptions.length);
+        break;
+
+      case 'Home':
+        e.preventDefault();
+        setFocusedIndex(0);
+        break;
+
+      case 'End':
+        e.preventDefault();
+        setFocusedIndex(menuOptions.length - 1);
+        break;
+
+      case 'Enter':
+      case ' ':
+        e.preventDefault();
+        if (focusedIndex >= 0) {
+          menuOptions[focusedIndex].action();
+        }
+        break;
+
+      case 'Tab':
+        // Close dropdown on Tab to maintain expected behavior
+        setIsOpen(false);
+        break;
+    }
+  };
 
   // Sketch-style drawing functions (simplified versions for export)
   const SKETCH_AMPLITUDE = 1.5;
@@ -369,10 +431,25 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
 
     try {
       const bounds = getBoundingBox();
-      const canvas = document.createElement('canvas');
       const scale = 2; // 2x for retina
-      canvas.width = bounds.width * scale;
-      canvas.height = bounds.height * scale;
+      const scaledWidth = bounds.width * scale;
+      const scaledHeight = bounds.height * scale;
+
+      // Validate canvas dimensions don't exceed browser limits
+      if (scaledWidth > MAX_CANVAS_DIMENSION || scaledHeight > MAX_CANVAS_DIMENSION) {
+        const maxUnscaledSize = Math.floor(MAX_CANVAS_DIMENSION / scale);
+        addToast({
+          type: 'error',
+          title: 'Canvas too large',
+          message: `Export dimensions exceed browser limits. Maximum size is ${maxUnscaledSize}x${maxUnscaledSize} pixels.`,
+        });
+        setIsOpen(false);
+        return;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = scaledWidth;
+      canvas.height = scaledHeight;
 
       const ctx = canvas.getContext('2d');
       if (!ctx) {
@@ -588,12 +665,20 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
   };
 
   return (
-    <div ref={dropdownRef} className="relative">
+    <div ref={dropdownRef} className="relative" onKeyDown={handleDropdownKeyDown}>
       <button
+        ref={triggerRef}
         onClick={() => setIsOpen(!isOpen)}
+        onKeyDown={(e) => {
+          // Open dropdown on ArrowDown when closed
+          if (!isOpen && (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            setIsOpen(true);
+          }
+        }}
         className="px-3 py-2 bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 text-sm font-medium rounded-lg hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-all duration-150 flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
         aria-expanded={isOpen}
-        aria-haspopup="true"
+        aria-haspopup="menu"
       >
         <Image size={16} />
         <span>Export Image</span>
@@ -608,7 +693,10 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
           aria-orientation="vertical"
         >
           <button
+            ref={(el) => { menuItemRefs.current[0] = el; }}
             onClick={exportPNG}
+            onMouseEnter={() => setFocusedIndex(0)}
+            tabIndex={focusedIndex === 0 ? 0 : -1}
             className="w-full px-3 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-2 transition-colors focus:outline-none focus-visible:bg-zinc-100 dark:focus-visible:bg-zinc-700"
             role="menuitem"
           >
@@ -616,7 +704,10 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
             Export as PNG
           </button>
           <button
+            ref={(el) => { menuItemRefs.current[1] = el; }}
             onClick={exportSVG}
+            onMouseEnter={() => setFocusedIndex(1)}
+            tabIndex={focusedIndex === 1 ? 0 : -1}
             className="w-full px-3 py-2 text-left text-sm text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 flex items-center gap-2 transition-colors focus:outline-none focus-visible:bg-zinc-100 dark:focus-visible:bg-zinc-700"
             role="menuitem"
           >

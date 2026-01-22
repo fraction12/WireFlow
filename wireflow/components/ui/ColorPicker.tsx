@@ -31,6 +31,8 @@ export function ColorPicker({
   const colorButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
   const [showCustomPicker, setShowCustomPicker] = useState(false);
+  const [hexInputValue, setHexInputValue] = useState(selectedColor);
+  const [hexInputError, setHexInputError] = useState(false);
 
   // Get appropriate color array based on label
   const colors = label === 'Stroke' ? STROKE_COLORS : FILL_COLORS;
@@ -62,6 +64,12 @@ export function ColorPicker({
       setShowCustomPicker(false);
     }
   }, [isOpen, selectedColor, colors]);
+
+  // Sync hex input with selected color when it changes externally
+  useEffect(() => {
+    setHexInputValue(selectedColor === 'transparent' ? '' : selectedColor);
+    setHexInputError(false);
+  }, [selectedColor]);
 
   // Actually focus the button when focusedIndex changes (roving tabindex)
   useEffect(() => {
@@ -261,11 +269,30 @@ export function ColorPicker({
             <div className="mt-2 flex items-center gap-2">
               <input
                 type="text"
-                value={selectedColor === 'transparent' ? '' : selectedColor}
+                value={hexInputValue}
                 onChange={(e) => {
                   const val = e.target.value;
-                  if (/^#[0-9A-Fa-f]{0,6}$/.test(val) || val === '') {
-                    onColorChange(val || '#000000');
+                  // Allow typing any hex-like value (# followed by hex chars)
+                  if (/^#?[0-9A-Fa-f]{0,6}$/.test(val) || val === '') {
+                    // Auto-prepend # if user starts typing without it
+                    const normalized = val && !val.startsWith('#') ? `#${val}` : val;
+                    setHexInputValue(normalized || '#');
+                    // Clear error while typing
+                    setHexInputError(false);
+                  }
+                }}
+                onBlur={() => {
+                  // Validate on blur - must be complete 6-character hex
+                  if (/^#[0-9A-Fa-f]{6}$/.test(hexInputValue)) {
+                    onColorChange(hexInputValue);
+                    setHexInputError(false);
+                  } else if (hexInputValue === '' || hexInputValue === '#') {
+                    // Reset to current color if empty
+                    setHexInputValue(selectedColor === 'transparent' ? '' : selectedColor);
+                    setHexInputError(false);
+                  } else {
+                    // Show error for invalid/incomplete hex
+                    setHexInputError(true);
                   }
                 }}
                 onKeyDown={(e) => {
@@ -273,13 +300,32 @@ export function ColorPicker({
                     e.preventDefault();
                     onOpenChange(false);
                     triggerRef.current?.focus();
+                  } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    // Apply on Enter if valid
+                    if (/^#[0-9A-Fa-f]{6}$/.test(hexInputValue)) {
+                      onColorChange(hexInputValue);
+                      setHexInputError(false);
+                    } else {
+                      setHexInputError(true);
+                    }
                   }
                 }}
                 placeholder="#000000"
                 aria-label="Custom hex color value"
-                className="flex-1 px-2 py-1 text-xs border border-zinc-200 dark:border-zinc-700 rounded bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                aria-invalid={hexInputError}
+                className={`flex-1 px-2 py-1 text-xs border rounded bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-1 ${
+                  hexInputError
+                    ? 'border-red-500 focus:ring-red-500'
+                    : 'border-zinc-200 dark:border-zinc-700 focus:ring-blue-500'
+                }`}
               />
             </div>
+            {hexInputError && (
+              <p className="mt-1 text-xs text-red-500" role="alert">
+                Enter a valid 6-digit hex color (e.g., #FF5733)
+              </p>
+            )}
           </div>
         )}
       </div>

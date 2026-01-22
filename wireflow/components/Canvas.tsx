@@ -1041,6 +1041,29 @@ export function Canvas() {
     return () => canvas.removeEventListener('wheel', wheelHandler);
   }, [zoomAtPoint]);
 
+  // Prevent browser auto-scroll on middle mouse button
+  // Must use native event listener with capture phase to intercept before browser default
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const preventMiddleClickScroll = (e: MouseEvent) => {
+      if (e.button === 1) {
+        e.preventDefault();
+      }
+    };
+
+    // Use capture phase to intercept before browser's auto-scroll behavior
+    canvas.addEventListener('mousedown', preventMiddleClickScroll, { capture: true });
+    // Also prevent auxclick context menu on middle mouse
+    canvas.addEventListener('auxclick', preventMiddleClickScroll);
+
+    return () => {
+      canvas.removeEventListener('mousedown', preventMiddleClickScroll, { capture: true });
+      canvas.removeEventListener('auxclick', preventMiddleClickScroll);
+    };
+  }, []);
+
   // Draw all elements on canvas
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
