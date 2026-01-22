@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { AlertTriangle, Trash2, X } from 'lucide-react';
+import { useFocusTrap } from '@/lib/useFocusTrap';
+import { useFocusRestore } from '@/lib/useFocusRestore';
 
 export interface ConfirmDialogProps {
   isOpen: boolean;
@@ -26,7 +28,9 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
-  const previousActiveElement = useRef<HTMLElement | null>(null);
+
+  // Restore focus to previously focused element when dialog closes
+  useFocusRestore(isOpen);
 
   // Lock body scroll when dialog is open
   useEffect(() => {
@@ -40,23 +44,18 @@ export function ConfirmDialog({
   }, [isOpen]);
 
   // Focus the cancel button when dialog opens (safer default for destructive actions)
-  // and restore focus when dialog closes
   useEffect(() => {
     if (isOpen) {
-      // Store the currently focused element to restore later
-      previousActiveElement.current = document.activeElement as HTMLElement;
-
       // Use requestAnimationFrame for more reliable focus after render
       const frameId = requestAnimationFrame(() => {
         cancelButtonRef.current?.focus();
       });
       return () => cancelAnimationFrame(frameId);
-    } else if (previousActiveElement.current) {
-      // Restore focus to the previously focused element
-      previousActiveElement.current.focus();
-      previousActiveElement.current = null;
     }
   }, [isOpen]);
+
+  // Focus trap
+  useFocusTrap(dialogRef, isOpen);
 
   // Handle escape key
   useEffect(() => {
@@ -72,27 +71,6 @@ export function ConfirmDialog({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onCancel]);
-
-  // Trap focus within dialog
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (e.key !== 'Tab') return;
-
-    const focusableSelector = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-    const focusableElements = dialogRef.current?.querySelectorAll(focusableSelector);
-
-    if (!focusableElements || focusableElements.length === 0) return;
-
-    const firstElement = focusableElements[0] as HTMLElement;
-    const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
-
-    if (e.shiftKey && document.activeElement === firstElement) {
-      e.preventDefault();
-      lastElement.focus();
-    } else if (!e.shiftKey && document.activeElement === lastElement) {
-      e.preventDefault();
-      firstElement.focus();
-    }
-  }, []);
 
   if (!isOpen) return null;
 
@@ -126,7 +104,6 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-labelledby="dialog-title"
         aria-describedby="dialog-description"
-        onKeyDown={handleKeyDown}
         className="relative bg-white dark:bg-zinc-900 rounded-xl shadow-2xl max-w-md w-full mx-4 animate-scale-in"
       >
         {/* Close button */}

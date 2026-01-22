@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { X, ArrowRight } from 'lucide-react';
+import { useFocusTrap } from '@/lib/useFocusTrap';
+import { useFocusRestore } from '@/lib/useFocusRestore';
 
 const WELCOME_SHOWN_KEY = 'wireflow-welcome-shown';
 
@@ -12,15 +14,15 @@ interface WelcomeModalProps {
 export function WelcomeModal({ onDismiss }: WelcomeModalProps) {
   const [isOpen, setIsOpen] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
-  const previousActiveElement = useRef<Element | null>(null);
   const startButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Restore focus to previously focused element when modal closes
+  useFocusRestore(isOpen);
 
   useEffect(() => {
     // Check if user has seen the welcome modal before
     const hasSeenWelcome = localStorage.getItem(WELCOME_SHOWN_KEY);
     if (!hasSeenWelcome) {
-      // Store the currently focused element to restore focus later
-      previousActiveElement.current = document.activeElement;
       setIsOpen(true);
     }
   }, []);
@@ -35,12 +37,11 @@ export function WelcomeModal({ onDismiss }: WelcomeModalProps) {
   const handleDismiss = useCallback(() => {
     localStorage.setItem(WELCOME_SHOWN_KEY, 'true');
     setIsOpen(false);
-    // Return focus to the previously focused element
-    if (previousActiveElement.current instanceof HTMLElement) {
-      previousActiveElement.current.focus();
-    }
     onDismiss?.();
   }, [onDismiss]);
+
+  // Focus trap
+  useFocusTrap(modalRef, isOpen);
 
   // Handle Escape key
   useEffect(() => {
@@ -56,39 +57,6 @@ export function WelcomeModal({ onDismiss }: WelcomeModalProps) {
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, handleDismiss]);
-
-  // Focus trap implementation
-  useEffect(() => {
-    if (!isOpen || !modalRef.current) return;
-
-    const modal = modalRef.current;
-    const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-
-    const handleTabKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab') return;
-
-      const focusableElements = modal.querySelectorAll(focusableSelector);
-      const firstElement = focusableElements[0] as HTMLElement;
-      const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
-
-      if (e.shiftKey) {
-        // Shift + Tab: if focus is on first element, wrap to last
-        if (document.activeElement === firstElement) {
-          e.preventDefault();
-          lastElement?.focus();
-        }
-      } else {
-        // Tab: if focus is on last element, wrap to first
-        if (document.activeElement === lastElement) {
-          e.preventDefault();
-          firstElement?.focus();
-        }
-      }
-    };
-
-    document.addEventListener('keydown', handleTabKey);
-    return () => document.removeEventListener('keydown', handleTabKey);
-  }, [isOpen]);
 
   if (!isOpen) return null;
 

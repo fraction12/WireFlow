@@ -1,10 +1,33 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { HexColorPicker } from 'react-colorful';
 import { STROKE_COLORS, FILL_COLORS, getContrastColor, type PresetColor } from '@/lib/colors';
 import { Check } from 'lucide-react';
 import { Divider } from '@/components/ui/Divider';
+import { useRovingTabindex } from '@/lib/useRovingTabindex';
+
+/** Color name tooltip that appears on hover/focus for accessibility */
+function ColorNameTooltip({ name, visible }: { name: string; visible: boolean }) {
+  if (!visible) return null;
+
+  return (
+    <div
+      role="tooltip"
+      className="absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-1 text-xs font-medium
+        bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900
+        rounded shadow-lg whitespace-nowrap z-10 pointer-events-none
+        animate-fade-in"
+    >
+      {name}
+      {/* Tooltip arrow */}
+      <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0
+        border-l-4 border-r-4 border-t-4
+        border-l-transparent border-r-transparent
+        border-t-zinc-900 dark:border-t-zinc-100" />
+    </div>
+  );
+}
 
 interface ColorPickerProps {
   /** Currently selected color */
@@ -28,14 +51,46 @@ export function ColorPicker({
 }: ColorPickerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const colorButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const [focusedIndex, setFocusedIndex] = useState<number>(-1);
   const [showCustomPicker, setShowCustomPicker] = useState(false);
   const [hexInputValue, setHexInputValue] = useState(selectedColor);
   const [hexInputError, setHexInputError] = useState(false);
+  // Track hovered color index for tooltip display
+  const [hoveredColorIndex, setHoveredColorIndex] = useState<number | null>(null);
 
   // Get appropriate color array based on label
   const colors = label === 'Stroke' ? STROKE_COLORS : FILL_COLORS;
+
+  // Find initial index based on selected color
+  const selectedIndex = colors.findIndex(
+    c => c.hex.toLowerCase() === selectedColor.toLowerCase()
+  );
+
+  // Handle closing dropdown and returning focus
+  const handleClose = useCallback(() => {
+    onOpenChange(false);
+    setShowCustomPicker(false);
+    triggerRef.current?.focus();
+  }, [onOpenChange]);
+
+  // Handle color selection
+  const handleColorSelect = useCallback((color: PresetColor) => {
+    onColorChange(color.hex);
+    handleClose();
+  }, [onColorChange, handleClose]);
+
+  // Use roving tabindex hook for keyboard navigation
+  const {
+    focusedIndex,
+    getItemRef,
+    handleKeyDown: rovingKeyDown,
+    getTabIndex,
+  } = useRovingTabindex<HTMLButtonElement>({
+    itemCount: colors.length,
+    isActive: isOpen && !showCustomPicker,
+    initialIndex: selectedIndex >= 0 ? selectedIndex : 0,
+    onSelect: (index) => handleColorSelect(colors[index]),
+    onEscape: handleClose,
+  });
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -52,18 +107,12 @@ export function ColorPicker({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen, onOpenChange]);
 
-  // Focus management: set initial focused index when dropdown opens
+  // Reset showCustomPicker when dropdown closes
   useEffect(() => {
-    if (isOpen) {
-      const selectedIndex = colors.findIndex(
-        c => c.hex.toLowerCase() === selectedColor.toLowerCase()
-      );
-      setFocusedIndex(selectedIndex >= 0 ? selectedIndex : 0);
-    } else {
-      setFocusedIndex(-1);
+    if (!isOpen) {
       setShowCustomPicker(false);
     }
-  }, [isOpen, selectedColor, colors]);
+  }, [isOpen]);
 
   // Sync hex input with selected color when it changes externally
   useEffect(() => {
@@ -71,61 +120,20 @@ export function ColorPicker({
     setHexInputError(false);
   }, [selectedColor]);
 
-  // Actually focus the button when focusedIndex changes (roving tabindex)
-  useEffect(() => {
-    if (isOpen && focusedIndex >= 0 && colorButtonRefs.current[focusedIndex]) {
-      colorButtonRefs.current[focusedIndex]?.focus();
-    }
-  }, [isOpen, focusedIndex]);
-
-  // Handle keyboard navigation in dropdown
+  // Handle keyboard navigation in dropdown (delegates to roving tabindex)
   const handleDropdownKeyDown = (e: React.KeyboardEvent) => {
-    if (!isOpen || showCustomPicker) return;
+    if (!isOpen) return;
 
-    switch (e.key) {
-      case 'Escape':
+    // When custom picker is shown, only handle Escape
+    if (showCustomPicker) {
+      if (e.key === 'Escape') {
         e.preventDefault();
-        onOpenChange(false);
-        triggerRef.current?.focus();
-        break;
-
-      case 'ArrowRight':
-      case 'ArrowDown':
-        e.preventDefault();
-        setFocusedIndex(prev => (prev + 1) % colors.length);
-        break;
-
-      case 'ArrowLeft':
-      case 'ArrowUp':
-        e.preventDefault();
-        setFocusedIndex(prev => (prev - 1 + colors.length) % colors.length);
-        break;
-
-      case 'Enter':
-      case ' ':
-        e.preventDefault();
-        if (focusedIndex >= 0) {
-          handleColorSelect(colors[focusedIndex]);
-        }
-        break;
-
-      case 'Home':
-        e.preventDefault();
-        setFocusedIndex(0);
-        break;
-
-      case 'End':
-        e.preventDefault();
-        setFocusedIndex(colors.length - 1);
-        break;
+        handleClose();
+      }
+      return;
     }
-  };
 
-  // Handle color selection
-  const handleColorSelect = (color: PresetColor) => {
-    onColorChange(color.hex);
-    onOpenChange(false);
-    triggerRef.current?.focus();
+    rovingKeyDown(e);
   };
 
   // Handle custom color change from spectrum picker
@@ -190,51 +198,59 @@ export function ColorPicker({
             const isFocused = index === focusedIndex;
             const isTransparent = color.hex === 'transparent';
 
+            const showTooltip = hoveredColorIndex === index || isFocused;
+
             return (
-              <button
-                id={getOptionId(index)}
-                key={color.hex}
-                ref={(el) => { colorButtonRefs.current[index] = el; }}
-                onClick={() => handleColorSelect(color)}
-                onKeyDown={handleDropdownKeyDown}
-                className={`
-                  w-8 h-8 rounded-lg flex items-center justify-center
-                  transition-all duration-150 ease-out
-                  focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2
-                  hover:scale-105 active:scale-95
-                  ${isSelected
-                    ? 'ring-2 ring-blue-500 ring-offset-1'
-                    : isFocused
-                    ? 'ring-2 ring-blue-300 ring-offset-1'
-                    : 'ring-1 ring-zinc-200 dark:ring-zinc-600 hover:ring-zinc-400'
-                  }
-                `}
-                style={{
-                  backgroundColor: isTransparent ? '#ffffff' : color.hex,
-                }}
-                title={color.name}
-                aria-label={color.name}
-                role="option"
-                aria-selected={isSelected}
-                tabIndex={isFocused ? 0 : -1}
-              >
-                {/* Transparent indicator */}
-                {isTransparent && (
-                  <svg
-                    width="20"
-                    height="20"
-                    viewBox="0 0 20 20"
-                    className="text-red-500"
-                    aria-hidden="true"
-                  >
-                    <line x1="3" y1="17" x2="17" y2="3" stroke="currentColor" strokeWidth="2" />
-                  </svg>
-                )}
-                {/* Selected checkmark for non-transparent colors */}
-                {isSelected && !isTransparent && (
-                  <Check size={16} color={getContrastColor(color.hex)} strokeWidth={3} />
-                )}
-              </button>
+              <div key={color.hex} className="relative">
+                <ColorNameTooltip name={color.name} visible={showTooltip} />
+                <button
+                  id={getOptionId(index)}
+                  ref={getItemRef(index)}
+                  onClick={() => handleColorSelect(color)}
+                  onKeyDown={handleDropdownKeyDown}
+                  onMouseEnter={() => setHoveredColorIndex(index)}
+                  onMouseLeave={() => setHoveredColorIndex(null)}
+                  onFocus={() => setHoveredColorIndex(index)}
+                  onBlur={() => setHoveredColorIndex(null)}
+                  className={`
+                    w-8 h-8 rounded-lg flex items-center justify-center
+                    transition-all duration-150 ease-out
+                    focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2
+                    hover:scale-105 active:scale-95
+                    ${isSelected
+                      ? 'ring-2 ring-blue-500 ring-offset-1'
+                      : isFocused
+                      ? 'ring-2 ring-blue-300 ring-offset-1'
+                      : 'ring-1 ring-zinc-200 dark:ring-zinc-600 hover:ring-zinc-400'
+                    }
+                  `}
+                  style={{
+                    backgroundColor: isTransparent ? '#ffffff' : color.hex,
+                  }}
+                  aria-label={`${color.name}${isSelected ? ' (selected)' : ''}`}
+                  aria-describedby={`color-tooltip-${label}-${index}`}
+                  role="option"
+                  aria-selected={isSelected}
+                  tabIndex={getTabIndex(index)}
+                >
+                  {/* Transparent indicator */}
+                  {isTransparent && (
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 20 20"
+                      className="text-red-500"
+                      aria-hidden="true"
+                    >
+                      <line x1="3" y1="17" x2="17" y2="3" stroke="currentColor" strokeWidth="2" />
+                    </svg>
+                  )}
+                  {/* Selected checkmark for non-transparent colors */}
+                  {isSelected && !isTransparent && (
+                    <Check size={16} color={getContrastColor(color.hex)} strokeWidth={3} />
+                  )}
+                </button>
+              </div>
             );
           })}
         </div>
@@ -248,8 +264,7 @@ export function ColorPicker({
           onKeyDown={(e) => {
             if (e.key === 'Escape') {
               e.preventDefault();
-              onOpenChange(false);
-              triggerRef.current?.focus();
+              handleClose();
             }
           }}
           className="w-full text-xs text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-200 py-1 px-2 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1"
@@ -298,8 +313,7 @@ export function ColorPicker({
                 onKeyDown={(e) => {
                   if (e.key === 'Escape') {
                     e.preventDefault();
-                    onOpenChange(false);
-                    triggerRef.current?.focus();
+                    handleClose();
                   } else if (e.key === 'Enter') {
                     e.preventDefault();
                     // Apply on Enter if valid

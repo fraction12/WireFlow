@@ -19,6 +19,7 @@ import {
   ArrowRight,
   Minus,
   Pencil,
+  PencilLine,
   Folder,
   Component,
   AlertTriangle,
@@ -383,11 +384,16 @@ export function LayersPanel({
           ) : (
             <button
               type="button"
-              className="w-full text-left text-sm text-zinc-700 dark:text-zinc-300 truncate hover:text-blue-600 dark:hover:text-blue-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded px-1 -mx-1"
+              className="w-full flex items-center gap-1 text-left text-sm text-zinc-700 dark:text-zinc-300 truncate hover:text-blue-600 dark:hover:text-blue-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded px-1 -mx-1 group/name"
               onDoubleClick={(e) => startEditing(element, e)}
-              title={getElementDisplayName(element)}
+              title={`${getElementDisplayName(element)} (double-click to rename)`}
             >
-              {getElementDisplayName(element)}
+              <span className="truncate">{getElementDisplayName(element)}</span>
+              <PencilLine
+                size={12}
+                className="flex-shrink-0 opacity-0 group-hover/name:opacity-60 transition-opacity"
+                aria-hidden="true"
+              />
             </button>
           )}
         </div>
@@ -665,7 +671,7 @@ export function LayersPanel({
 
           {/* Footer with keyboard hints */}
           <div className="px-4 py-2 border-t border-zinc-200 dark:border-zinc-700 text-xs text-zinc-500 dark:text-zinc-400">
-            <span className="font-medium">H</span> toggle visibility · <span className="font-medium">Ctrl+L</span> toggle lock
+            <span className="font-medium">Double-click</span> to rename · <span className="font-medium">H</span> visibility · <span className="font-medium">Ctrl+L</span> lock
           </div>
         </>
       )}

@@ -356,11 +356,6 @@ export function Canvas() {
     };
   }, []);
 
-  // Track if current selection was made by clicking (for Backspace delete behavior)
-  // Backspace should only delete an element if the user clicked to select it,
-  // not after exiting text edit mode or other interactions
-  const [selectedByClick, setSelectedByClick] = useState(false);
-
   // Marquee (area) selection state
   // - isMarqueeSelecting: true when user is dragging to create selection box
   // - marqueeStart: starting corner of the selection rectangle
@@ -382,6 +377,7 @@ export function Canvas() {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [lastPanPoint, setLastPanPoint] = useState<{ x: number; y: number } | null>(null);
+  const [isSpaceHeld, setIsSpaceHeld] = useState(false); // Track spacebar for Space+drag panning
 
   // Freehand drawing state
   const [freedrawPoints, setFreedrawPoints] = useState<{ x: number; y: number }[]>([]);
@@ -412,6 +408,9 @@ export function Canvas() {
 
   // Alignment guides state (lines to show when elements align)
   const [alignmentGuides, setAlignmentGuides] = useState<{ type: 'h' | 'v'; pos: number }[]>([]);
+
+  // Grid snap guides state (lines to show when snapping to grid)
+  const [snapGuides, setSnapGuides] = useState<{ type: 'h' | 'v'; pos: number }[]>([]);
 
   // Right panel states (Phase 1) - only one panel can be open at a time
   // Right panels state - only one can be open at a time
@@ -540,17 +539,30 @@ export function Canvas() {
 
   // Zoom functions
   const zoomIn = useCallback(() => {
-    setZoom((prev) => Math.min(prev + ZOOM_STEP, MAX_ZOOM));
-  }, []);
+    setZoom((prev) => {
+      const newZoom = Math.min(prev + ZOOM_STEP, MAX_ZOOM);
+      if (newZoom !== prev) {
+        announce(`Zoom ${Math.round(newZoom * 100)}%`);
+      }
+      return newZoom;
+    });
+  }, [announce]);
 
   const zoomOut = useCallback(() => {
-    setZoom((prev) => Math.max(prev - ZOOM_STEP, MIN_ZOOM));
-  }, []);
+    setZoom((prev) => {
+      const newZoom = Math.max(prev - ZOOM_STEP, MIN_ZOOM);
+      if (newZoom !== prev) {
+        announce(`Zoom ${Math.round(newZoom * 100)}%`);
+      }
+      return newZoom;
+    });
+  }, [announce]);
 
   const resetZoom = useCallback(() => {
     setZoom(1);
     setPan({ x: 0, y: 0 });
-  }, []);
+    announce('Zoom reset to 100%');
+  }, [announce]);
 
   // Zoom to a specific point (for scroll wheel zoom)
   const zoomAtPoint = useCallback(
@@ -574,8 +586,10 @@ export function Canvas() {
     [zoom, screenToCanvas]
   );
 
-  // Persistence: track if initial load has completed
-  const hasLoadedRef = useRef(false);
+  // Tracks whether initial localStorage load has completed.
+  // Prevents auto-save from running before workspace data is loaded,
+  // which would overwrite saved data with empty initial state.
+  const isPersistenceInitialized = useRef(false);
 
   // Ref for keyboard handler state - prevents excessive event listener re-registration
   // by allowing the handler to read current values without being in the dependency array
@@ -587,7 +601,6 @@ export function Canvas() {
     componentGroups: ComponentGroup[];
     elementGroups: ElementGroup[];
     editingElementId: string | null;
-    selectedByClick: boolean;
     isPromoteDialogOpen: boolean;
     confirmDialogIsOpen: boolean;
     showGrid: boolean;
@@ -600,7 +613,6 @@ export function Canvas() {
     componentGroups: [],
     elementGroups: [],
     editingElementId: null,
-    selectedByClick: false,
     isPromoteDialogOpen: false,
     confirmDialogIsOpen: false,
     showGrid: false,
@@ -623,7 +635,6 @@ export function Canvas() {
       componentGroups,
       elementGroups,
       editingElementId,
-      selectedByClick,
       isPromoteDialogOpen,
       confirmDialogIsOpen: confirmDialog.isOpen,
       showGrid,
@@ -637,7 +648,6 @@ export function Canvas() {
     componentGroups,
     elementGroups,
     editingElementId,
-    selectedByClick,
     isPromoteDialogOpen,
     confirmDialog.isOpen,
     showGrid,
@@ -692,8 +702,8 @@ export function Canvas() {
 
   // Load workspace from localStorage on mount
   useEffect(() => {
-    if (hasLoadedRef.current) return;
-    hasLoadedRef.current = true;
+    if (isPersistenceInitialized.current) return;
+    isPersistenceInitialized.current = true;
 
     const savedState = loadWorkspace();
     if (savedState && savedState.frames.length > 0) {
@@ -737,7 +747,7 @@ export function Canvas() {
   // Auto-save workspace on meaningful state changes (debounced)
   useEffect(() => {
     // Skip saving until initial load completes
-    if (!hasLoadedRef.current) return;
+    if (!isPersistenceInitialized.current) return;
 
     // Show saving indicator
     setSaveStatus('saving');
@@ -768,10 +778,8 @@ export function Canvas() {
       } else {
         setSaveStatus('error');
         setSaveError(result.message);
-        // Show error toast for quota exceeded
-        if (result.error === 'quota_exceeded') {
-          addToast({ type: 'error', title: 'Save Failed', message: result.message });
-        }
+        // Show error toast for all persistence errors
+        addToast({ type: 'error', title: 'Save Failed', message: result.message });
       }
     }, 500); // 500ms debounce
 
@@ -1961,6 +1969,30 @@ export function Canvas() {
       ctx.setLineDash([]);
     }
 
+    // Draw snap guides (grid snap feedback)
+    if (snapGuides.length > 0) {
+      ctx.strokeStyle = "#38bdf8"; // Sky blue color for grid snap guides
+      ctx.lineWidth = 1;
+      ctx.setLineDash([]);
+
+      const visibleLeft = -pan.x / zoom;
+      const visibleTop = -pan.y / zoom;
+      const visibleRight = (canvas.width - pan.x) / zoom;
+      const visibleBottom = (canvas.height - pan.y) / zoom;
+
+      snapGuides.forEach((guide) => {
+        ctx.beginPath();
+        if (guide.type === 'v') {
+          ctx.moveTo(guide.pos, visibleTop);
+          ctx.lineTo(guide.pos, visibleBottom);
+        } else {
+          ctx.moveTo(visibleLeft, guide.pos);
+          ctx.lineTo(visibleRight, guide.pos);
+        }
+        ctx.stroke();
+      });
+    }
+
     // Restore canvas state (undo zoom/pan transform)
     ctx.restore();
   }, [
@@ -1986,6 +2018,7 @@ export function Canvas() {
     zoom,
     pan,
     alignmentGuides,
+    snapGuides,
     showGrid,
     GRID_SIZE,
   ]);
@@ -2261,6 +2294,21 @@ export function Canvas() {
     }
   };
 
+  // Get tool-specific cursor for drawing tools
+  const getToolCursor = (tool: Tool): string => {
+    // Custom SVG cursors for each tool with hotspot at center (12,12) of 24x24 canvas
+    const cursors: Record<string, string> = {
+      rectangle: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Crect x='4' y='6' width='16' height='12' stroke='%23374151' stroke-width='1.5' fill='none'/%3E%3Cline x1='12' y1='0' x2='12' y2='24' stroke='%23374151' stroke-width='1'/%3E%3Cline x1='0' y1='12' x2='24' y2='12' stroke='%23374151' stroke-width='1'/%3E%3C/svg%3E") 12 12, crosshair`,
+      ellipse: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cellipse cx='12' cy='12' rx='8' ry='6' stroke='%23374151' stroke-width='1.5' fill='none'/%3E%3Cline x1='12' y1='0' x2='12' y2='24' stroke='%23374151' stroke-width='1'/%3E%3Cline x1='0' y1='12' x2='24' y2='12' stroke='%23374151' stroke-width='1'/%3E%3C/svg%3E") 12 12, crosshair`,
+      diamond: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M12 4 L20 12 L12 20 L4 12 Z' stroke='%23374151' stroke-width='1.5' fill='none'/%3E%3Cline x1='12' y1='0' x2='12' y2='24' stroke='%23374151' stroke-width='1'/%3E%3Cline x1='0' y1='12' x2='24' y2='12' stroke='%23374151' stroke-width='1'/%3E%3C/svg%3E") 12 12, crosshair`,
+      arrow: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cline x1='4' y1='20' x2='20' y2='4' stroke='%23374151' stroke-width='1.5'/%3E%3Cpath d='M14 4 L20 4 L20 10' stroke='%23374151' stroke-width='1.5' fill='none'/%3E%3Cline x1='12' y1='0' x2='12' y2='24' stroke='%23374151' stroke-width='1'/%3E%3Cline x1='0' y1='12' x2='24' y2='12' stroke='%23374151' stroke-width='1'/%3E%3C/svg%3E") 12 12, crosshair`,
+      line: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cline x1='4' y1='20' x2='20' y2='4' stroke='%23374151' stroke-width='1.5'/%3E%3Cline x1='12' y1='0' x2='12' y2='24' stroke='%23374151' stroke-width='1'/%3E%3Cline x1='0' y1='12' x2='24' y2='12' stroke='%23374151' stroke-width='1'/%3E%3C/svg%3E") 12 12, crosshair`,
+      text: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M6 6 L18 6 L18 8 L13 8 L13 18 L11 18 L11 8 L6 8 Z' stroke='%23374151' stroke-width='1.5' fill='none'/%3E%3Cline x1='12' y1='0' x2='12' y2='4' stroke='%23374151' stroke-width='1'/%3E%3Cline x1='12' y1='20' x2='12' y2='24' stroke='%23374151' stroke-width='1'/%3E%3Cline x1='0' y1='12' x2='8' y2='12' stroke='%23374151' stroke-width='1'/%3E%3Cline x1='16' y1='12' x2='24' y2='12' stroke='%23374151' stroke-width='1'/%3E%3C/svg%3E") 12 12, text`,
+      freedraw: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M4 20 Q8 12 12 14 Q16 16 20 8' stroke='%23374151' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3Cline x1='12' y1='0' x2='12' y2='24' stroke='%23374151' stroke-width='1'/%3E%3Cline x1='0' y1='12' x2='24' y2='12' stroke='%23374151' stroke-width='1'/%3E%3C/svg%3E") 12 12, crosshair`,
+    };
+    return cursors[tool] || 'crosshair';
+  };
+
   // Snap coordinate to grid
   const snapToGridCoord = (value: number): number => {
     if (!snapToGrid) return value;
@@ -2412,7 +2460,6 @@ export function Canvas() {
     setEditingElementId(element.id);
     setEditingText(element.content || "");
     setIsNewTextElement(false); // Existing element, not new
-    setSelectedByClick(false); // Clear click-selection flag (prevents Backspace delete after editing)
     // Focus input after React renders it
     if (textFocusTimeoutRef.current) {
       clearTimeout(textFocusTimeoutRef.current);
@@ -2659,8 +2706,8 @@ export function Canvas() {
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
 
-    // Middle mouse button or spacebar held starts panning
-    if (e.button === 1 || (e.button === 0 && e.altKey)) {
+    // Middle mouse button, Alt+drag, or Space+drag starts panning
+    if (e.button === 1 || (e.button === 0 && (e.altKey || isSpaceHeld))) {
       setIsPanning(true);
       setLastPanPoint({ x: screenX, y: screenY });
       e.preventDefault();
@@ -2749,7 +2796,6 @@ export function Canvas() {
       const clickedInstance = findInstanceAtPoint(x, y);
 
       if (clickedInstance) {
-        setSelectedByClick(true);
         // Clear element selections when selecting an instance
         setSelectedElementId(null);
         setSelectedElementIds(new Set());
@@ -2767,7 +2813,6 @@ export function Canvas() {
       const { element: clickedElement, groupId } = findElementAtPoint(x, y);
 
       if (clickedElement) {
-        setSelectedByClick(true); // Mark as selected by click (enables Backspace delete)
         // Clear instance selection when selecting an element
         setSelectedInstanceId(null);
 
@@ -2986,6 +3031,16 @@ export function Canvas() {
         // Apply grid snap if enabled
         const finalX = snapToGrid ? snapToGridCoord(rawX) : rawX;
         const finalY = snapToGrid ? snapToGridCoord(rawY) : rawY;
+
+        // Show snap guides when snapping to grid
+        if (snapToGrid) {
+          setSnapGuides([
+            { type: 'v', pos: finalX },
+            { type: 'h', pos: finalY },
+          ]);
+        } else {
+          setSnapGuides([]);
+        }
 
         setComponentInstances(
           componentInstances.map(i =>
@@ -3272,8 +3327,16 @@ export function Canvas() {
             setAlignmentGuides(guides);
             finalX = snapX;
             finalY = snapY;
+            setSnapGuides([]);
           } else {
             setAlignmentGuides([]);
+            // Calculate snap guides to show which grid lines we're snapping to
+            const guides: { type: 'h' | 'v'; pos: number }[] = [];
+            // Add vertical guide for left edge (x position)
+            guides.push({ type: 'v', pos: finalX });
+            // Add horizontal guide for top edge (y position)
+            guides.push({ type: 'h', pos: finalY });
+            setSnapGuides(guides);
           }
 
           const snapDx = finalX - element.x;
@@ -3499,7 +3562,6 @@ export function Canvas() {
 
         // Set the first selected element as the primary selection
         setSelectedElementId(selectedIds[0]);
-        setSelectedByClick(true);
       }
 
       // Clear marquee state
@@ -3716,6 +3778,7 @@ export function Canvas() {
     setFreedrawPoints([]);
     setDragOffset(null);
     setAlignmentGuides([]); // Clear alignment guides when drag ends
+    setSnapGuides([]); // Clear snap guides when drag ends
     setResizeHandle(null);
     setResizeSnapshot(null); // Clear resize snapshot on pointer up
     setIsRotating(false);
@@ -3810,7 +3873,6 @@ export function Canvas() {
     const newIds = new Set(newElements.map((el) => el.id));
     setSelectedElementIds(newIds);
     setSelectedElementId(newElements[0].id);
-    setSelectedByClick(true);
   }, [clipboard, elements, recordSnapshot]);
 
   // Duplicate selected elements (copy + paste in one action)
@@ -3913,7 +3975,6 @@ export function Canvas() {
     const newIds = new Set(newElements.map((el) => el.id));
     setSelectedElementIds(newIds);
     setSelectedElementId(newElements[0].id);
-    setSelectedByClick(true);
   }, [
     elements,
     selectedElementId,
@@ -4131,7 +4192,6 @@ export function Canvas() {
     setSelectedElementId(nextElement.id);
     setSelectedElementIds(new Set([nextElement.id]));
     setSelectedGroupId(null);
-    setSelectedByClick(true); // Enable deletion with Backspace
 
     announce(
       `Selected ${nextElement.type} element (${nextIndex + 1} of ${visibleElements.length})`
@@ -4859,6 +4919,19 @@ export function Canvas() {
   // This significantly reduces event listener churn when state changes frequently
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Spacebar for pan mode - handle before other checks so it works in most contexts
+      // Skip when typing in inputs to allow normal space character input
+      const activeElement = document.activeElement;
+      const isInputFocused = activeElement instanceof HTMLInputElement ||
+                             activeElement instanceof HTMLTextAreaElement ||
+                             activeElement?.getAttribute('contenteditable') === 'true';
+
+      if (e.code === "Space" && !isInputFocused) {
+        e.preventDefault(); // Prevent page scroll
+        setIsSpaceHeld(true);
+        return;
+      }
+
       // Read current state from ref to avoid closure stale values
       const {
         selectedElementId: currentSelectedElementId,
@@ -4868,7 +4941,6 @@ export function Canvas() {
         componentGroups: currentComponentGroups,
         elementGroups: currentElementGroups,
         editingElementId: currentEditingElementId,
-        selectedByClick: currentSelectedByClick,
         isPromoteDialogOpen: currentIsPromoteDialogOpen,
         confirmDialogIsOpen: currentConfirmDialogIsOpen,
         showGrid: currentShowGrid,
@@ -4883,10 +4955,7 @@ export function Canvas() {
       if (currentEditingElementId) return;
 
       // Don't handle shortcuts when focus is on input fields or dialogs are open
-      const activeElement = document.activeElement;
-      const isInputFocused = activeElement instanceof HTMLInputElement ||
-                             activeElement instanceof HTMLTextAreaElement ||
-                             activeElement?.getAttribute('contenteditable') === 'true';
+      // (isInputFocused already computed above for spacebar handling)
       if (isInputFocused) return;
       if (currentIsPromoteDialogOpen || currentConfirmDialogIsOpen) return;
 
@@ -5332,7 +5401,6 @@ export function Canvas() {
             setEditingElementId(textEl.id);
             setEditingText(e.key);
             setIsNewTextElement(false);
-            setSelectedByClick(false);
             // Focus input after React renders it
             if (textFocusTimeoutRef.current) {
               clearTimeout(textFocusTimeoutRef.current);
@@ -5352,10 +5420,9 @@ export function Canvas() {
 
       // Handle instance deletion
       if (currentSelectedInstanceId) {
-        if (e.key === "Delete" || (e.key === "Backspace" && currentSelectedByClick)) {
+        if (e.key === "Delete" || e.key === "Backspace") {
           e.preventDefault();
           callbacks.deleteComponentInstance(currentSelectedInstanceId);
-          setSelectedByClick(false);
         }
         return;
       }
@@ -5366,9 +5433,8 @@ export function Canvas() {
       const element = currentElements.find((el) => el.id === currentSelectedElementId);
       if (!element) return;
 
-      // Check for Delete or Backspace key
-      // Backspace only deletes if element was selected by clicking (not after editing text)
-      if (e.key === "Delete" || (e.key === "Backspace" && currentSelectedByClick)) {
+      // Check for Delete or Backspace key (both behave identically)
+      if (e.key === "Delete" || e.key === "Backspace") {
         // Prevent default browser behavior (e.g., navigate back)
         e.preventDefault();
 
@@ -5462,7 +5528,6 @@ export function Canvas() {
                 setSelectedElementIds(new Set());
                 setSelectedElementId(null);
                 setSelectedGroupId(null);
-                setSelectedByClick(false);
 
                 latestCallbacks.announce(
                   `Deleted ${parts.join(" and ")}`
@@ -5479,7 +5544,6 @@ export function Canvas() {
             );
             setSelectedElementIds(new Set());
             setSelectedElementId(null);
-            setSelectedByClick(false);
             callbacks.announce(`Deleted ${count} elements`);
           }
         }
@@ -5491,7 +5555,6 @@ export function Canvas() {
             "This will delete all elements in this group. This action cannot be undone.",
             () => {
               keyboardCallbacksRef.current.deleteElementGroup(groupId);
-              setSelectedByClick(false);
             },
             "danger",
           );
@@ -5505,7 +5568,6 @@ export function Canvas() {
             "This will delete the entire component and all its elements. This action cannot be undone.",
             () => {
               keyboardCallbacksRef.current.deleteGroup(groupId);
-              setSelectedByClick(false);
             },
             "danger",
           );
@@ -5541,7 +5603,6 @@ export function Canvas() {
                   .map(el => el.id === textEl.containerId ? updatedContainer : el)
               );
               setSelectedElementId(null);
-              setSelectedByClick(false);
               callbacks.announce(`Deleted ${elementType}`);
               return;
             }
@@ -5549,7 +5610,6 @@ export function Canvas() {
 
           setElements(currentElements.filter((el) => !idsToDelete.has(el.id)));
           setSelectedElementId(null);
-          setSelectedByClick(false);
           callbacks.announce(`Deleted ${elementType}`);
         }
       }
@@ -5566,12 +5626,24 @@ export function Canvas() {
       }
     };
 
-    // Add event listener
+    // Handle spacebar release for pan mode
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        setIsSpaceHeld(false);
+        // Also stop panning if it was started by spacebar
+        setIsPanning(false);
+        setLastPanPoint(null);
+      }
+    };
+
+    // Add event listeners
     window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
 
     // Cleanup on unmount
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
     };
   // Empty dependency array - all state and callbacks are accessed via refs
   // This completely eliminates event listener re-registration on state changes
@@ -5836,6 +5908,72 @@ export function Canvas() {
   const selectedTextElement = selectedElementId
     ? (elements.find(el => el.id === selectedElementId && el.type === 'text') as TextElement | undefined) || null
     : null;
+
+  // Get context-sensitive modifier key hints for the status bar
+  const getModifierHints = (): { tool: string; hints: string[] } => {
+    // Determine display name for current tool
+    const toolNames: Record<Tool, string> = {
+      select: 'Select',
+      rectangle: 'Rectangle',
+      ellipse: 'Ellipse',
+      diamond: 'Diamond',
+      arrow: 'Arrow',
+      line: 'Line',
+      text: 'Text',
+      freedraw: 'Freedraw',
+    };
+    const tool = toolNames[currentTool];
+
+    // Context-specific hints based on current operation
+    if (isRotating) {
+      return { tool, hints: ['Shift: Snap to 15°'] };
+    }
+
+    if (resizeHandle) {
+      return { tool, hints: ['Shift: Maintain aspect ratio'] };
+    }
+
+    // When actively drawing shapes
+    if (isDrawing && startPoint) {
+      if (currentTool === 'rectangle' || currentTool === 'ellipse' || currentTool === 'diamond') {
+        return { tool, hints: ['Shift: Constrain to square/circle'] };
+      }
+      if (currentTool === 'arrow' || currentTool === 'line') {
+        return { tool, hints: ['Shift: Snap to 45° angles'] };
+      }
+    }
+
+    // Tool-specific hints when not actively drawing
+    switch (currentTool) {
+      case 'select':
+        if (selectedElementId || selectedElementIds.size > 0) {
+          return {
+            tool,
+            hints: [
+              'Shift+Click: Multi-select',
+              'Shift+Arrow: Move 10px',
+              'Shift+Tab: Cycle backwards',
+            ]
+          };
+        }
+        return { tool, hints: ['Shift+Click: Add to selection'] };
+      case 'rectangle':
+      case 'ellipse':
+      case 'diamond':
+        return { tool, hints: ['Shift: Constrain to square/circle'] };
+      case 'arrow':
+      case 'line':
+        return { tool, hints: ['Shift: Snap to 45° angles'] };
+      case 'text':
+        return { tool, hints: ['Click to place text'] };
+      case 'freedraw':
+        return { tool, hints: ['Click and drag to draw'] };
+      default:
+        return { tool, hints: [] };
+    }
+  };
+
+  const statusBarInfo = getModifierHints();
 
   // Calculate selection info for UnifiedStyleBar
   const getSelectionInfo = () => {
@@ -6238,22 +6376,30 @@ export function Canvas() {
             className={
               isPanning
                 ? "absolute inset-0 cursor-grabbing"
-                : currentTool === "select"
-                  ? hoveredHandle
-                    ? `absolute inset-0 ${(() => {
-                        // Show not-allowed cursor if the selected element is locked
-                        const selectedEl = elements.find(el => el.id === selectedElementId);
-                        if (selectedEl?.locked) return "cursor-not-allowed";
-                        return getHandleCursor(hoveredHandle);
-                      })()}`
-                    : hoveredElementId
+                : isSpaceHeld
+                  ? "absolute inset-0 cursor-grab" // Space held, ready to pan
+                  : currentTool === "select"
+                    ? hoveredHandle
                       ? `absolute inset-0 ${(() => {
-                          const hoveredEl = elements.find(el => el.id === hoveredElementId);
-                          if (hoveredEl?.locked) return "cursor-not-allowed";
-                          return hoveredEl?.type === "text" ? "cursor-text" : "cursor-move";
+                          // Show not-allowed cursor if the selected element is locked
+                          const selectedEl = elements.find(el => el.id === selectedElementId);
+                          if (selectedEl?.locked) return "cursor-not-allowed";
+                          return getHandleCursor(hoveredHandle);
                         })()}`
-                      : "absolute inset-0 cursor-default"
-                  : "absolute inset-0 cursor-crosshair"
+                      : hoveredElementId
+                        ? `absolute inset-0 ${(() => {
+                            const hoveredEl = elements.find(el => el.id === hoveredElementId);
+                            if (hoveredEl?.locked) return "cursor-not-allowed";
+                            return hoveredEl?.type === "text" ? "cursor-text" : "cursor-move";
+                          })()}`
+                        : "absolute inset-0 cursor-default"
+                    : "absolute inset-0" // Tool-specific cursor applied via style
+            }
+            style={
+              // Apply tool-specific custom cursors for drawing tools
+              currentTool !== "select" && !isPanning && !isSpaceHeld
+                ? { cursor: getToolCursor(currentTool) }
+                : undefined
             }
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
@@ -6436,6 +6582,37 @@ export function Canvas() {
                 />
               );
             })()}
+
+          {/* Status Bar - shows current tool and modifier key hints */}
+          <div
+            className="absolute bottom-0 left-0 right-0 h-7 bg-zinc-100/90 dark:bg-zinc-800/90 backdrop-blur-sm border-t border-zinc-200 dark:border-zinc-700 flex items-center px-3 text-xs text-zinc-600 dark:text-zinc-400 pointer-events-none select-none"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            {/* Current tool indicator */}
+            <span className="font-medium text-zinc-700 dark:text-zinc-300 mr-4">
+              {statusBarInfo.tool}
+            </span>
+
+            {/* Modifier hints */}
+            {statusBarInfo.hints.length > 0 && (
+              <div className="flex items-center gap-3">
+                <span className="text-zinc-400 dark:text-zinc-500">|</span>
+                {statusBarInfo.hints.map((hint, index) => (
+                  <span key={index} className="flex items-center gap-1">
+                    {index > 0 && <span className="text-zinc-300 dark:text-zinc-600 mx-1">·</span>}
+                    {hint}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Zoom level on the right side */}
+            <span className="ml-auto text-zinc-500 dark:text-zinc-500">
+              {Math.round(zoom * 100)}%
+            </span>
+          </div>
         </div>
       </div>
 
@@ -6508,7 +6685,6 @@ export function Canvas() {
             setSelectedElementIds(new Set());
           }
           setSelectedInstanceId(null); // Clear instance selection when selecting element
-          setSelectedByClick(true);
         }}
         onSelectGroup={(groupId, groupType) => {
           // Select all elements in the group
@@ -6520,14 +6696,12 @@ export function Canvas() {
             setSelectedElementId(groupElementIds[0]);
             setSelectedElementIds(new Set(groupElementIds));
             setSelectedInstanceId(null); // Clear instance selection when selecting group
-            setSelectedByClick(true);
           }
         }}
         onSelectInstance={(instanceId) => {
           setSelectedInstanceId(instanceId);
           setSelectedElementId(null); // Clear element selection when selecting instance
           setSelectedElementIds(new Set());
-          setSelectedByClick(true);
         }}
         onReorderElements={reorderElement}
         onToggleVisibility={toggleElementVisibility}

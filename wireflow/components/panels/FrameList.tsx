@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import type { Frame, FrameType } from '@/lib/types';
 import { usePanelAnimation } from '@/lib/usePanelAnimation';
-import { Trash2, Plus, ChevronDown, ChevronLeft, AppWindow } from 'lucide-react';
+import { Trash2, Plus, ChevronDown, ChevronLeft, AppWindow, Pencil } from 'lucide-react';
 
 interface FrameListProps {
   /** Whether the panel is expanded */
@@ -206,16 +206,22 @@ export function FrameList({
                   : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/50'
               }`}
               onClick={() => !isEditing && onSwitchFrame(frame.id)}
+              onDoubleClick={() => !isEditing && setEditingFrameId(frame.id)}
               onKeyDown={(e) => {
                 if ((e.key === 'Enter' || e.key === ' ') && !isEditing) {
                   e.preventDefault();
                   onSwitchFrame(frame.id);
                 }
+                // F2 to rename (common rename shortcut)
+                if (e.key === 'F2' && !isEditing) {
+                  e.preventDefault();
+                  setEditingFrameId(frame.id);
+                }
               }}
               role="button"
               tabIndex={0}
               aria-current={isActive ? 'page' : undefined}
-              aria-label={`Frame: ${frame.name}`}
+              aria-label={`Frame: ${frame.name}. Double-click or press F2 to rename.`}
             >
               {/* Frame name (editable) */}
               <div className="mb-1">
@@ -235,17 +241,31 @@ export function FrameList({
                     aria-label="Rename frame"
                   />
                 ) : (
-                  <button
-                    type="button"
-                    className="font-medium text-sm text-zinc-900 dark:text-zinc-100 hover:text-blue-600 dark:hover:text-blue-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 rounded px-1 -mx-1"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditingFrameId(frame.id);
-                    }}
-                    aria-label={`Rename frame ${frame.name}`}
-                  >
-                    {frame.name}
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      className="font-medium text-sm text-zinc-900 dark:text-zinc-100 hover:text-blue-600 dark:hover:text-blue-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 rounded px-1 -mx-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingFrameId(frame.id);
+                      }}
+                      aria-label={`Rename frame ${frame.name}`}
+                    >
+                      {frame.name}
+                    </button>
+                    <button
+                      type="button"
+                      className="p-0.5 text-zinc-400 hover:text-blue-600 dark:hover:text-blue-400 rounded transition-all duration-150 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingFrameId(frame.id);
+                      }}
+                      title="Rename frame"
+                      aria-label={`Rename frame ${frame.name}`}
+                    >
+                      <Pencil size={12} />
+                    </button>
+                  </div>
                 )}
               </div>
 

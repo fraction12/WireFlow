@@ -130,6 +130,81 @@ export function ComponentPanel({
     ? getInstanceCount?.(pendingDeleteComponent.id) || 0
     : 0;
 
+  // Render the My Components section content based on state
+  const renderMyComponentsContent = () => {
+    // Show component cards if there are user components
+    if (userComponents.length > 0) {
+      return userComponents.map(component => (
+        <UserComponentCard
+          key={component.id}
+          component={component}
+          isEditing={editingComponentId === component.id}
+          editingName={editingName}
+          onEditingNameChange={setEditingName}
+          onSaveRename={handleSaveRename}
+          onCancelRename={handleCancelRename}
+          onStartRename={handleStartRename}
+          onRequestDelete={handleRequestDelete}
+          onInsert={onInsertUserComponent}
+          onDragStart={handleDragStart}
+          instanceCount={getInstanceCount?.(component.id) || 0}
+          menuOpen={menuOpenId === component.id}
+          onMenuToggle={(open) => setMenuOpenId(open ? component.id : null)}
+        />
+      ));
+    }
+
+    // If a group is selected, don't show empty state (convert button is shown above)
+    if (selectedElementGroupId) {
+      return null;
+    }
+
+    // Show empty state when no components and no group selected
+    return (
+      <div className="text-center py-8 text-zinc-500 dark:text-zinc-400">
+        {/* Empty state illustration - grouped shapes */}
+        <svg
+          width="64"
+          height="64"
+          viewBox="0 0 64 64"
+          className="mx-auto mb-3 opacity-30"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          {/* Outer dashed group border */}
+          <rect
+            x="8"
+            y="8"
+            width="48"
+            height="48"
+            rx="4"
+            strokeDasharray="4 3"
+            className="opacity-50"
+          />
+          {/* Rectangle shape */}
+          <rect x="14" y="14" width="16" height="12" rx="1" />
+          {/* Circle shape */}
+          <circle cx="44" cy="20" r="7" />
+          {/* Diamond shape */}
+          <path d="M24 44 L32 36 L40 44 L32 52 Z" />
+          {/* Connecting dots */}
+          <circle cx="22" cy="30" r="1.5" fill="currentColor" />
+          <circle cx="37" cy="32" r="1.5" fill="currentColor" />
+        </svg>
+        <p className="text-sm font-medium mb-1">No components yet</p>
+        <p className="text-xs opacity-70">
+          Select elements and press{' '}
+          <kbd className="px-1 py-0.5 text-[10px] bg-zinc-100 dark:bg-zinc-800 rounded border border-zinc-200 dark:border-zinc-700">
+            Ctrl+Shift+C
+          </kbd>
+        </p>
+      </div>
+    );
+  };
+
   return (
     <div
       className={`bg-white dark:bg-zinc-900 border-l border-zinc-200 dark:border-zinc-700 flex flex-col h-full transition-all duration-200 motion-reduce:transition-none overflow-hidden ${
@@ -218,70 +293,7 @@ export function ComponentPanel({
                         <span className="text-sm font-medium">Convert Group to Component</span>
                       </button>
                     )}
-                    {userComponents.length === 0 && !selectedElementGroupId ? (
-                      <div className="text-center py-8 text-zinc-500 dark:text-zinc-400">
-                    {/* Empty state illustration - grouped shapes */}
-                    <svg
-                      width="64"
-                      height="64"
-                      viewBox="0 0 64 64"
-                      className="mx-auto mb-3 opacity-30"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      {/* Outer dashed group border */}
-                      <rect
-                        x="8"
-                        y="8"
-                        width="48"
-                        height="48"
-                        rx="4"
-                        strokeDasharray="4 3"
-                        className="opacity-50"
-                      />
-                      {/* Rectangle shape */}
-                      <rect x="14" y="14" width="16" height="12" rx="1" />
-                      {/* Circle shape */}
-                      <circle cx="44" cy="20" r="7" />
-                      {/* Diamond shape */}
-                      <path d="M24 44 L32 36 L40 44 L32 52 Z" />
-                      {/* Connecting dots */}
-                      <circle cx="22" cy="30" r="1.5" fill="currentColor" />
-                      <circle cx="37" cy="32" r="1.5" fill="currentColor" />
-                        </svg>
-                        <p className="text-sm font-medium mb-1">No components yet</p>
-                        <p className="text-xs opacity-70">
-                          Select elements and press{' '}
-                          <kbd className="px-1 py-0.5 text-[10px] bg-zinc-100 dark:bg-zinc-800 rounded border border-zinc-200 dark:border-zinc-700">
-                            Ctrl+Shift+C
-                          </kbd>
-                        </p>
-                      </div>
-                    ) : userComponents.length === 0 ? (
-                      null
-                    ) : (
-                      userComponents.map(component => (
-                        <UserComponentCard
-                          key={component.id}
-                          component={component}
-                          isEditing={editingComponentId === component.id}
-                          editingName={editingName}
-                          onEditingNameChange={setEditingName}
-                          onSaveRename={handleSaveRename}
-                          onCancelRename={handleCancelRename}
-                          onStartRename={handleStartRename}
-                          onRequestDelete={handleRequestDelete}
-                          onInsert={onInsertUserComponent}
-                          onDragStart={handleDragStart}
-                          instanceCount={getInstanceCount?.(component.id) || 0}
-                          menuOpen={menuOpenId === component.id}
-                          onMenuToggle={(open) => setMenuOpenId(open ? component.id : null)}
-                        />
-                      ))
-                    )}
+                    {renderMyComponentsContent()}
                   </div>
                 )}
               </div>

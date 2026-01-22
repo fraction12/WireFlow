@@ -2,6 +2,7 @@
 
 import { useEffect, useCallback, useRef } from 'react';
 import { X } from 'lucide-react';
+import { useFocusTrap } from '@/lib/useFocusTrap';
 
 interface KeyboardShortcutsPanelProps {
   isOpen: boolean;
@@ -84,7 +85,7 @@ const shortcutGroups: ShortcutGroup[] = [
     shortcuts: [
       { keys: 'Ctrl/⌘ + G', description: 'Group selected elements' },
       { keys: 'Ctrl/⌘ + Shift + G', description: 'Ungroup elements' },
-      { keys: 'G (with element selected)', description: 'Ungroup (legacy)' },
+      { keys: 'G (with grouped element)', description: 'Quick ungroup' },
     ],
   },
   {
@@ -98,12 +99,12 @@ const shortcutGroups: ShortcutGroup[] = [
     ],
   },
   {
-    title: 'Font Size',
+    title: 'Text Presets',
     shortcuts: [
-      { keys: 'Ctrl/⌘ + Alt + 1', description: 'Small text (14px)' },
-      { keys: 'Ctrl/⌘ + Alt + 2', description: 'Medium text (18px)' },
-      { keys: 'Ctrl/⌘ + Alt + 3', description: 'Large text (24px)' },
-      { keys: 'Ctrl/⌘ + Alt + 0', description: 'Default text (16px)' },
+      { keys: 'Ctrl/⌘ + Alt + 1', description: 'Heading 1 (32px)' },
+      { keys: 'Ctrl/⌘ + Alt + 2', description: 'Heading 2 (24px)' },
+      { keys: 'Ctrl/⌘ + Alt + 3', description: 'Heading 3 (20px)' },
+      { keys: 'Ctrl/⌘ + Alt + 0', description: 'Body text (16px)' },
     ],
   },
   {
@@ -113,8 +114,10 @@ const shortcutGroups: ShortcutGroup[] = [
       { keys: 'Ctrl/⌘ + Shift + C', description: 'Copy element style' },
       { keys: '?', description: 'Show keyboard shortcuts' },
       { keys: 'Shift (while drawing)', description: 'Constrain to 45° angles' },
-      { keys: 'Middle-click drag', description: 'Pan canvas' },
-      { keys: 'Mouse wheel', description: 'Zoom in/out' },
+      { keys: 'Space + drag', description: 'Pan canvas' },
+      { keys: 'Middle-click drag', description: 'Pan canvas (alternative)' },
+      { keys: 'Mouse wheel', description: 'Pan canvas' },
+      { keys: 'Ctrl/⌘ + wheel', description: 'Zoom in/out' },
     ],
   },
 ];
@@ -123,34 +126,14 @@ export function KeyboardShortcutsPanel({ isOpen, onClose }: KeyboardShortcutsPan
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Focus trap
+  useFocusTrap(panelRef, isOpen);
+
   // Close on Escape key
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape' && isOpen) {
       e.preventDefault();
       onClose();
-    }
-
-    // Focus trap - handle Tab key
-    if (e.key === 'Tab' && isOpen && panelRef.current) {
-      const focusableElements = panelRef.current.querySelectorAll(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      );
-      const firstElement = focusableElements[0] as HTMLElement;
-      const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
-
-      if (e.shiftKey) {
-        // Shift+Tab: if on first element, focus last
-        if (document.activeElement === firstElement) {
-          e.preventDefault();
-          lastElement?.focus();
-        }
-      } else {
-        // Tab: if on last element, focus first
-        if (document.activeElement === lastElement) {
-          e.preventDefault();
-          firstElement?.focus();
-        }
-      }
     }
   }, [isOpen, onClose]);
 

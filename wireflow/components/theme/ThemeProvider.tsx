@@ -30,12 +30,20 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const root = document.documentElement;
 
-    const applyTheme = (isDark: boolean, isExplicit: boolean) => {
+    /**
+     * Applies the theme to the document root element.
+     * @param isDark - Whether to apply dark theme (true) or light theme (false)
+     * @param isUserSelected - Whether the user explicitly selected this theme (true)
+     *                         or it's derived from system preferences (false).
+     *                         When true, always adds the theme class.
+     *                         When false (system mode), only adds 'dark' class when needed.
+     */
+    const applyTheme = (isDark: boolean, isUserSelected: boolean) => {
       // Remove both classes first
       root.classList.remove('dark', 'light');
 
-      if (isExplicit) {
-        // Explicit selection: add the appropriate class
+      if (isUserSelected) {
+        // User explicitly selected this theme: add the appropriate class
         root.classList.add(isDark ? 'dark' : 'light');
       } else if (isDark) {
         // System preference dark: add dark class

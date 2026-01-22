@@ -3,6 +3,14 @@
 import { useState, useEffect, useCallback, createContext, useContext } from 'react';
 import { X, CheckCircle2, AlertCircle, AlertTriangle, Info } from 'lucide-react';
 
+/**
+ * Animation duration for toast exit animation (must match CSS .animate-fade-out in globals.css)
+ * The CSS animation is 150ms, we add a 50ms buffer before removing from DOM
+ */
+export const TOAST_EXIT_ANIMATION_MS = 150;
+export const TOAST_EXIT_BUFFER_MS = 50;
+export const TOAST_EXIT_TOTAL_MS = TOAST_EXIT_ANIMATION_MS + TOAST_EXIT_BUFFER_MS;
+
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
 export interface Toast {
@@ -90,10 +98,10 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
 
   useEffect(() => {
     if (isExiting) {
-      // Wait for animation to complete (150ms) plus small buffer (50ms)
+      // Wait for animation to complete plus small buffer before removing from DOM
       const timer = setTimeout(() => {
         onRemove(toast.id);
-      }, 200);
+      }, TOAST_EXIT_TOTAL_MS);
       return () => clearTimeout(timer);
     }
   }, [isExiting, onRemove, toast.id]);

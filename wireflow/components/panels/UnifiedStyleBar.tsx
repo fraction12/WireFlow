@@ -210,30 +210,20 @@ export function UnifiedStyleBar({
     { key: 'caption', label: 'Cap' },
   ];
 
-  // Shared button styles - standardized to 32px height
-  const buttonBase = `
-    h-8 px-2 flex items-center justify-center rounded
-    transition-all duration-150 ease-out
-    focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1
-    active:scale-95
-  `;
+  // Button style constants
+  const BUTTON_STYLES = {
+    base: 'h-8 px-2 flex items-center justify-center rounded transition-all duration-150 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 active:scale-95',
+    inactive: 'text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 hover:text-zinc-900 dark:hover:text-zinc-100',
+    active: 'bg-blue-100 text-blue-700 dark:bg-blue-900/80 dark:text-blue-200 shadow-sm font-medium',
+    disabled: 'opacity-50 pointer-events-none cursor-not-allowed',
+  } as const;
 
-  const buttonInactive = `
-    text-zinc-600 dark:text-zinc-400
-    hover:bg-zinc-100 dark:hover:bg-zinc-700
-    hover:text-zinc-900 dark:hover:text-zinc-100
-  `;
-
-  const buttonActive = `
-    bg-blue-100 text-blue-700
-    dark:bg-blue-900/80 dark:text-blue-200
-    shadow-sm
-    font-medium
-  `;
-
-  const buttonDisabled = `
-    opacity-50 pointer-events-none cursor-not-allowed
-  `;
+  /**
+   * Compose button class names from style parts.
+   * Filters out falsy values and joins with spaces.
+   */
+  const btn = (...classes: (string | false | undefined | null)[]) =>
+    classes.filter(Boolean).join(' ');
 
   // Generate selection label for accessibility
   const selectionLabel = selectionCount === 0
@@ -313,9 +303,12 @@ export function UnifiedStyleBar({
             key={key}
             onClick={() => handlePresetClick(key)}
             disabled={textControlsDisabled}
-            className={`${buttonBase} min-w-[36px] text-xs ${
-              preset === key ? buttonActive : buttonInactive
-            } ${textControlsDisabled ? buttonDisabled : ''}`}
+            className={btn(
+              BUTTON_STYLES.base,
+              'min-w-[36px] text-xs',
+              preset === key ? BUTTON_STYLES.active : BUTTON_STYLES.inactive,
+              textControlsDisabled && BUTTON_STYLES.disabled
+            )}
             title={textControlsDisabled ? 'Select text to enable' : TEXT_PRESETS[key].label}
             aria-label={`Apply ${TEXT_PRESETS[key].label} style`}
             aria-pressed={!textControlsDisabled && preset === key}
@@ -340,9 +333,12 @@ export function UnifiedStyleBar({
         <button
           onClick={toggleBold}
           disabled={textControlsDisabled}
-          className={`${buttonBase} w-7 ${fontWeight === 'bold' ? buttonActive : buttonInactive} ${
-            textControlsDisabled ? buttonDisabled : ''
-          }`}
+          className={btn(
+            BUTTON_STYLES.base,
+            'w-7',
+            fontWeight === 'bold' ? BUTTON_STYLES.active : BUTTON_STYLES.inactive,
+            textControlsDisabled && BUTTON_STYLES.disabled
+          )}
           title={textControlsDisabled ? 'Select text to enable' : 'Bold'}
           aria-label="Toggle bold"
           aria-pressed={!textControlsDisabled && fontWeight === 'bold'}
@@ -352,9 +348,12 @@ export function UnifiedStyleBar({
         <button
           onClick={toggleItalic}
           disabled={textControlsDisabled}
-          className={`${buttonBase} w-7 ${fontStyle === 'italic' ? buttonActive : buttonInactive} ${
-            textControlsDisabled ? buttonDisabled : ''
-          }`}
+          className={btn(
+            BUTTON_STYLES.base,
+            'w-7',
+            fontStyle === 'italic' ? BUTTON_STYLES.active : BUTTON_STYLES.inactive,
+            textControlsDisabled && BUTTON_STYLES.disabled
+          )}
           title={textControlsDisabled ? 'Select text to enable' : 'Italic'}
           aria-label="Toggle italic"
           aria-pressed={!textControlsDisabled && fontStyle === 'italic'}
@@ -378,9 +377,12 @@ export function UnifiedStyleBar({
         <button
           onClick={() => handleAlignChange('left')}
           disabled={textControlsDisabled}
-          className={`${buttonBase} w-7 ${textAlign === 'left' ? buttonActive : buttonInactive} ${
-            textControlsDisabled ? buttonDisabled : ''
-          }`}
+          className={btn(
+            BUTTON_STYLES.base,
+            'w-7',
+            textAlign === 'left' ? BUTTON_STYLES.active : BUTTON_STYLES.inactive,
+            textControlsDisabled && BUTTON_STYLES.disabled
+          )}
           title={textControlsDisabled ? 'Select text to enable' : 'Align left'}
           aria-label="Align left"
           aria-pressed={!textControlsDisabled && textAlign === 'left'}
@@ -390,9 +392,12 @@ export function UnifiedStyleBar({
         <button
           onClick={() => handleAlignChange('center')}
           disabled={textControlsDisabled}
-          className={`${buttonBase} w-7 ${textAlign === 'center' ? buttonActive : buttonInactive} ${
-            textControlsDisabled ? buttonDisabled : ''
-          }`}
+          className={btn(
+            BUTTON_STYLES.base,
+            'w-7',
+            textAlign === 'center' ? BUTTON_STYLES.active : BUTTON_STYLES.inactive,
+            textControlsDisabled && BUTTON_STYLES.disabled
+          )}
           title={textControlsDisabled ? 'Select text to enable' : 'Align center'}
           aria-label="Align center"
           aria-pressed={!textControlsDisabled && textAlign === 'center'}
@@ -402,9 +407,12 @@ export function UnifiedStyleBar({
         <button
           onClick={() => handleAlignChange('right')}
           disabled={textControlsDisabled}
-          className={`${buttonBase} w-7 ${textAlign === 'right' ? buttonActive : buttonInactive} ${
-            textControlsDisabled ? buttonDisabled : ''
-          }`}
+          className={btn(
+            BUTTON_STYLES.base,
+            'w-7',
+            textAlign === 'right' ? BUTTON_STYLES.active : BUTTON_STYLES.inactive,
+            textControlsDisabled && BUTTON_STYLES.disabled
+          )}
           title={textControlsDisabled ? 'Select text to enable' : 'Align right'}
           aria-label="Align right"
           aria-pressed={!textControlsDisabled && textAlign === 'right'}
@@ -441,9 +449,12 @@ export function UnifiedStyleBar({
           }}
           onKeyDown={handleDropdownKeyDown}
           disabled={textControlsDisabled}
-          className={`${buttonBase} ${buttonInactive} min-w-[60px] gap-1 text-sm ${
-            textControlsDisabled ? buttonDisabled : ''
-          }`}
+          className={btn(
+            BUTTON_STYLES.base,
+            BUTTON_STYLES.inactive,
+            'min-w-[60px] gap-1 text-sm',
+            textControlsDisabled && BUTTON_STYLES.disabled
+          )}
           title={textControlsDisabled ? 'Select text to enable' : 'Font size'}
           aria-label={textControlsDisabled ? 'Font size' : `Font size: ${fontSize}px`}
           aria-expanded={!textControlsDisabled && showSizeDropdown}
@@ -513,7 +524,12 @@ export function UnifiedStyleBar({
         <button
           onClick={onGroup}
           disabled={!canGroup}
-          className={`${buttonBase} w-8 ${buttonInactive} ${!canGroup ? buttonDisabled : ''}`}
+          className={btn(
+            BUTTON_STYLES.base,
+            'w-8',
+            BUTTON_STYLES.inactive,
+            !canGroup && BUTTON_STYLES.disabled
+          )}
           title={canGroup ? 'Group selected elements (Ctrl+G)' : 'Select multiple elements to group'}
           aria-label="Group selected elements"
         >
@@ -522,7 +538,12 @@ export function UnifiedStyleBar({
         <button
           onClick={onUngroup}
           disabled={!canUngroup}
-          className={`${buttonBase} w-8 ${buttonInactive} ${!canUngroup ? buttonDisabled : ''}`}
+          className={btn(
+            BUTTON_STYLES.base,
+            'w-8',
+            BUTTON_STYLES.inactive,
+            !canUngroup && BUTTON_STYLES.disabled
+          )}
           title={canUngroup ? 'Ungroup elements (Ctrl+Shift+G)' : 'Select a grouped element to ungroup'}
           aria-label="Ungroup elements"
         >
