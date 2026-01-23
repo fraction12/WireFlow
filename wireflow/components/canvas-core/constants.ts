@@ -1,7 +1,17 @@
 /**
  * Canvas constants for sketch rendering and interaction
  * These values control the visual appearance and interaction behavior of the canvas
+ *
+ * NOTE: Color constants are centralized in lib/colors.ts
+ * Import CanvasTheme, DEFAULT_CANVAS_THEME, getCanvasTheme from '@/lib/colors'
  */
+
+// Re-export color types and functions from centralized location
+export {
+  type CanvasTheme,
+  DEFAULT_CANVAS_THEME,
+  getCanvasTheme
+} from '@/lib/colors';
 
 // ============================================================================
 // Sketch Rendering Constants
@@ -78,70 +88,6 @@ export const ELEMENT_GROUP_LINE_WIDTH = 2;
 // ============================================================================
 // Canvas Theme Types & Defaults
 // ============================================================================
-
-/** Color theme interface for canvas rendering */
-export interface CanvasTheme {
-  sketch: string;
-  selected: string;
-  selectedBg: string;
-  hover: string;
-  tagged: string;
-  group: string;
-  multiSelect: string;
-  multiSelectBg: string;
-  elementGroup: string;
-  elementGroupBg: string;
-  marqueeFill: string;
-  marqueeStroke: string;
-  handle: string;
-  handleFill: string;
-  grid: string;
-}
-
-/** Default light theme colors for SSR */
-export const DEFAULT_CANVAS_THEME: CanvasTheme = {
-  sketch: "#6b7280",
-  selected: "#3b82f6",
-  selectedBg: "rgba(59, 130, 246, 0.08)",
-  hover: "#4b5563",
-  tagged: "#10b981",
-  group: "#8b5cf6",
-  multiSelect: "#06b6d4",
-  multiSelectBg: "rgba(6, 182, 212, 0.08)",
-  elementGroup: "#14b8a6",
-  elementGroupBg: "rgba(20, 184, 166, 0.08)",
-  marqueeFill: "rgba(59, 130, 246, 0.1)",
-  marqueeStroke: "#3b82f6",
-  handle: "#3b82f6",
-  handleFill: "#ffffff",
-  grid: "rgba(150, 150, 150, 0.3)",
-};
-
-/**
- * Get canvas colors from CSS variables
- * Falls back to default theme during SSR
- */
-export function getCanvasTheme(): CanvasTheme {
-  if (typeof window === "undefined") {
-    return DEFAULT_CANVAS_THEME;
-  }
-
-  const styles = getComputedStyle(document.documentElement);
-  return {
-    sketch: styles.getPropertyValue("--canvas-sketch").trim() || DEFAULT_CANVAS_THEME.sketch,
-    selected: styles.getPropertyValue("--canvas-selected").trim() || DEFAULT_CANVAS_THEME.selected,
-    selectedBg: styles.getPropertyValue("--canvas-selected-bg").trim() || DEFAULT_CANVAS_THEME.selectedBg,
-    hover: styles.getPropertyValue("--canvas-hover").trim() || DEFAULT_CANVAS_THEME.hover,
-    tagged: styles.getPropertyValue("--canvas-tagged").trim() || DEFAULT_CANVAS_THEME.tagged,
-    group: styles.getPropertyValue("--canvas-group").trim() || DEFAULT_CANVAS_THEME.group,
-    multiSelect: styles.getPropertyValue("--canvas-multi-select").trim() || DEFAULT_CANVAS_THEME.multiSelect,
-    multiSelectBg: styles.getPropertyValue("--canvas-multi-select-bg").trim() || DEFAULT_CANVAS_THEME.multiSelectBg,
-    elementGroup: styles.getPropertyValue("--canvas-element-group").trim() || DEFAULT_CANVAS_THEME.elementGroup,
-    elementGroupBg: styles.getPropertyValue("--canvas-element-group-bg").trim() || DEFAULT_CANVAS_THEME.elementGroupBg,
-    marqueeFill: styles.getPropertyValue("--canvas-marquee-fill").trim() || DEFAULT_CANVAS_THEME.marqueeFill,
-    marqueeStroke: styles.getPropertyValue("--canvas-marquee-stroke").trim() || DEFAULT_CANVAS_THEME.marqueeStroke,
-    handle: styles.getPropertyValue("--canvas-handle").trim() || DEFAULT_CANVAS_THEME.handle,
-    handleFill: styles.getPropertyValue("--canvas-handle-fill").trim() || DEFAULT_CANVAS_THEME.handleFill,
-    grid: styles.getPropertyValue("--canvas-grid").trim() || DEFAULT_CANVAS_THEME.grid,
-  };
-}
+// NOTE: CanvasTheme, DEFAULT_CANVAS_THEME, and getCanvasTheme are now
+// re-exported from '@/lib/colors' at the top of this file for backwards
+// compatibility. See lib/colors.ts for the source of truth.

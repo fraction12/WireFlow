@@ -1,10 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef, memo, useCallback } from 'react';
+import { useState, useEffect, useRef, memo, useCallback, useMemo } from 'react';
 import type { ComponentTemplate, ComponentType, UserComponent } from '@/lib/types';
 import { COMPONENT_TEMPLATES } from '@/lib/componentTemplates';
 import { usePanelAnimation } from '@/lib/usePanelAnimation';
 import { ConfirmDialog } from '@/components/dialogs';
+import { useTheme } from '@/components/theme';
+import { drawSketchRect, drawSketchLine } from '@/components/canvas-core';
+import { getPreviewColors } from '@/lib/colors';
 import {
   ChevronRight,
   ChevronDown,
@@ -574,38 +577,212 @@ interface ComponentPreviewProps {
   onInsert: (template: ComponentTemplate) => void;
 }
 
-const ComponentPreview = memo(function ComponentPreview({ template, onInsert }: ComponentPreviewProps) {
-  const Icon = getComponentIcon(template.type);
+// Max tooltip preview size
+const MAX_PREVIEW_WIDTH = 300;
+const MAX_PREVIEW_HEIGHT = 200;
+const PREVIEW_PADDING = 16;
+
+/**
+ * Renders a component template to a canvas element
+ */
+function renderTemplateToCanvas(
+  ctx: CanvasRenderingContext2D,
+  template: ComponentTemplate,
+  scale: number,
+  isDark: boolean
+) {
+  const previewColors = getPreviewColors(isDark);
+  const strokeColor = previewColors.stroke;
+  const textColor = previewColors.text;
+  const fillColor = previewColors.fill;
+
+  ctx.save();
+  ctx.scale(scale, scale);
+  ctx.lineWidth = 1.5 / scale; // Maintain consistent stroke width at any scale
+  ctx.strokeStyle = strokeColor;
+  ctx.fillStyle = fillColor;
+  ctx.font = '14px system-ui, -apple-system, sans-serif';
+
+  // Render each element
+  for (const element of template.elements) {
+    const x = element.offsetX + PREVIEW_PADDING / scale;
+    const y = element.offsetY + PREVIEW_PADDING / scale;
+
+    switch (element.type) {
+      case 'rectangle':
+        ctx.fillRect(x, y, element.width, element.height);
+        drawSketchRect(ctx, x, y, element.width, element.height, template.id.charCodeAt(0));
+        break;
+
+      case 'line':
+        if (element.startX !== undefined && element.endX !== undefined) {
+          drawSketchLine(
+            ctx,
+            element.startX + PREVIEW_PADDING / scale,
+            element.startY! + PREVIEW_PADDING / scale,
+            element.endX + PREVIEW_PADDING / scale,
+            element.endY! + PREVIEW_PADDING / scale,
+            template.id.charCodeAt(1)
+          );
+        }
+        break;
+
+      case 'text':
+        ctx.fillStyle = textColor;
+        ctx.textBaseline = 'top';
+        const fontSize = Math.max(10, 14 * (element.height / 16));
+        ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`;
+
+        if (element.textAlign === 'center') {
+          ctx.textAlign = 'center';
+          ctx.fillText(element.content || '', x + (element.width / 2), y);
+        } else if (element.textAlign === 'right') {
+          ctx.textAlign = 'right';
+          ctx.fillText(element.content || '', x + element.width, y);
+        } else {
+          ctx.textAlign = 'left';
+          ctx.fillText(element.content || '', x, y);
+        }
+        ctx.fillStyle = fillColor; // Reset fill
+        break;
+    }
+  }
+
+  ctx.restore();
+}
+
+/**
+ * Tooltip that shows a canvas preview of the component template
+ */
+const ComponentPreviewTooltip = memo(function ComponentPreviewTooltip({
+  template,
+  buttonRect,
+}: {
+  template: ComponentTemplate;
+  buttonRect: DOMRect;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
+
+  // Calculate scale to fit preview within max dimensions
+  const { scale, canvasWidth, canvasHeight } = useMemo(() => {
+    const contentWidth = template.width + PREVIEW_PADDING * 2;
+    const contentHeight = template.height + PREVIEW_PADDING * 2;
+
+    const scaleX = MAX_PREVIEW_WIDTH / contentWidth;
+    const scaleY = MAX_PREVIEW_HEIGHT / contentHeight;
+    const s = Math.min(scaleX, scaleY, 1); // Don't scale up, only down
+
+    return {
+      scale: s,
+      canvasWidth: Math.ceil(contentWidth * s),
+      canvasHeight: Math.ceil(contentHeight * s),
+    };
+  }, [template.width, template.height]);
+
+  // Render the template to canvas
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Handle high-DPI displays
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = canvasWidth * dpr;
+    canvas.height = canvasHeight * dpr;
+    ctx.scale(dpr, dpr);
+
+    // Clear and render
+    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+    renderTemplateToCanvas(ctx, template, scale, isDark);
+  }, [template, scale, canvasWidth, canvasHeight, isDark]);
+
+  // Position tooltip to the left of the button
+  const tooltipStyle: React.CSSProperties = {
+    position: 'fixed',
+    left: buttonRect.left - canvasWidth - 16,
+    top: Math.max(8, Math.min(buttonRect.top, window.innerHeight - canvasHeight - 16)),
+    zIndex: 1000,
+  };
 
   return (
-    <button
-      onClick={() => onInsert(template)}
-      className="w-full border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950 transition-all duration-150 text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-[0.98]"
+    <div
+      style={tooltipStyle}
+      className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-xl p-2 pointer-events-none"
     >
-      {/* Preview thumbnail */}
-      <div className="w-full h-24 bg-zinc-50 dark:bg-zinc-800 rounded mb-2 flex items-center justify-center border border-zinc-200 dark:border-zinc-700 overflow-hidden">
-        <Icon
-          size={40}
-          className="text-zinc-400 dark:text-zinc-500 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors duration-150"
-          strokeWidth={1.5}
-        />
+      <canvas
+        ref={canvasRef}
+        width={canvasWidth}
+        height={canvasHeight}
+        style={{ width: canvasWidth, height: canvasHeight }}
+        className="rounded"
+      />
+      <div className="mt-1 text-xs text-center text-zinc-500 dark:text-zinc-400">
+        {template.width}×{template.height}
       </div>
+    </div>
+  );
+});
 
-      {/* Name and description */}
-      <div className="font-medium text-sm text-zinc-900 dark:text-zinc-100 mb-1">
-        {template.name}
-      </div>
-      <div className="text-xs text-zinc-600 dark:text-zinc-400 line-clamp-2">
-        {template.description}
-      </div>
+const ComponentPreview = memo(function ComponentPreview({ template, onInsert }: ComponentPreviewProps) {
+  const Icon = getComponentIcon(template.type);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [isHovered, setIsHovered] = useState(false);
+  const [buttonRect, setButtonRect] = useState<DOMRect | null>(null);
 
-      {/* Metadata */}
-      <div className="mt-2 flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-500">
-        <span>{template.elements.length} elements</span>
-        <span>•</span>
-        <span>{template.width}×{template.height}</span>
-      </div>
-    </button>
+  const handleMouseEnter = useCallback(() => {
+    if (buttonRef.current) {
+      setButtonRect(buttonRef.current.getBoundingClientRect());
+      setIsHovered(true);
+    }
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setIsHovered(false);
+  }, []);
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        onClick={() => onInsert(template)}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        className="w-full border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950 transition-all duration-150 text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-[0.98]"
+      >
+        {/* Preview thumbnail */}
+        <div className="w-full h-24 bg-zinc-50 dark:bg-zinc-800 rounded mb-2 flex items-center justify-center border border-zinc-200 dark:border-zinc-700 overflow-hidden">
+          <Icon
+            size={40}
+            className="text-zinc-400 dark:text-zinc-500 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors duration-150"
+            strokeWidth={1.5}
+          />
+        </div>
+
+        {/* Name and description */}
+        <div className="font-medium text-sm text-zinc-900 dark:text-zinc-100 mb-1">
+          {template.name}
+        </div>
+        <div className="text-xs text-zinc-600 dark:text-zinc-400 line-clamp-2">
+          {template.description}
+        </div>
+
+        {/* Metadata */}
+        <div className="mt-2 flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-500">
+          <span>{template.elements.length} elements</span>
+          <span>•</span>
+          <span>{template.width}×{template.height}</span>
+        </div>
+      </button>
+
+      {/* Preview tooltip on hover */}
+      {isHovered && buttonRect && (
+        <ComponentPreviewTooltip template={template} buttonRect={buttonRect} />
+      )}
+    </>
   );
 });
 

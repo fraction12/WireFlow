@@ -50,7 +50,15 @@ import {
   WelcomeModal,
 } from "./dialogs";
 import { ThemeToggle } from "./theme";
-import { DEFAULT_STROKE_COLOR, DEFAULT_FILL_COLOR } from "@/lib/colors";
+import {
+  DEFAULT_STROKE_COLOR,
+  DEFAULT_FILL_COLOR,
+  ALIGNMENT_GUIDE_COLOR,
+  SNAP_GUIDE_COLOR,
+  LOCK_BADGE_BG_COLOR,
+  LOCK_BADGE_ICON_COLOR,
+  TAGGED_ELEMENT_BG_COLOR,
+} from "@/lib/colors";
 import { useMCPBridge, type MCPBridgeCallbacks } from "@/lib/mcpBridge";
 import { COMPONENT_TEMPLATES } from "@/lib/componentTemplates";
 import {
@@ -1165,7 +1173,7 @@ export function Canvas() {
 
       // Store colors for shape fill (used for rectangle, ellipse, diamond)
       // Selected elements show their actual fill color with a subtle selection overlay
-      const shapeFillColor = element.semanticTag ? 'rgba(16, 185, 129, 0.08)' : elementFillColor;
+      const shapeFillColor = element.semanticTag ? TAGGED_ELEMENT_BG_COLOR : elementFillColor;
 
       // Use element ID as seed for deterministic randomness
       const seed = parseInt(element.id.split("_")[1]) || 0;
@@ -1596,12 +1604,12 @@ export function Canvas() {
         // Draw lock icon background circle
         ctx.beginPath();
         ctx.arc(lockX + lockSize / 2, lockY + lockSize / 2, lockSize / 2 + 3, 0, Math.PI * 2);
-        ctx.fillStyle = '#ef4444'; // Red background
+        ctx.fillStyle = LOCK_BADGE_BG_COLOR;
         ctx.fill();
 
         // Draw lock icon (simplified padlock shape)
-        ctx.strokeStyle = '#ffffff';
-        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = LOCK_BADGE_ICON_COLOR;
+        ctx.fillStyle = LOCK_BADGE_ICON_COLOR;
         ctx.lineWidth = 1.5;
 
         // Lock body (rounded rectangle)
@@ -1949,7 +1957,7 @@ export function Canvas() {
 
     // Draw alignment guides
     if (alignmentGuides.length > 0) {
-      ctx.strokeStyle = "#ff6b6b"; // Red/pink color for guides
+      ctx.strokeStyle = ALIGNMENT_GUIDE_COLOR;
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 4]);
 
@@ -1975,7 +1983,7 @@ export function Canvas() {
 
     // Draw snap guides (grid snap feedback)
     if (snapGuides.length > 0) {
-      ctx.strokeStyle = "#38bdf8"; // Sky blue color for grid snap guides
+      ctx.strokeStyle = SNAP_GUIDE_COLOR;
       ctx.lineWidth = 1;
       ctx.setLineDash([]);
 

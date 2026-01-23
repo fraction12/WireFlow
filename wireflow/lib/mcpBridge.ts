@@ -15,6 +15,7 @@ import type {
   WorkspaceState,
 } from "./types";
 import { COMPONENT_TEMPLATES } from "./componentTemplates";
+import { DEFAULT_STROKE_COLOR, DEFAULT_FILL_COLOR } from "./colors";
 
 // ============================================================
 // Types
@@ -501,7 +502,7 @@ function handleCreateRectangle(
     width: params.width,
     height: params.height,
     style: {
-      strokeColor: params.strokeColor || "#6b7280",
+      strokeColor: params.strokeColor || DEFAULT_STROKE_COLOR,
       fillColor: params.fillColor || "transparent",
     },
   };
@@ -554,7 +555,7 @@ function handleCreateEllipse(
     width: params.width,
     height: params.height,
     style: {
-      strokeColor: params.strokeColor || "#6b7280",
+      strokeColor: params.strokeColor || DEFAULT_STROKE_COLOR,
       fillColor: params.fillColor || "transparent",
     },
   };
@@ -661,7 +662,7 @@ function handleCreateArrow(
     endX,
     endY,
     style: {
-      strokeColor: params.strokeColor || "#6b7280",
+      strokeColor: params.strokeColor || DEFAULT_STROKE_COLOR,
       fillColor: "transparent",
     },
   };
@@ -721,7 +722,7 @@ function handleCreateLine(
     endX,
     endY,
     style: {
-      strokeColor: params.strokeColor || "#6b7280",
+      strokeColor: params.strokeColor || DEFAULT_STROKE_COLOR,
       fillColor: "transparent",
     },
   };
@@ -797,7 +798,7 @@ function handleUpdateElement(
 
       // Apply style updates
       if (updates.strokeColor || updates.fillColor) {
-        const currentStyle = updated.style || { strokeColor: "#6b7280", fillColor: "transparent" };
+        const currentStyle = updated.style || { strokeColor: DEFAULT_STROKE_COLOR, fillColor: DEFAULT_FILL_COLOR };
         updated.style = {
           strokeColor: typeof updates.strokeColor === "string" ? updates.strokeColor : currentStyle.strokeColor,
           fillColor: typeof updates.fillColor === "string" ? updates.fillColor : currentStyle.fillColor,

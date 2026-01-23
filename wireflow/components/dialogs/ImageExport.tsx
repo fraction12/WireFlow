@@ -11,6 +11,7 @@ import type {
 } from '@/lib/types';
 import { useToast } from '../ui/Toast';
 import { wrapText } from '../canvas-core/renderers';
+import { DEFAULT_STROKE_COLOR, EXPORT_BG_COLOR } from '@/lib/colors';
 
 // Maximum canvas dimension supported by browsers
 // Most browsers support up to 32767 pixels per dimension
@@ -273,7 +274,7 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
 
   // Render elements to canvas
   const renderToCanvas = useCallback((ctx: CanvasRenderingContext2D, offsetX: number, offsetY: number) => {
-    const defaultSketchColor = '#6b7280';
+    const defaultSketchColor = DEFAULT_STROKE_COLOR;
     ctx.lineWidth = 1.5;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -462,7 +463,7 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
         if (!ctx) return;
 
         // White background
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = EXPORT_BG_COLOR;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         // Scale down for preview
@@ -524,7 +525,7 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
       }
 
       // White background
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = EXPORT_BG_COLOR;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Scale for retina
@@ -568,10 +569,10 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
 
     try {
       const bounds = getBoundingBox();
-      const defaultSketchColor = '#6b7280';
+      const defaultSketchColor = DEFAULT_STROKE_COLOR;
 
       let svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${bounds.width} ${bounds.height}" width="${bounds.width}" height="${bounds.height}">
-  <rect width="100%" height="100%" fill="white"/>
+  <rect width="100%" height="100%" fill="${EXPORT_BG_COLOR}"/>
   <g stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
 `;
 

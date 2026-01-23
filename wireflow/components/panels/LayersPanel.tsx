@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import type { CanvasElement, ElementType, ComponentGroup, ElementGroup, UserComponent, ComponentInstance } from '@/lib/types';
 import { usePanelAnimation } from '@/lib/usePanelAnimation';
 import {
@@ -23,6 +23,8 @@ import {
   Folder,
   Component,
   AlertTriangle,
+  Search,
+  X,
 } from 'lucide-react';
 
 interface LayersPanelProps {
@@ -161,6 +163,10 @@ export function LayersPanel({
 
   // Collapsed groups state
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  // Search/filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Toggle group collapse
   const toggleGroupCollapse = useCallback((groupId: string) => {
@@ -332,6 +338,55 @@ export function LayersPanel({
   }, [elements, componentGroups, elementGroups, componentInstances, userComponents]);
 
   const layerItems = buildLayerHierarchy();
+
+  // Check if an element matches the search query
+  const elementMatchesSearch = useCallback((element: CanvasElement, query: string): boolean => {
+    if (!query.trim()) return true;
+    const lowerQuery = query.toLowerCase().trim();
+
+    // Match by element name
+    if (element.name?.toLowerCase().includes(lowerQuery)) return true;
+
+    // Match by element type
+    if (ELEMENT_TYPE_NAMES[element.type].toLowerCase().includes(lowerQuery)) return true;
+
+    // Match by text content for text elements
+    if (element.type === 'text' && 'content' in element && element.content) {
+      if (element.content.toLowerCase().includes(lowerQuery)) return true;
+    }
+
+    return false;
+  }, []);
+
+  // Filter layer items based on search query
+  const filteredLayerItems = useMemo(() => {
+    if (!searchQuery.trim()) return layerItems;
+
+    return layerItems.filter(item => {
+      if (item.type === 'element') {
+        return elementMatchesSearch(item.element, searchQuery);
+      }
+
+      if (item.type === 'componentGroup' || item.type === 'elementGroup') {
+        // Show group if any of its elements match
+        return item.elements.some(el => elementMatchesSearch(el, searchQuery));
+      }
+
+      if (item.type === 'userComponentInstance') {
+        // Match by component name
+        const componentName = item.component?.name || 'Unknown Component';
+        return componentName.toLowerCase().includes(searchQuery.toLowerCase().trim());
+      }
+
+      return true;
+    });
+  }, [layerItems, searchQuery, elementMatchesSearch]);
+
+  // Clear search
+  const clearSearch = useCallback(() => {
+    setSearchQuery('');
+    searchInputRef.current?.focus();
+  }, []);
 
   // Render a single element row
   const renderElementRow = (
@@ -579,6 +634,35 @@ export function LayersPanel({
             )}
           </div>
 
+          {/* Search/filter input */}
+          <div className="px-3 py-2 border-b border-zinc-100 dark:border-zinc-800">
+            <div className="relative">
+              <Search
+                size={14}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400 dark:text-zinc-500 pointer-events-none"
+              />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Filter by name or type..."
+                className="w-full pl-8 pr-7 py-1.5 text-sm bg-zinc-100 dark:bg-zinc-800 border border-transparent rounded-md text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+                aria-label="Filter layers"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={clearSearch}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded"
+                  aria-label="Clear search"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* Layer list */}
           <div
             className="flex-1 overflow-y-auto"
@@ -589,9 +673,13 @@ export function LayersPanel({
           <div className="px-4 py-8 text-center text-sm text-zinc-400 dark:text-zinc-500">
             No elements yet
           </div>
+        ) : filteredLayerItems.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-zinc-400 dark:text-zinc-500">
+            No matches for &quot;{searchQuery}&quot;
+          </div>
         ) : (
           <>
-            {layerItems.map((item, idx) => {
+            {filteredLayerItems.map((item, idx) => {
               if (item.type === 'element') {
                 return renderElementRow(item.element, item.displayIndex, false);
               }
