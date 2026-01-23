@@ -6503,7 +6503,13 @@ export function Canvas() {
               </svg>
             </button>
             <ThemeToggle />
-            <ImageExport elements={elements} frameName={activeFrame?.name || 'wireflow'} />
+            <ImageExport
+              elements={elements}
+              frameName={activeFrame?.name || 'wireflow'}
+              userComponents={userComponents}
+              componentInstances={componentInstances}
+              activeFrameId={activeFrameId}
+            />
             <ExportButton frames={frames} />
           </div>
         </div>

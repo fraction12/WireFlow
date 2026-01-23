@@ -8,10 +8,22 @@ import type {
   ArrowElement,
   LineElement,
   FreedrawElement,
+  UserComponent,
+  ComponentInstance,
+  ComponentElementDef,
 } from '@/lib/types';
 import { useToast } from '../ui/Toast';
-import { wrapText } from '../canvas-core/renderers';
+import {
+  wrapText,
+  drawSketchLine,
+  drawSketchRect,
+  drawSketchEllipse,
+  drawSketchDiamond,
+  drawFreedraw,
+} from '../canvas-core/renderers';
+import { ARROW_HEAD_LENGTH } from '../canvas-core/constants';
 import { DEFAULT_STROKE_COLOR, EXPORT_BG_COLOR } from '@/lib/colors';
+import { TEXT_PADDING } from '@/lib/textMeasurement';
 
 // Maximum canvas dimension supported by browsers
 // Most browsers support up to 32767 pixels per dimension
@@ -20,13 +32,27 @@ const MAX_CANVAS_DIMENSION = 32767;
 interface ImageExportProps {
   elements: CanvasElement[];
   frameName: string;
+  /** User-defined components for rendering instances */
+  userComponents?: UserComponent[];
+  /** Component instances placed on the canvas */
+  componentInstances?: ComponentInstance[];
+  /** Active frame ID for filtering instances */
+  activeFrameId?: string;
 }
 
 // Maximum preview thumbnail size
 const PREVIEW_MAX_WIDTH = 200;
 const PREVIEW_MAX_HEIGHT = 150;
 
-export function ImageExport({ elements, frameName }: ImageExportProps) {
+export function ImageExport({
+  elements,
+  frameName,
+  userComponents = [],
+  componentInstances = [],
+  activeFrameId,
+}: ImageExportProps) {
+  // Filter out hidden elements for export
+  const visibleElements = elements.filter(el => el.visible !== false);
   const [isOpen, setIsOpen] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const [previewDataUrl, setPreviewDataUrl] = useState<string | null>(null);
@@ -119,147 +145,40 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
     }
   };
 
-  // Sketch-style drawing functions (simplified versions for export)
-  const SKETCH_AMPLITUDE = 1.5;
-  const SEGMENT_DISTANCE = 20;
-  const ARROW_HEAD_LENGTH = 15;
+  // Get component instances for the active frame
+  const frameInstances = activeFrameId
+    ? componentInstances.filter(i => i.frameId === activeFrameId)
+    : componentInstances;
 
-  const seededRandom = (seed: number): number => {
-    const x = Math.sin(seed * 12.9898 + seed * 78.233) * 43758.5453;
-    return x - Math.floor(x);
-  };
-
-  const wobble = (value: number, seed: number, amplitude: number = SKETCH_AMPLITUDE): number => {
-    return value + (seededRandom(seed) - 0.5) * amplitude * 2;
-  };
-
-  const drawSketchLine = (
-    ctx: CanvasRenderingContext2D,
-    x1: number,
-    y1: number,
-    x2: number,
-    y2: number,
-    seed: number = 0
-  ) => {
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const length = Math.sqrt(dx * dx + dy * dy);
-    const segments = Math.max(2, Math.ceil(length / SEGMENT_DISTANCE));
-
-    ctx.beginPath();
-    ctx.moveTo(wobble(x1, seed), wobble(y1, seed + 1));
-
-    for (let i = 1; i <= segments; i++) {
-      const t = i / segments;
-      const x = x1 + dx * t;
-      const y = y1 + dy * t;
-      ctx.lineTo(wobble(x, seed + i * 2), wobble(y, seed + i * 2 + 1));
-    }
-
-    ctx.stroke();
-  };
-
-  const drawSketchRect = (
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    seed: number = 0
-  ) => {
-    drawSketchLine(ctx, x, y, x + width, y, seed);
-    drawSketchLine(ctx, x + width, y, x + width, y + height, seed + 100);
-    drawSketchLine(ctx, x + width, y + height, x, y + height, seed + 200);
-    drawSketchLine(ctx, x, y + height, x, y, seed + 300);
-  };
-
-  const drawSketchEllipse = (
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    seed: number = 0
-  ) => {
-    const centerX = x + width / 2;
-    const centerY = y + height / 2;
-    const radiusX = width / 2;
-    const radiusY = height / 2;
-    const segments = Math.max(12, Math.ceil((radiusX + radiusY) / 10));
-
-    ctx.beginPath();
-    for (let i = 0; i <= segments; i++) {
-      const angle = (i / segments) * 2 * Math.PI;
-      const px = centerX + Math.cos(angle) * radiusX;
-      const py = centerY + Math.sin(angle) * radiusY;
-      const wobbleX = wobble(px, seed + i * 2);
-      const wobbleY = wobble(py, seed + i * 2 + 1);
-
-      if (i === 0) {
-        ctx.moveTo(wobbleX, wobbleY);
-      } else {
-        ctx.lineTo(wobbleX, wobbleY);
-      }
-    }
-    ctx.closePath();
-    ctx.stroke();
-  };
-
-  const drawSketchDiamond = (
-    ctx: CanvasRenderingContext2D,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    seed: number = 0
-  ) => {
-    const topX = x + width / 2, topY = y;
-    const rightX = x + width, rightY = y + height / 2;
-    const bottomX = x + width / 2, bottomY = y + height;
-    const leftX = x, leftY = y + height / 2;
-
-    drawSketchLine(ctx, topX, topY, rightX, rightY, seed);
-    drawSketchLine(ctx, rightX, rightY, bottomX, bottomY, seed + 1);
-    drawSketchLine(ctx, bottomX, bottomY, leftX, leftY, seed + 2);
-    drawSketchLine(ctx, leftX, leftY, topX, topY, seed + 3);
-  };
-
-  const drawFreedraw = (
-    ctx: CanvasRenderingContext2D,
-    points: { x: number; y: number }[]
-  ) => {
-    if (points.length < 2) return;
-
-    ctx.beginPath();
-    ctx.moveTo(points[0].x, points[0].y);
-
-    for (let i = 1; i < points.length - 1; i++) {
-      const xc = (points[i].x + points[i + 1].x) / 2;
-      const yc = (points[i].y + points[i + 1].y) / 2;
-      ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
-    }
-
-    if (points.length > 1) {
-      ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
-    }
-
-    ctx.stroke();
-  };
-
-  // Calculate bounding box for all elements
+  // Calculate bounding box for all elements (including component instances)
   const getBoundingBox = useCallback(() => {
-    if (elements.length === 0) {
+    const hasVisibleElements = visibleElements.length > 0;
+    const hasInstances = frameInstances.length > 0;
+
+    if (!hasVisibleElements && !hasInstances) {
       return { x: 0, y: 0, width: 800, height: 600 };
     }
 
     let minX = Infinity, minY = Infinity;
     let maxX = -Infinity, maxY = -Infinity;
 
-    elements.forEach((el) => {
+    // Include visible elements in bounds
+    visibleElements.forEach((el) => {
       minX = Math.min(minX, el.x);
       minY = Math.min(minY, el.y);
       maxX = Math.max(maxX, el.x + el.width);
       maxY = Math.max(maxY, el.y + el.height);
+    });
+
+    // Include component instances in bounds
+    frameInstances.forEach((instance) => {
+      const component = userComponents.find(c => c.id === instance.componentId);
+      if (!component) return;
+
+      minX = Math.min(minX, instance.x);
+      minY = Math.min(minY, instance.y);
+      maxX = Math.max(maxX, instance.x + component.width);
+      maxY = Math.max(maxY, instance.y + component.height);
     });
 
     // Add padding
@@ -270,7 +189,185 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
       width: maxX - minX + padding * 2,
       height: maxY - minY + padding * 2,
     };
-  }, [elements]);
+  }, [visibleElements, frameInstances, userComponents]);
+
+  // Helper function to render a single element (used by both elements and component instances)
+  const renderElement = (
+    ctx: CanvasRenderingContext2D,
+    element: CanvasElement | ComponentElementDef,
+    x: number,
+    y: number,
+    seed: number,
+    defaultSketchColor: string,
+    // For bound text vertical centering
+    allElements?: CanvasElement[],
+    offsetX?: number,
+    offsetY?: number
+  ) => {
+    // Read element-specific colors or fall back to defaults
+    const elementStrokeColor = element.style?.strokeColor || defaultSketchColor;
+    const elementFillColor = element.style?.fillColor || 'transparent';
+    ctx.strokeStyle = elementStrokeColor;
+    ctx.fillStyle = elementStrokeColor;
+
+    // Apply rotation for rotatable elements
+    const rotation = element.rotation || 0;
+    const hasRotation = rotation !== 0 && element.type !== 'arrow' && element.type !== 'line' && element.type !== 'freedraw' && element.type !== 'text';
+
+    if (hasRotation) {
+      const centerX = x + element.width / 2;
+      const centerY = y + element.height / 2;
+      ctx.save();
+      ctx.translate(centerX, centerY);
+      ctx.rotate(rotation);
+      ctx.translate(-centerX, -centerY);
+    }
+
+    if (element.type === 'rectangle') {
+      // Fill rectangle first if fill color is set
+      if (elementFillColor && elementFillColor !== 'transparent') {
+        ctx.fillStyle = elementFillColor;
+        ctx.fillRect(x, y, element.width, element.height);
+      }
+      // Then draw the stroke
+      ctx.strokeStyle = elementStrokeColor;
+      drawSketchRect(ctx, x, y, element.width, element.height, seed);
+    } else if (element.type === 'ellipse') {
+      // Fill ellipse first if fill color is set
+      if (elementFillColor && elementFillColor !== 'transparent') {
+        ctx.fillStyle = elementFillColor;
+        ctx.beginPath();
+        ctx.ellipse(
+          x + element.width / 2,
+          y + element.height / 2,
+          element.width / 2,
+          element.height / 2,
+          0, 0, Math.PI * 2
+        );
+        ctx.fill();
+      }
+      // Then draw the stroke
+      ctx.strokeStyle = elementStrokeColor;
+      drawSketchEllipse(ctx, x, y, element.width, element.height, seed);
+    } else if (element.type === 'diamond') {
+      // Fill diamond first if fill color is set
+      if (elementFillColor && elementFillColor !== 'transparent') {
+        ctx.fillStyle = elementFillColor;
+        const cx = x + element.width / 2;
+        const cy = y + element.height / 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, y); // Top
+        ctx.lineTo(x + element.width, cy); // Right
+        ctx.lineTo(cx, y + element.height); // Bottom
+        ctx.lineTo(x, cy); // Left
+        ctx.closePath();
+        ctx.fill();
+      }
+      // Then draw the stroke
+      ctx.strokeStyle = elementStrokeColor;
+      drawSketchDiamond(ctx, x, y, element.width, element.height, seed);
+    }
+
+    if (hasRotation) {
+      ctx.restore();
+    }
+
+    if (element.type === 'text') {
+      const textEl = element as TextElement;
+      const fontSize = textEl.fontSize || 16;
+      const fontWeight = textEl.fontWeight || 'normal';
+      const fontStyle = textEl.fontStyle || 'normal';
+      const textAlign = textEl.textAlign || 'left';
+      const lineHeight = textEl.lineHeight || Math.round(fontSize * 1.5);
+      const isBoundText = !!(textEl as TextElement).containerId;
+
+      ctx.font = `${fontStyle === 'italic' ? 'italic ' : ''}${fontWeight === 'bold' ? 'bold ' : ''}${fontSize}px sans-serif`;
+      ctx.textAlign = textAlign;
+      ctx.textBaseline = 'alphabetic';
+
+      let textX: number;
+      switch (textAlign) {
+        case 'center':
+          textX = x + element.width / 2;
+          break;
+        case 'right':
+          textX = x + element.width - TEXT_PADDING;
+          break;
+        default:
+          textX = x + TEXT_PADDING;
+      }
+
+      // Use element's stroke color for text fill (matches Canvas.tsx behavior)
+      ctx.fillStyle = elementStrokeColor;
+
+      // Wrap text to fit within element width
+      const maxWidth = element.width - TEXT_PADDING * 2;
+      const lines = wrapText(ctx, (textEl as TextElement).content || (element as ComponentElementDef).content || '', maxWidth);
+
+      // Calculate Y position - handle bound text vertical centering
+      let textY = y + fontSize;
+      if (isBoundText && (textEl as TextElement).verticalAlign === 'middle' && allElements && offsetX !== undefined && offsetY !== undefined) {
+        // Find the container element for vertical centering
+        const container = allElements.find(el => el.id === (textEl as TextElement).containerId);
+        if (container) {
+          const totalTextHeight = lines.length * lineHeight;
+          const containerY = container.y - offsetY;
+          textY = containerY + (container.height - totalTextHeight) / 2 + fontSize;
+        }
+      }
+
+      // Render each line of wrapped text
+      lines.forEach((line, index) => {
+        ctx.fillText(line, textX, textY + index * lineHeight);
+      });
+    } else if (element.type === 'arrow') {
+      const arrowEl = element as ArrowElement;
+      const startX = (arrowEl.startX ?? (element as ComponentElementDef).startX ?? 0) - (offsetX ?? 0);
+      const startY = (arrowEl.startY ?? (element as ComponentElementDef).startY ?? 0) - (offsetY ?? 0);
+      const endX = (arrowEl.endX ?? (element as ComponentElementDef).endX ?? 0) - (offsetX ?? 0);
+      const endY = (arrowEl.endY ?? (element as ComponentElementDef).endY ?? 0) - (offsetY ?? 0);
+
+      // For component instance elements, coordinates are already adjusted
+      const finalStartX = 'containerId' in element ? startX : x + (startX - x);
+      const finalStartY = 'containerId' in element ? startY : y + (startY - y);
+      const finalEndX = 'containerId' in element ? endX : x + (endX - x);
+      const finalEndY = 'containerId' in element ? endY : y + (endY - y);
+
+      drawSketchLine(ctx, finalStartX, finalStartY, finalEndX, finalEndY, seed);
+
+      // Draw arrowhead
+      const angle = Math.atan2(finalEndY - finalStartY, finalEndX - finalStartX);
+      const head1X = finalEndX - ARROW_HEAD_LENGTH * Math.cos(angle - Math.PI / 6);
+      const head1Y = finalEndY - ARROW_HEAD_LENGTH * Math.sin(angle - Math.PI / 6);
+      const head2X = finalEndX - ARROW_HEAD_LENGTH * Math.cos(angle + Math.PI / 6);
+      const head2Y = finalEndY - ARROW_HEAD_LENGTH * Math.sin(angle + Math.PI / 6);
+
+      drawSketchLine(ctx, finalEndX, finalEndY, head1X, head1Y, seed + 10);
+      drawSketchLine(ctx, finalEndX, finalEndY, head2X, head2Y, seed + 11);
+    } else if (element.type === 'line') {
+      const lineEl = element as LineElement;
+      const startX = (lineEl.startX ?? (element as ComponentElementDef).startX ?? 0) - (offsetX ?? 0);
+      const startY = (lineEl.startY ?? (element as ComponentElementDef).startY ?? 0) - (offsetY ?? 0);
+      const endX = (lineEl.endX ?? (element as ComponentElementDef).endX ?? 0) - (offsetX ?? 0);
+      const endY = (lineEl.endY ?? (element as ComponentElementDef).endY ?? 0) - (offsetY ?? 0);
+
+      // For component instance elements, coordinates are already adjusted
+      const finalStartX = 'containerId' in element ? startX : x + (startX - x);
+      const finalStartY = 'containerId' in element ? startY : y + (startY - y);
+      const finalEndX = 'containerId' in element ? endX : x + (endX - x);
+      const finalEndY = 'containerId' in element ? endY : y + (endY - y);
+
+      drawSketchLine(ctx, finalStartX, finalStartY, finalEndX, finalEndY, seed);
+    } else if (element.type === 'freedraw') {
+      const freedrawEl = element as FreedrawElement;
+      const points = freedrawEl.points || (element as ComponentElementDef).points || [];
+      const adjustedPoints = points.map((p) => ({
+        x: p.x - (offsetX ?? 0),
+        y: p.y - (offsetY ?? 0),
+      }));
+      drawFreedraw(ctx, adjustedPoints);
+    }
+  };
 
   // Render elements to canvas
   const renderToCanvas = useCallback((ctx: CanvasRenderingContext2D, offsetX: number, offsetY: number) => {
@@ -279,155 +376,74 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    elements.forEach((element) => {
+    // Render visible elements
+    visibleElements.forEach((element) => {
       const seed = parseInt(element.id.split('_')[1] || '0', 10) % 1000;
       const x = element.x - offsetX;
       const y = element.y - offsetY;
 
-      // Read element-specific colors or fall back to defaults
-      const elementStrokeColor = element.style?.strokeColor || defaultSketchColor;
-      const elementFillColor = element.style?.fillColor || 'transparent';
-      ctx.strokeStyle = elementStrokeColor;
-      ctx.fillStyle = elementStrokeColor;
-
-      // Apply rotation for rotatable elements
-      const rotation = element.rotation || 0;
-      const hasRotation = rotation !== 0 && element.type !== 'arrow' && element.type !== 'line' && element.type !== 'freedraw' && element.type !== 'text';
-
-      if (hasRotation) {
-        const centerX = x + element.width / 2;
-        const centerY = y + element.height / 2;
-        ctx.save();
-        ctx.translate(centerX, centerY);
-        ctx.rotate(rotation);
-        ctx.translate(-centerX, -centerY);
-      }
-
-      if (element.type === 'rectangle') {
-        // Fill rectangle first if fill color is set
-        if (elementFillColor && elementFillColor !== 'transparent') {
-          ctx.fillStyle = elementFillColor;
-          ctx.fillRect(x, y, element.width, element.height);
-        }
-        // Then draw the stroke
-        ctx.strokeStyle = elementStrokeColor;
-        drawSketchRect(ctx, x, y, element.width, element.height, seed);
-      } else if (element.type === 'ellipse') {
-        // Fill ellipse first if fill color is set
-        if (elementFillColor && elementFillColor !== 'transparent') {
-          ctx.fillStyle = elementFillColor;
-          ctx.beginPath();
-          ctx.ellipse(
-            x + element.width / 2,
-            y + element.height / 2,
-            element.width / 2,
-            element.height / 2,
-            0, 0, Math.PI * 2
-          );
-          ctx.fill();
-        }
-        // Then draw the stroke
-        ctx.strokeStyle = elementStrokeColor;
-        drawSketchEllipse(ctx, x, y, element.width, element.height, seed);
-      } else if (element.type === 'diamond') {
-        // Fill diamond first if fill color is set
-        if (elementFillColor && elementFillColor !== 'transparent') {
-          ctx.fillStyle = elementFillColor;
-          const cx = x + element.width / 2;
-          const cy = y + element.height / 2;
-          ctx.beginPath();
-          ctx.moveTo(cx, y); // Top
-          ctx.lineTo(x + element.width, cy); // Right
-          ctx.lineTo(cx, y + element.height); // Bottom
-          ctx.lineTo(x, cy); // Left
-          ctx.closePath();
-          ctx.fill();
-        }
-        // Then draw the stroke
-        ctx.strokeStyle = elementStrokeColor;
-        drawSketchDiamond(ctx, x, y, element.width, element.height, seed);
-      }
-
-      if (hasRotation) {
-        ctx.restore();
-      }
-
-      if (element.type === 'text') {
-        const textEl = element as TextElement;
-        const fontSize = textEl.fontSize || 16;
-        const fontWeight = textEl.fontWeight || 'normal';
-        const fontStyle = textEl.fontStyle || 'normal';
-        const textAlign = textEl.textAlign || 'left';
-        const lineHeight = textEl.lineHeight || Math.round(fontSize * 1.5);
-        const padding = 4; // Matches TEXT_PADDING from textMeasurement.ts
-
-        ctx.font = `${fontStyle === 'italic' ? 'italic ' : ''}${fontWeight === 'bold' ? 'bold ' : ''}${fontSize}px sans-serif`;
-        ctx.textAlign = textAlign;
-        ctx.textBaseline = 'alphabetic';
-
-        let textX: number;
-        switch (textAlign) {
-          case 'center':
-            textX = x + element.width / 2;
-            break;
-          case 'right':
-            textX = x + element.width - padding;
-            break;
-          default:
-            textX = x + padding;
-        }
-
-        // Use element's stroke color for text fill (matches Canvas.tsx behavior)
-        ctx.fillStyle = elementStrokeColor;
-
-        // Wrap text to fit within element width
-        const maxWidth = element.width - padding * 2;
-        const lines = wrapText(ctx, textEl.content || '', maxWidth);
-
-        // Render each line of wrapped text
-        lines.forEach((line, index) => {
-          ctx.fillText(line, textX, y + fontSize + index * lineHeight);
-        });
-      } else if (element.type === 'arrow') {
-        const arrowEl = element as ArrowElement;
-        const startX = arrowEl.startX - offsetX;
-        const startY = arrowEl.startY - offsetY;
-        const endX = arrowEl.endX - offsetX;
-        const endY = arrowEl.endY - offsetY;
-
-        drawSketchLine(ctx, startX, startY, endX, endY, seed);
-
-        // Draw arrowhead
-        const angle = Math.atan2(endY - startY, endX - startX);
-        const head1X = endX - ARROW_HEAD_LENGTH * Math.cos(angle - Math.PI / 6);
-        const head1Y = endY - ARROW_HEAD_LENGTH * Math.sin(angle - Math.PI / 6);
-        const head2X = endX - ARROW_HEAD_LENGTH * Math.cos(angle + Math.PI / 6);
-        const head2Y = endY - ARROW_HEAD_LENGTH * Math.sin(angle + Math.PI / 6);
-
-        drawSketchLine(ctx, endX, endY, head1X, head1Y, seed + 10);
-        drawSketchLine(ctx, endX, endY, head2X, head2Y, seed + 11);
-      } else if (element.type === 'line') {
-        const lineEl = element as LineElement;
-        const startX = lineEl.startX - offsetX;
-        const startY = lineEl.startY - offsetY;
-        const endX = lineEl.endX - offsetX;
-        const endY = lineEl.endY - offsetY;
-
-        drawSketchLine(ctx, startX, startY, endX, endY, seed);
-      } else if (element.type === 'freedraw') {
-        const freedrawEl = element as FreedrawElement;
-        const adjustedPoints = freedrawEl.points.map((p) => ({
-          x: p.x - offsetX,
-          y: p.y - offsetY,
-        }));
-        drawFreedraw(ctx, adjustedPoints);
-      }
+      renderElement(ctx, element, x, y, seed, defaultSketchColor, visibleElements, offsetX, offsetY);
     });
-  }, [elements]);
+
+    // Render component instances
+    frameInstances.forEach((instance) => {
+      const component = userComponents.find(c => c.id === instance.componentId);
+      if (!component) return;
+
+      // Draw each element from the master definition
+      component.masterElements.forEach((def) => {
+        const x = instance.x + def.offsetX - offsetX;
+        const y = instance.y + def.offsetY - offsetY;
+        const seed = parseInt(def.id.split('_')[1] || '0', 10) % 1000;
+
+        // Handle text content override for component instances
+        if (def.type === 'text') {
+          const override = instance.overrides?.find(o => o.elementId === def.id && o.property === 'content');
+          const content = override ? String(override.value) : (def.content || '');
+          const textDef = { ...def, content } as ComponentElementDef;
+          renderElement(ctx, textDef as unknown as CanvasElement, x, y, seed, defaultSketchColor);
+        } else if (def.type === 'arrow' || def.type === 'line') {
+          // For arrows and lines in component instances, calculate absolute positions
+          const startX = instance.x + (def.startX || 0) - offsetX;
+          const startY = instance.y + (def.startY || 0) - offsetY;
+          const endX = instance.x + (def.endX || 0) - offsetX;
+          const endY = instance.y + (def.endY || 0) - offsetY;
+
+          ctx.strokeStyle = def.style?.strokeColor || defaultSketchColor;
+          drawSketchLine(ctx, startX, startY, endX, endY, seed);
+
+          if (def.type === 'arrow') {
+            // Draw arrowhead
+            const angle = Math.atan2(endY - startY, endX - startX);
+            const head1X = endX - ARROW_HEAD_LENGTH * Math.cos(angle - Math.PI / 6);
+            const head1Y = endY - ARROW_HEAD_LENGTH * Math.sin(angle - Math.PI / 6);
+            const head2X = endX - ARROW_HEAD_LENGTH * Math.cos(angle + Math.PI / 6);
+            const head2Y = endY - ARROW_HEAD_LENGTH * Math.sin(angle + Math.PI / 6);
+
+            drawSketchLine(ctx, endX, endY, head1X, head1Y, seed + 10);
+            drawSketchLine(ctx, endX, endY, head2X, head2Y, seed + 11);
+          }
+        } else if (def.type === 'freedraw' && def.points) {
+          // For freedraw in component instances
+          const translatedPoints = def.points.map(p => ({
+            x: instance.x + p.x - offsetX,
+            y: instance.y + p.y - offsetY,
+          }));
+          ctx.strokeStyle = def.style?.strokeColor || defaultSketchColor;
+          drawFreedraw(ctx, translatedPoints);
+        } else {
+          renderElement(ctx, def as unknown as CanvasElement, x, y, seed, defaultSketchColor);
+        }
+      });
+    });
+  }, [visibleElements, frameInstances, userComponents]);
+
+  // Check if there's anything to export (visible elements or instances)
+  const hasExportableContent = visibleElements.length > 0 || frameInstances.length > 0;
 
   // Generate preview when dropdown opens
   useEffect(() => {
-    if (!isOpen || elements.length === 0) {
+    if (!isOpen || !hasExportableContent) {
       setPreviewDataUrl(null);
       setPreviewDimensions(null);
       return;
@@ -484,10 +500,10 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
     // Use requestAnimationFrame for smooth rendering
     const rafId = requestAnimationFrame(generatePreview);
     return () => cancelAnimationFrame(rafId);
-  }, [isOpen, elements, getBoundingBox, renderToCanvas]);
+  }, [isOpen, hasExportableContent, getBoundingBox, renderToCanvas]);
 
   const exportPNG = () => {
-    if (elements.length === 0) {
+    if (!hasExportableContent) {
       addToast({
         type: 'warning',
         title: 'Nothing to export',
@@ -539,10 +555,11 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
       link.href = canvas.toDataURL('image/png');
       link.click();
 
+      const totalItems = visibleElements.length + frameInstances.length;
       addToast({
         type: 'success',
         title: 'PNG exported',
-        message: `Exported ${elements.length} element(s) as PNG`,
+        message: `Exported ${totalItems} item(s) as PNG`,
       });
     } catch (error) {
       console.error('PNG export failed:', error);
@@ -556,8 +573,102 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
     }
   };
 
+  // Helper function to generate SVG for an element
+  const elementToSvg = (
+    element: CanvasElement | ComponentElementDef,
+    x: number,
+    y: number,
+    defaultSketchColor: string,
+    content?: string // For text content override
+  ): string => {
+    const elementStrokeColor = element.style?.strokeColor || defaultSketchColor;
+    const elementFillColor = element.style?.fillColor || 'transparent';
+    const svgFillColor = elementFillColor === 'transparent' ? 'none' : elementFillColor;
+
+    const rotation = element.rotation || 0;
+    const rotationDegrees = (rotation * 180) / Math.PI;
+    const hasRotation = rotation !== 0 && element.type !== 'arrow' && element.type !== 'line' && element.type !== 'freedraw' && element.type !== 'text';
+    const centerX = x + element.width / 2;
+    const centerY = y + element.height / 2;
+    const rotateAttr = hasRotation ? ` transform="rotate(${rotationDegrees.toFixed(2)} ${centerX.toFixed(2)} ${centerY.toFixed(2)})"` : '';
+
+    if (element.type === 'rectangle') {
+      return `    <rect x="${x}" y="${y}" width="${element.width}" height="${element.height}" stroke="${elementStrokeColor}" fill="${svgFillColor}"${rotateAttr}/>\n`;
+    } else if (element.type === 'ellipse') {
+      const cx = x + element.width / 2;
+      const cy = y + element.height / 2;
+      const rx = element.width / 2;
+      const ry = element.height / 2;
+      return `    <ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" stroke="${elementStrokeColor}" fill="${svgFillColor}"${rotateAttr}/>\n`;
+    } else if (element.type === 'diamond') {
+      const topX = x + element.width / 2;
+      const topY = y;
+      const rightX = x + element.width;
+      const rightY = y + element.height / 2;
+      const bottomX = x + element.width / 2;
+      const bottomY = y + element.height;
+      const leftX = x;
+      const leftY = y + element.height / 2;
+      return `    <polygon points="${topX},${topY} ${rightX},${rightY} ${bottomX},${bottomY} ${leftX},${leftY}" stroke="${elementStrokeColor}" fill="${svgFillColor}"${rotateAttr}/>\n`;
+    } else if (element.type === 'text') {
+      const textEl = element as TextElement;
+      const fontSize = textEl.fontSize || (element as ComponentElementDef).fontSize || 16;
+      const fontWeight = textEl.fontWeight || (element as ComponentElementDef).fontWeight || 'normal';
+      const fontStyle = textEl.fontStyle || (element as ComponentElementDef).fontStyle || 'normal';
+      const textAlign = textEl.textAlign || (element as ComponentElementDef).textAlign || 'left';
+      const lineHeight = textEl.lineHeight || (element as ComponentElementDef).lineHeight || Math.round(fontSize * 1.5);
+      const textContent = content ?? (textEl.content || (element as ComponentElementDef).content || '');
+
+      let textX: number;
+      let anchor: string;
+      switch (textAlign) {
+        case 'center':
+          textX = x + element.width / 2;
+          anchor = 'middle';
+          break;
+        case 'right':
+          textX = x + element.width - TEXT_PADDING;
+          anchor = 'end';
+          break;
+        default:
+          textX = x + TEXT_PADDING;
+          anchor = 'start';
+      }
+
+      const style = `font-size:${fontSize}px;font-weight:${fontWeight};font-style:${fontStyle};font-family:sans-serif`;
+
+      // Create offscreen canvas to measure text for wrapping
+      const measureCanvas = document.createElement('canvas');
+      const measureCtx = measureCanvas.getContext('2d');
+      let lines: string[] = [textContent];
+
+      if (measureCtx) {
+        measureCtx.font = `${fontStyle === 'italic' ? 'italic ' : ''}${fontWeight === 'bold' ? 'bold ' : ''}${fontSize}px sans-serif`;
+        const maxWidth = element.width - TEXT_PADDING * 2;
+        lines = wrapText(measureCtx, textContent, maxWidth);
+      }
+
+      // Build SVG text element with tspan for each line
+      const textY = y + fontSize;
+      const escapeLine = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+      if (lines.length === 1) {
+        return `    <text x="${textX}" y="${textY}" fill="${elementStrokeColor}" text-anchor="${anchor}" style="${style}">${escapeLine(lines[0])}</text>\n`;
+      } else {
+        let result = `    <text x="${textX}" y="${textY}" fill="${elementStrokeColor}" text-anchor="${anchor}" style="${style}">\n`;
+        lines.forEach((line, index) => {
+          const dy = index === 0 ? 0 : lineHeight;
+          result += `      <tspan x="${textX}" dy="${dy}">${escapeLine(line)}</tspan>\n`;
+        });
+        result += `    </text>\n`;
+        return result;
+      }
+    }
+    return '';
+  };
+
   const exportSVG = () => {
-    if (elements.length === 0) {
+    if (!hasExportableContent) {
       addToast({
         type: 'warning',
         title: 'Nothing to export',
@@ -576,100 +687,18 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
   <g stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
 `;
 
-      elements.forEach((element) => {
+      // Render visible elements
+      visibleElements.forEach((element) => {
         const x = element.x - bounds.x;
         const y = element.y - bounds.y;
 
-        // Read element-specific colors or fall back to defaults
-        const elementStrokeColor = element.style?.strokeColor || defaultSketchColor;
-        const elementFillColor = element.style?.fillColor || 'transparent';
-        // SVG uses "none" for transparent fill
-        const svgFillColor = elementFillColor === 'transparent' ? 'none' : elementFillColor;
-
-        // Calculate rotation transform for SVG
-        const rotation = element.rotation || 0;
-        const rotationDegrees = (rotation * 180) / Math.PI;
-        const hasRotation = rotation !== 0 && element.type !== 'arrow' && element.type !== 'line' && element.type !== 'freedraw' && element.type !== 'text';
-        const centerX = x + element.width / 2;
-        const centerY = y + element.height / 2;
-        const rotateAttr = hasRotation ? ` transform="rotate(${rotationDegrees.toFixed(2)} ${centerX.toFixed(2)} ${centerY.toFixed(2)})"` : '';
-
-        if (element.type === 'rectangle') {
-          svgContent += `    <rect x="${x}" y="${y}" width="${element.width}" height="${element.height}" stroke="${elementStrokeColor}" fill="${svgFillColor}"${rotateAttr}/>\n`;
-        } else if (element.type === 'ellipse') {
-          const cx = x + element.width / 2;
-          const cy = y + element.height / 2;
-          const rx = element.width / 2;
-          const ry = element.height / 2;
-          svgContent += `    <ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" stroke="${elementStrokeColor}" fill="${svgFillColor}"${rotateAttr}/>\n`;
-        } else if (element.type === 'diamond') {
-          const topX = x + element.width / 2;
-          const topY = y;
-          const rightX = x + element.width;
-          const rightY = y + element.height / 2;
-          const bottomX = x + element.width / 2;
-          const bottomY = y + element.height;
-          const leftX = x;
-          const leftY = y + element.height / 2;
-          svgContent += `    <polygon points="${topX},${topY} ${rightX},${rightY} ${bottomX},${bottomY} ${leftX},${leftY}" stroke="${elementStrokeColor}" fill="${svgFillColor}"${rotateAttr}/>\n`;
-        } else if (element.type === 'text') {
-          const textEl = element as TextElement;
-          const fontSize = textEl.fontSize || 16;
-          const fontWeight = textEl.fontWeight || 'normal';
-          const fontStyle = textEl.fontStyle || 'normal';
-          const textAlign = textEl.textAlign || 'left';
-          const lineHeight = textEl.lineHeight || Math.round(fontSize * 1.5);
-          const padding = 4; // Matches TEXT_PADDING from textMeasurement.ts
-
-          let textX: number;
-          let anchor: string;
-          switch (textAlign) {
-            case 'center':
-              textX = x + element.width / 2;
-              anchor = 'middle';
-              break;
-            case 'right':
-              textX = x + element.width - padding;
-              anchor = 'end';
-              break;
-            default:
-              textX = x + padding;
-              anchor = 'start';
-          }
-
-          const style = `font-size:${fontSize}px;font-weight:${fontWeight};font-style:${fontStyle};font-family:sans-serif`;
-
-          // Create offscreen canvas to measure text for wrapping
-          const measureCanvas = document.createElement('canvas');
-          const measureCtx = measureCanvas.getContext('2d');
-          let lines: string[] = [textEl.content || ''];
-
-          if (measureCtx) {
-            measureCtx.font = `${fontStyle === 'italic' ? 'italic ' : ''}${fontWeight === 'bold' ? 'bold ' : ''}${fontSize}px sans-serif`;
-            const maxWidth = element.width - padding * 2;
-            lines = wrapText(measureCtx, textEl.content || '', maxWidth);
-          }
-
-          // Build SVG text element with tspan for each line
-          const textY = y + fontSize;
-          const escapeLine = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-
-          if (lines.length === 1) {
-            svgContent += `    <text x="${textX}" y="${textY}" fill="${elementStrokeColor}" text-anchor="${anchor}" style="${style}">${escapeLine(lines[0])}</text>\n`;
-          } else {
-            svgContent += `    <text x="${textX}" y="${textY}" fill="${elementStrokeColor}" text-anchor="${anchor}" style="${style}">\n`;
-            lines.forEach((line, index) => {
-              const dy = index === 0 ? 0 : lineHeight;
-              svgContent += `      <tspan x="${textX}" dy="${dy}">${escapeLine(line)}</tspan>\n`;
-            });
-            svgContent += `    </text>\n`;
-          }
-        } else if (element.type === 'arrow') {
+        if (element.type === 'arrow') {
           const arrowEl = element as ArrowElement;
           const startX = arrowEl.startX - bounds.x;
           const startY = arrowEl.startY - bounds.y;
           const endX = arrowEl.endX - bounds.x;
           const endY = arrowEl.endY - bounds.y;
+          const elementStrokeColor = element.style?.strokeColor || defaultSketchColor;
 
           svgContent += `    <line x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}" stroke="${elementStrokeColor}"/>\n`;
 
@@ -688,11 +717,13 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
           const startY = lineEl.startY - bounds.y;
           const endX = lineEl.endX - bounds.x;
           const endY = lineEl.endY - bounds.y;
+          const elementStrokeColor = element.style?.strokeColor || defaultSketchColor;
 
           svgContent += `    <line x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}" stroke="${elementStrokeColor}"/>\n`;
         } else if (element.type === 'freedraw') {
           const freedrawEl = element as FreedrawElement;
           if (freedrawEl.points.length >= 2) {
+            const elementStrokeColor = element.style?.strokeColor || defaultSketchColor;
             const pathPoints = freedrawEl.points.map((p, i) => {
               const px = p.x - bounds.x;
               const py = p.y - bounds.y;
@@ -700,7 +731,59 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
             }).join(' ');
             svgContent += `    <path d="${pathPoints}" stroke="${elementStrokeColor}" fill="none"/>\n`;
           }
+        } else {
+          svgContent += elementToSvg(element, x, y, defaultSketchColor);
         }
+      });
+
+      // Render component instances
+      frameInstances.forEach((instance) => {
+        const component = userComponents.find(c => c.id === instance.componentId);
+        if (!component) return;
+
+        component.masterElements.forEach((def) => {
+          const x = instance.x + def.offsetX - bounds.x;
+          const y = instance.y + def.offsetY - bounds.y;
+          const elementStrokeColor = def.style?.strokeColor || defaultSketchColor;
+
+          if (def.type === 'text') {
+            const override = instance.overrides?.find(o => o.elementId === def.id && o.property === 'content');
+            const content = override ? String(override.value) : (def.content || '');
+            svgContent += elementToSvg(def as unknown as CanvasElement, x, y, defaultSketchColor, content);
+          } else if (def.type === 'arrow') {
+            const startX = instance.x + (def.startX || 0) - bounds.x;
+            const startY = instance.y + (def.startY || 0) - bounds.y;
+            const endX = instance.x + (def.endX || 0) - bounds.x;
+            const endY = instance.y + (def.endY || 0) - bounds.y;
+
+            svgContent += `    <line x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}" stroke="${elementStrokeColor}"/>\n`;
+
+            const angle = Math.atan2(endY - startY, endX - startX);
+            const head1X = endX - ARROW_HEAD_LENGTH * Math.cos(angle - Math.PI / 6);
+            const head1Y = endY - ARROW_HEAD_LENGTH * Math.sin(angle - Math.PI / 6);
+            const head2X = endX - ARROW_HEAD_LENGTH * Math.cos(angle + Math.PI / 6);
+            const head2Y = endY - ARROW_HEAD_LENGTH * Math.sin(angle + Math.PI / 6);
+
+            svgContent += `    <line x1="${endX}" y1="${endY}" x2="${head1X}" y2="${head1Y}" stroke="${elementStrokeColor}"/>\n`;
+            svgContent += `    <line x1="${endX}" y1="${endY}" x2="${head2X}" y2="${head2Y}" stroke="${elementStrokeColor}"/>\n`;
+          } else if (def.type === 'line') {
+            const startX = instance.x + (def.startX || 0) - bounds.x;
+            const startY = instance.y + (def.startY || 0) - bounds.y;
+            const endX = instance.x + (def.endX || 0) - bounds.x;
+            const endY = instance.y + (def.endY || 0) - bounds.y;
+
+            svgContent += `    <line x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}" stroke="${elementStrokeColor}"/>\n`;
+          } else if (def.type === 'freedraw' && def.points) {
+            const pathPoints = def.points.map((p, i) => {
+              const px = instance.x + p.x - bounds.x;
+              const py = instance.y + p.y - bounds.y;
+              return i === 0 ? `M${px},${py}` : `L${px},${py}`;
+            }).join(' ');
+            svgContent += `    <path d="${pathPoints}" stroke="${elementStrokeColor}" fill="none"/>\n`;
+          } else {
+            svgContent += elementToSvg(def as unknown as CanvasElement, x, y, defaultSketchColor);
+          }
+        });
       });
 
       svgContent += `  </g>
@@ -715,10 +798,11 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
       link.click();
       URL.revokeObjectURL(url);
 
+      const totalItems = visibleElements.length + frameInstances.length;
       addToast({
         type: 'success',
         title: 'SVG exported',
-        message: `Exported ${elements.length} element(s) as SVG`,
+        message: `Exported ${totalItems} item(s) as SVG`,
       });
     } catch (error) {
       console.error('SVG export failed:', error);
@@ -775,7 +859,7 @@ export function ImageExport({ elements, frameName }: ImageExportProps) {
                 />
               </div>
             </div>
-          ) : elements.length === 0 ? (
+          ) : !hasExportableContent ? (
             <div className="p-3 border-b border-zinc-200 dark:border-zinc-700">
               <div className="text-xs text-zinc-500 dark:text-zinc-400 text-center">
                 No elements to export
