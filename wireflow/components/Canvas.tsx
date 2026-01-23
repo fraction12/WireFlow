@@ -4618,15 +4618,29 @@ export function Canvas() {
     // Prevent grouping elements from different frames (currently all elements are from active frame)
     // This is automatically enforced since we only work with elements from activeFrame
 
+    // Collect bound text elements for selected containers
+    const boundTextIds = new Set<string>();
+    selectedElements.forEach((el) => {
+      if (isContainerElement(el) && el.boundElements) {
+        el.boundElements.forEach((be) => {
+          if (be.type === 'text') {
+            boundTextIds.add(be.id);
+          }
+        });
+      }
+    });
+
     recordSnapshot(); // Record for undo
 
     const groupId = generateElementGroupId();
-    const elementIds = Array.from(selectedElementIds);
+    const elementIds = [...Array.from(selectedElementIds), ...Array.from(boundTextIds)];
 
-    // Update elements with group reference
+    // Update elements with group reference (including bound text)
     setElements(
       elements.map((el) =>
-        selectedElementIds.has(el.id) ? { ...el, elementGroupId: groupId } : el,
+        selectedElementIds.has(el.id) || boundTextIds.has(el.id)
+          ? { ...el, elementGroupId: groupId }
+          : el,
       ),
     );
 
