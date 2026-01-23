@@ -191,19 +191,24 @@ export function Canvas() {
   const elements = activeFrame?.elements || [];
 
   // Wrapper to update active frame's elements
+  // Uses functional update to avoid stale closure issues with frames
   const setElements = (
     newElements: CanvasElement[] | ((prev: CanvasElement[]) => CanvasElement[]),
   ) => {
-    const elementsArray =
-      typeof newElements === "function" ? newElements(elements) : newElements;
+    setFrames((prevFrames) => {
+      // Find the current active frame to get its elements
+      const currentFrame = prevFrames.find((f) => f.id === activeFrameId);
+      const currentElements = currentFrame?.elements || [];
 
-    setFrames(
-      frames.map((frame) =>
+      const elementsArray =
+        typeof newElements === "function" ? newElements(currentElements) : newElements;
+
+      return prevFrames.map((frame) =>
         frame.id === activeFrameId
           ? { ...frame, elements: elementsArray }
           : frame,
-      ),
-    );
+      );
+    });
   };
 
   // Tool and interaction state
@@ -823,7 +828,8 @@ export function Canvas() {
         elements: [],
         createdAt: new Date().toISOString(),
       };
-      setFrames([...frames, newFrame]);
+      // Uses functional update to avoid stale closure issues
+      setFrames((prevFrames) => [...prevFrames, newFrame]);
       return newFrame.id;
     },
     createComponentGroup: (templateType: string, x: number, y: number) => {
@@ -2842,6 +2848,25 @@ export function Canvas() {
 
           setSelectedElementIds((prev) => {
             const newSet = new Set(prev);
+
+            // CRITICAL FIX: If there's already a selectedElementId (from a previous single-click)
+            // that's not in selectedElementIds, include it in the multi-selection.
+            // This ensures the first selected element is part of the group when grouping.
+            if (selectedElementId && !newSet.has(selectedElementId)) {
+              // Check if the primary selected element is in a group, include all group members
+              const primaryElement = elements.find(el => el.id === selectedElementId);
+              if (primaryElement?.elementGroupId) {
+                const primaryGroup = elementGroups.find(g => g.id === primaryElement.elementGroupId);
+                if (primaryGroup) {
+                  primaryGroup.elementIds.forEach(id => newSet.add(id));
+                } else {
+                  newSet.add(selectedElementId);
+                }
+              } else {
+                newSet.add(selectedElementId);
+              }
+            }
+
             // If the clicked element (or any in its group) is already selected, remove them
             const alreadySelected = idsToToggle.some((id) => newSet.has(id));
             if (alreadySelected) {
@@ -4212,16 +4237,21 @@ export function Canvas() {
 
   // Frame management handlers
   const handleCreateFrame = (type: FrameType) => {
-    const newFrame: Frame = {
-      id: generateFrameId(),
-      name: `${type.charAt(0).toUpperCase() + type.slice(1)} ${frames.length + 1}`,
-      type,
-      elements: [],
-      createdAt: new Date().toISOString(),
-    };
+    const frameId = generateFrameId();
+    const createdAt = new Date().toISOString();
 
-    setFrames([...frames, newFrame]);
-    setActiveFrameId(newFrame.id); // Auto-switch to new frame
+    // Uses functional update to avoid stale closure issues
+    setFrames((prevFrames) => {
+      const newFrame: Frame = {
+        id: frameId,
+        name: `${type.charAt(0).toUpperCase() + type.slice(1)} ${prevFrames.length + 1}`,
+        type,
+        elements: [],
+        createdAt,
+      };
+      return [...prevFrames, newFrame];
+    });
+    setActiveFrameId(frameId); // Auto-switch to new frame
   };
 
   const handleSwitchFrame = (frameId: string) => {
@@ -4234,8 +4264,9 @@ export function Canvas() {
   };
 
   const handleRenameFrame = (frameId: string, newName: string) => {
-    setFrames(
-      frames.map((frame) =>
+    // Uses functional update to avoid stale closure issues
+    setFrames((prevFrames) =>
+      prevFrames.map((frame) =>
         frame.id === frameId ? { ...frame, name: newName } : frame,
       ),
     );
@@ -4252,25 +4283,34 @@ export function Canvas() {
       return;
     }
 
-    const newFrames = frames.filter((f) => f.id !== frameId);
-    setFrames(newFrames);
+    // Uses functional update to avoid stale closure issues
+    setFrames((prevFrames) => {
+      const newFrames = prevFrames.filter((f) => f.id !== frameId);
 
-    // Safety: If deleted active frame, switch to first frame (with bounds check)
-    if (frameId === activeFrameId && newFrames.length > 0) {
-      setActiveFrameId(newFrames[0].id);
-    }
+      // Safety: If deleted active frame, switch to first frame (with bounds check)
+      if (frameId === activeFrameId && newFrames.length > 0) {
+        // Schedule the active frame change for after this update
+        setTimeout(() => setActiveFrameId(newFrames[0].id), 0);
+      }
+
+      return newFrames;
+    });
   };
 
   // Handler for reordering frames via drag-drop
   const handleReorderFrames = (fromIndex: number, toIndex: number) => {
     if (fromIndex === toIndex) return;
-    if (fromIndex < 0 || fromIndex >= frames.length) return;
-    if (toIndex < 0 || toIndex >= frames.length) return;
 
-    const newFrames = [...frames];
-    const [movedFrame] = newFrames.splice(fromIndex, 1);
-    newFrames.splice(toIndex, 0, movedFrame);
-    setFrames(newFrames);
+    // Uses functional update to avoid stale closure issues
+    setFrames((prevFrames) => {
+      if (fromIndex < 0 || fromIndex >= prevFrames.length) return prevFrames;
+      if (toIndex < 0 || toIndex >= prevFrames.length) return prevFrames;
+
+      const newFrames = [...prevFrames];
+      const [movedFrame] = newFrames.splice(fromIndex, 1);
+      newFrames.splice(toIndex, 0, movedFrame);
+      return newFrames;
+    });
   };
 
   // Handler for frame deletion request (shows confirm dialog)
@@ -4659,11 +4699,12 @@ export function Canvas() {
   }, [selectedElementIds, elements, recordSnapshot, activeFrameId, elementGroups]);
 
   // Ungroup a user-created element group
+  // Uses functional updates to avoid stale closure issues when called from confirmation dialogs
   const ungroupElements = useCallback((elementGroupId: string) => {
     recordSnapshot(); // Record for undo
     // Remove group reference from all elements
-    setElements(
-      elements.map((el) =>
+    setElements(prev =>
+      prev.map((el) =>
         el.elementGroupId === elementGroupId
           ? { ...el, elementGroupId: undefined }
           : el,
@@ -4671,28 +4712,30 @@ export function Canvas() {
     );
 
     // Remove the group record
-    setElementGroups(elementGroups.filter((grp) => grp.id !== elementGroupId));
+    setElementGroups(prev => prev.filter((grp) => grp.id !== elementGroupId));
 
     // Keep elements selected individually
     // selectedElementIds remains unchanged
-  }, [recordSnapshot, elements, elementGroups]);
+  }, [recordSnapshot]);
 
   // Delete all elements in a user-created element group
+  // Uses functional updates to avoid stale closure issues when called from confirmation dialogs
   const deleteElementGroup = useCallback((elementGroupId: string) => {
     recordSnapshot(); // Record for undo
-    setElements(elements.filter((el) => el.elementGroupId !== elementGroupId));
-    setElementGroups(elementGroups.filter((grp) => grp.id !== elementGroupId));
+    setElements(prev => prev.filter((el) => el.elementGroupId !== elementGroupId));
+    setElementGroups(prev => prev.filter((grp) => grp.id !== elementGroupId));
 
     // Clear selections
     setSelectedElementIds(new Set());
     setSelectedElementId(null);
-  }, [recordSnapshot, elements, elementGroups]);
+  }, [recordSnapshot]);
 
+  // Uses functional updates to avoid stale closure issues when called from confirmation dialogs
   const ungroupComponent = useCallback((groupId: string) => {
     recordSnapshot(); // Record for undo
     // Remove group reference from all elements
-    setElements(
-      elements.map((el) =>
+    setElements(prev =>
+      prev.map((el) =>
         el.groupId === groupId
           ? { ...el, groupId: undefined, componentType: undefined }
           : el,
@@ -4700,23 +4743,22 @@ export function Canvas() {
     );
 
     // Remove group
-    setComponentGroups(componentGroups.filter((grp) => grp.id !== groupId));
+    setComponentGroups(prev => prev.filter((grp) => grp.id !== groupId));
 
     // Clear group selection
-    if (selectedGroupId === groupId) {
-      setSelectedGroupId(null);
-    }
-  }, [recordSnapshot, elements, componentGroups, selectedGroupId]);
+    setSelectedGroupId(currentId => currentId === groupId ? null : currentId);
+  }, [recordSnapshot]);
 
+  // Uses functional updates to avoid stale closure issues when called from confirmation dialogs
   const deleteGroup = useCallback((groupId: string) => {
     recordSnapshot(); // Record for undo
-    setElements(elements.filter((el) => el.groupId !== groupId));
-    setComponentGroups(componentGroups.filter((grp) => grp.id !== groupId));
+    setElements(prev => prev.filter((el) => el.groupId !== groupId));
+    setComponentGroups(prev => prev.filter((grp) => grp.id !== groupId));
 
     // Clear selections
     setSelectedGroupId(null);
     setSelectedElementId(null);
-  }, [recordSnapshot, elements, componentGroups]);
+  }, [recordSnapshot]);
 
   // Generate unique user component ID
   const generateUserComponentId = () =>
@@ -4841,10 +4883,11 @@ export function Canvas() {
     };
 
     // Remove the original elements from the canvas
-    setElements(elements.filter(el => el.elementGroupId !== elementGroupId));
+    // Use functional update to avoid stale closure issues
+    setElements(prev => prev.filter(el => el.elementGroupId !== elementGroupId));
 
     // Remove the element group record
-    setElementGroups(elementGroups.filter(g => g.id !== elementGroupId));
+    setElementGroups(prev => prev.filter(g => g.id !== elementGroupId));
 
     // Add the new component to the library
     setUserComponents([...userComponents, newComponent]);
@@ -5918,41 +5961,47 @@ export function Canvas() {
   // ============================================================================
 
   // Handler for changing frame notes
+  // Uses functional update to avoid stale closure issues
   const handleFrameNotesChange = (notes: string) => {
-    setFrames(frames.map(frame => {
-      if (frame.id === activeFrameId) {
-        return {
-          ...frame,
-          documentation: {
-            ...frame.documentation,
-            notes,
-            elementAnnotations: frame.documentation?.elementAnnotations || {},
-          },
-        };
-      }
-      return frame;
-    }));
+    setFrames((prevFrames) =>
+      prevFrames.map(frame => {
+        if (frame.id === activeFrameId) {
+          return {
+            ...frame,
+            documentation: {
+              ...frame.documentation,
+              notes,
+              elementAnnotations: frame.documentation?.elementAnnotations || {},
+            },
+          };
+        }
+        return frame;
+      })
+    );
   };
 
   // Handler for changing element annotation
+  // Uses functional update to avoid stale closure issues
   const handleElementAnnotationChange = (annotation: ElementAnnotation) => {
     if (!selectedElementId) return;
 
-    setFrames(frames.map(frame => {
-      if (frame.id === activeFrameId) {
-        return {
-          ...frame,
-          documentation: {
-            notes: frame.documentation?.notes || '',
-            elementAnnotations: {
-              ...frame.documentation?.elementAnnotations,
-              [selectedElementId]: annotation,
+    setFrames((prevFrames) =>
+      prevFrames.map(frame => {
+        if (frame.id === activeFrameId) {
+          return {
+            ...frame,
+            documentation: {
+              notes: frame.documentation?.notes || '',
+              elementAnnotations: {
+                ...frame.documentation?.elementAnnotations,
+                [selectedElementId]: annotation,
+              },
             },
-          },
-        };
-      }
-      return frame;
-    }));
+          };
+        }
+        return frame;
+      })
+    );
   };
 
   // Get current element annotation
