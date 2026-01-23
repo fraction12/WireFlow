@@ -72,6 +72,14 @@ interface LayersPanelProps {
   onReorderInstances: (fromIndex: number, toIndex: number) => void;
   /** Callback when instance is deleted */
   onDeleteInstance: (instanceId: string) => void;
+  /** Callback when element group visibility is toggled */
+  onToggleGroupVisibility: (groupId: string) => void;
+  /** Callback when element group lock is toggled */
+  onToggleGroupLock: (groupId: string) => void;
+  /** Callback when element group name is changed */
+  onRenameGroup: (groupId: string, newName: string) => void;
+  /** Callback when element groups are reordered via drag-drop */
+  onReorderGroups: (fromIndex: number, toIndex: number) => void;
 }
 
 // Element type to icon mapping
@@ -123,6 +131,9 @@ function getGroupDisplayName(
   groupElements: CanvasElement[],
   allElementGroups: ElementGroup[]
 ): string {
+  // Use custom name if set
+  if (group.name) return group.name;
+
   // Try to derive name from first element with a custom name
   const firstNamedElement = groupElements.find(el => el.name);
   if (firstNamedElement?.name) {
@@ -170,6 +181,10 @@ export function LayersPanel({
   onRenameInstance,
   onReorderInstances,
   onDeleteInstance,
+  onToggleGroupVisibility,
+  onToggleGroupLock,
+  onRenameGroup,
+  onReorderGroups,
 }: LayersPanelProps) {
   // Manage content visibility timing for smooth animation
   const contentVisible = usePanelAnimation(isExpanded);
@@ -177,9 +192,10 @@ export function LayersPanel({
   // Editing state for inline rename
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
-  const [editingType, setEditingType] = useState<'element' | 'instance'>('element');
+  const [editingType, setEditingType] = useState<'element' | 'instance' | 'group'>('element');
   const inputRef = useRef<HTMLInputElement>(null);
   const instanceInputRef = useRef<HTMLInputElement>(null);
+  const groupInputRef = useRef<HTMLInputElement>(null);
 
   // Drag-drop state
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -215,6 +231,9 @@ export function LayersPanel({
       } else if (editingType === 'instance' && instanceInputRef.current) {
         instanceInputRef.current.focus();
         instanceInputRef.current.select();
+      } else if (editingType === 'group' && groupInputRef.current) {
+        groupInputRef.current.focus();
+        groupInputRef.current.select();
       }
     }
   }, [editingId, editingType]);
@@ -235,18 +254,28 @@ export function LayersPanel({
     setEditingType('instance');
   }, []);
 
+  // Start editing group name
+  const startEditingGroup = useCallback((group: ElementGroup, groupElements: CanvasElement[], e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingId(group.id);
+    setEditingName(group.name || getGroupDisplayName(group, groupElements, elementGroups));
+    setEditingType('group');
+  }, [elementGroups]);
+
   // Save edited name
   const saveEdit = useCallback(() => {
     if (editingId) {
       if (editingType === 'element') {
         onRenameElement(editingId, editingName);
-      } else {
+      } else if (editingType === 'instance') {
         onRenameInstance(editingId, editingName);
+      } else if (editingType === 'group') {
+        onRenameGroup(editingId, editingName);
       }
       setEditingId(null);
       setEditingName('');
     }
-  }, [editingId, editingName, editingType, onRenameElement, onRenameInstance]);
+  }, [editingId, editingName, editingType, onRenameElement, onRenameInstance, onRenameGroup]);
 
   // Cancel editing
   const cancelEdit = useCallback(() => {
@@ -369,6 +398,61 @@ export function LayersPanel({
     setDraggedInstanceIndex(null);
     setDropInstanceTargetIndex(null);
     setDropInstancePosition('above');
+    document.body.classList.remove('dragging-layer');
+  }, []);
+
+  // Group drag-drop state
+  const [draggedGroupIndex, setDraggedGroupIndex] = useState<number | null>(null);
+  const [dropGroupTargetIndex, setDropGroupTargetIndex] = useState<number | null>(null);
+  const [dropGroupPosition, setDropGroupPosition] = useState<'above' | 'below'>('above');
+
+  // Group drag handlers
+  const handleGroupDragStart = useCallback((groupIndex: number) => (e: React.DragEvent) => {
+    setDraggedGroupIndex(groupIndex);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', `group:${groupIndex}`);
+    document.body.classList.add('dragging-layer');
+  }, []);
+
+  const handleGroupDragOver = useCallback((groupIndex: number) => (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDropGroupTargetIndex(groupIndex);
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midpoint = rect.top + rect.height / 2;
+    setDropGroupPosition(e.clientY < midpoint ? 'above' : 'below');
+  }, []);
+
+  const handleGroupDragLeave = useCallback(() => {
+    setDropGroupTargetIndex(null);
+    setDropGroupPosition('above');
+  }, []);
+
+  const handleGroupDrop = useCallback((toGroupIndex: number, position: 'above' | 'below' = dropGroupPosition) => (e: React.DragEvent) => {
+    e.preventDefault();
+    if (draggedGroupIndex !== null && draggedGroupIndex !== toGroupIndex) {
+      let actualToIndex = toGroupIndex;
+
+      // Adjust target index based on drop position
+      if (position === 'below') {
+        actualToIndex = Math.min(elementGroups.length - 1, actualToIndex + 1);
+      }
+
+      if (draggedGroupIndex !== actualToIndex) {
+        onReorderGroups(draggedGroupIndex, actualToIndex);
+      }
+    }
+    setDraggedGroupIndex(null);
+    setDropGroupTargetIndex(null);
+    setDropGroupPosition('above');
+    document.body.classList.remove('dragging-layer');
+  }, [draggedGroupIndex, dropGroupPosition, elementGroups.length, onReorderGroups]);
+
+  const handleGroupDragEnd = useCallback(() => {
+    setDraggedGroupIndex(null);
+    setDropGroupTargetIndex(null);
+    setDropGroupPosition('above');
     document.body.classList.remove('dragging-layer');
   }, []);
 
@@ -633,20 +717,19 @@ export function LayersPanel({
   };
 
   // Render a group header
-  const renderGroupHeader = (
+  // Render a component group header (read-only, no interactions beyond collapse/select)
+  const renderComponentGroupHeader = (
     groupId: string,
-    groupType: 'component' | 'element',
     name: string,
     elementCount: number,
     isAllSelected: boolean
   ) => {
     const isCollapsed = collapsedGroups.has(groupId);
-    const GroupIcon = groupType === 'component' ? Component : Folder;
 
     return (
       <div
         key={groupId}
-        onClick={() => onSelectGroup(groupId, groupType)}
+        onClick={() => onSelectGroup(groupId, 'component')}
         className={`
           group flex items-center gap-2 px-2 py-2 border-b border-zinc-100 dark:border-zinc-800
           transition-all duration-150 cursor-pointer
@@ -657,7 +740,7 @@ export function LayersPanel({
         `}
         role="treeitem"
         aria-expanded={!isCollapsed}
-        aria-label={`${groupType === 'component' ? 'Component' : 'Group'}: ${name} (${elementCount} elements)`}
+        aria-label={`Component: ${name} (${elementCount} elements)`}
       >
         {/* Collapse toggle */}
         <button
@@ -673,8 +756,8 @@ export function LayersPanel({
         </button>
 
         {/* Group icon */}
-        <div className={`flex-shrink-0 ${groupType === 'component' ? 'text-purple-500 dark:text-purple-400' : 'text-amber-500 dark:text-amber-400'}`}>
-          <GroupIcon size={16} />
+        <div className="flex-shrink-0 text-purple-500 dark:text-purple-400">
+          <Component size={16} />
         </div>
 
         {/* Group name */}
@@ -686,6 +769,162 @@ export function LayersPanel({
             {elementCount}
           </span>
         </div>
+      </div>
+    );
+  };
+
+  // Render an element group row with full interactions (visibility, lock, rename, drag-drop)
+  const renderElementGroupRow = (
+    group: ElementGroup,
+    groupElements: CanvasElement[],
+    groupIndex: number,
+    isAllSelected: boolean
+  ) => {
+    const isCollapsed = collapsedGroups.has(group.id);
+    const isEditing = group.id === editingId && editingType === 'group';
+    const isHidden = group.visible === false;
+    const isLocked = group.locked === true;
+    const isDragging = groupIndex === draggedGroupIndex;
+    const isDropTarget = groupIndex === dropGroupTargetIndex && draggedGroupIndex !== null && groupIndex !== draggedGroupIndex;
+    const isDropAbove = isDropTarget && dropGroupPosition === 'above';
+    const isDropBelow = isDropTarget && dropGroupPosition === 'below';
+    const displayName = getGroupDisplayName(group, groupElements, elementGroups);
+
+    return (
+      <div
+        key={group.id}
+        draggable={!isEditing}
+        onDragStart={handleGroupDragStart(groupIndex)}
+        onDragOver={handleGroupDragOver(groupIndex)}
+        onDragLeave={handleGroupDragLeave}
+        onDrop={handleGroupDrop(groupIndex)}
+        onDragEnd={handleGroupDragEnd}
+        onClick={() => !isEditing && onSelectGroup(group.id, 'element')}
+        className={`
+          group flex items-center gap-2 px-2 py-1.5 border-b border-zinc-100 dark:border-zinc-800
+          transition-all duration-150 cursor-pointer
+          ${isAllSelected
+            ? 'bg-amber-50 dark:bg-amber-950 border-l-4 border-l-amber-500'
+            : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/50 border-l-4 border-l-transparent'
+          }
+          ${isHidden ? 'opacity-50' : ''}
+          ${isDragging ? 'opacity-50 bg-zinc-100 dark:bg-zinc-800' : ''}
+          ${isDropAbove ? 'border-t-2 border-t-amber-500' : ''}
+          ${isDropBelow ? 'border-b-2 border-b-amber-500' : ''}
+        `}
+        role="treeitem"
+        tabIndex={0}
+        aria-expanded={!isCollapsed}
+        aria-selected={isAllSelected}
+        aria-label={`Group: ${displayName} (${groupElements.length} elements)${isHidden ? ', hidden' : ''}${isLocked ? ', locked' : ''}`}
+      >
+        {/* Drag handle */}
+        <div
+          className="flex-shrink-0 cursor-grab active:cursor-grabbing text-zinc-400 dark:text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity"
+          aria-label="Drag to reorder"
+        >
+          <GripVertical size={14} />
+        </div>
+
+        {/* Collapse toggle */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleGroupCollapse(group.id);
+          }}
+          className="flex-shrink-0 p-0.5 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+          aria-label={isCollapsed ? 'Expand group' : 'Collapse group'}
+        >
+          {isCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+        </button>
+
+        {/* Group icon */}
+        <div className="flex-shrink-0 text-amber-500 dark:text-amber-400">
+          <Folder size={16} />
+        </div>
+
+        {/* Group name (editable) */}
+        <div className="flex-1 min-w-0">
+          {isEditing ? (
+            <input
+              ref={groupInputRef}
+              type="text"
+              value={editingName}
+              onChange={(e) => setEditingName(e.target.value)}
+              onBlur={saveEdit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') saveEdit();
+                if (e.key === 'Escape') cancelEdit();
+                e.stopPropagation();
+              }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full text-sm px-1 py-0.5 border border-amber-500 rounded bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+              aria-label="Edit group name"
+            />
+          ) : (
+            <button
+              type="button"
+              className="w-full flex items-center gap-1 text-left text-sm text-zinc-700 dark:text-zinc-300 truncate hover:text-amber-600 dark:hover:text-amber-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded px-1 -mx-1 group/name"
+              onDoubleClick={(e) => startEditingGroup(group, groupElements, e)}
+              title={`${displayName} (double-click to rename)`}
+            >
+              <span className="truncate font-medium">{displayName}</span>
+              <span className="flex-shrink-0 text-xs text-zinc-400 dark:text-zinc-500 ml-1">
+                {groupElements.length}
+              </span>
+              <PencilLine
+                size={12}
+                className="flex-shrink-0 opacity-0 group-hover/name:opacity-60 transition-opacity"
+                aria-hidden="true"
+              />
+            </button>
+          )}
+        </div>
+
+        {/* Visibility toggle */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleGroupVisibility(group.id);
+          }}
+          className={`
+            flex-shrink-0 p-1 rounded transition-all duration-150
+            focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500
+            ${isHidden
+              ? 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700'
+              : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700'
+            }
+          `}
+          title={isHidden ? 'Show group' : 'Hide group'}
+          aria-label={isHidden ? 'Show group' : 'Hide group'}
+          aria-pressed={!isHidden}
+        >
+          {isHidden ? <EyeOff size={14} /> : <Eye size={14} />}
+        </button>
+
+        {/* Lock toggle */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleGroupLock(group.id);
+          }}
+          className={`
+            flex-shrink-0 p-1 rounded transition-all duration-150
+            focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500
+            ${isLocked
+              ? 'text-amber-500 dark:text-amber-400 hover:text-amber-600 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950'
+              : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700'
+            }
+          `}
+          title={isLocked ? 'Unlock group' : 'Lock group'}
+          aria-label={isLocked ? 'Unlock group' : 'Lock group'}
+          aria-pressed={isLocked}
+        >
+          {isLocked ? <Lock size={14} /> : <Unlock size={14} />}
+        </button>
       </div>
     );
   };
@@ -796,7 +1035,7 @@ export function LayersPanel({
 
                 return (
                   <div key={group.id} role="group">
-                    {renderGroupHeader(group.id, 'component', groupName, groupElements.length, isAllSelected)}
+                    {renderComponentGroupHeader(group.id, groupName, groupElements.length, isAllSelected)}
                     {!isCollapsed && groupElements.map((el, elIdx) =>
                       renderElementRow(el, idx * 100 + elIdx, true)
                     )}
@@ -810,11 +1049,12 @@ export function LayersPanel({
                 const isAllSelected = groupElements.every(el =>
                   el.id === selectedElementId || selectedElementIds.has(el.id)
                 );
-                const groupName = getGroupDisplayName(group, groupElements, elementGroups);
+                // Find the index of this group within elementGroups for drag-drop
+                const groupIndex = elementGroups.findIndex(g => g.id === group.id);
 
                 return (
                   <div key={group.id} role="group">
-                    {renderGroupHeader(group.id, 'element', groupName, groupElements.length, isAllSelected)}
+                    {renderElementGroupRow(group, groupElements, groupIndex, isAllSelected)}
                     {!isCollapsed && groupElements.map((el, elIdx) =>
                       renderElementRow(el, idx * 100 + elIdx, true)
                     )}

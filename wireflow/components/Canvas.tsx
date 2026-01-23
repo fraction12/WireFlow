@@ -559,6 +559,72 @@ export function Canvas() {
     setComponentInstances([...otherInstances, ...newFrameInstances]);
   }, [recordSnapshot, componentInstances, activeFrameId]);
 
+  // Element group layers panel handlers
+  const toggleGroupVisibility = useCallback((groupId: string) => {
+    recordSnapshot();
+    // Toggle visibility on the group itself
+    setElementGroups(prev => prev.map(group =>
+      group.id === groupId
+        ? { ...group, visible: group.visible === false ? true : false }
+        : group
+    ));
+    // Also toggle visibility on all elements in the group
+    const group = elementGroups.find(g => g.id === groupId);
+    if (group) {
+      const newVisible = group.visible === false ? true : false;
+      setElements(prev => prev.map(el =>
+        el.elementGroupId === groupId
+          ? { ...el, visible: newVisible }
+          : el
+      ));
+    }
+  }, [recordSnapshot, elementGroups]);
+
+  const toggleGroupLock = useCallback((groupId: string) => {
+    recordSnapshot();
+    // Toggle lock on the group itself
+    setElementGroups(prev => prev.map(group =>
+      group.id === groupId
+        ? { ...group, locked: !group.locked }
+        : group
+    ));
+    // Also toggle lock on all elements in the group
+    const group = elementGroups.find(g => g.id === groupId);
+    if (group) {
+      const newLocked = !group.locked;
+      setElements(prev => prev.map(el =>
+        el.elementGroupId === groupId
+          ? { ...el, locked: newLocked }
+          : el
+      ));
+    }
+  }, [recordSnapshot, elementGroups]);
+
+  const renameGroup = useCallback((groupId: string, newName: string) => {
+    recordSnapshot();
+    setElementGroups(prev => prev.map(group =>
+      group.id === groupId
+        ? { ...group, name: newName.trim() || undefined }
+        : group
+    ));
+  }, [recordSnapshot]);
+
+  const reorderGroups = useCallback((fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return;
+    recordSnapshot();
+    // Get groups for the active frame only
+    const frameGroups = elementGroups.filter(g => g.frameId === activeFrameId);
+    const otherGroups = elementGroups.filter(g => g.frameId !== activeFrameId);
+
+    // Reorder within the frame's groups
+    const newFrameGroups = [...frameGroups];
+    const [removed] = newFrameGroups.splice(fromIndex, 1);
+    newFrameGroups.splice(toIndex, 0, removed);
+
+    // Combine with groups from other frames
+    setElementGroups([...otherGroups, ...newFrameGroups]);
+  }, [recordSnapshot, elementGroups, activeFrameId]);
+
   // Colors state (Phase 1)
   const [currentStrokeColor, setCurrentStrokeColor] = useState(DEFAULT_STROKE_COLOR);
   const [currentFillColor, setCurrentFillColor] = useState(DEFAULT_FILL_COLOR);
@@ -5038,6 +5104,8 @@ export function Canvas() {
     toggleElementLock,
     toggleInstanceVisibility,
     toggleInstanceLock,
+    toggleGroupVisibility,
+    toggleGroupLock,
     announce,
     enterEditMode,
     createElementGroup,
@@ -5165,7 +5233,7 @@ export function Canvas() {
             return;
           // Layer shortcuts
           case "h":
-            // Toggle visibility of selected element(s) or instance
+            // Toggle visibility of selected element(s), instance, or group
             if (currentSelectedInstanceId) {
               e.preventDefault();
               callbacks.toggleInstanceVisibility(currentSelectedInstanceId);
@@ -5174,6 +5242,19 @@ export function Canvas() {
               const idsToToggle = currentSelectedElementIds.size > 0
                 ? Array.from(currentSelectedElementIds)
                 : [currentSelectedElementId!];
+              // Check if all selected elements belong to a single element group
+              const selectedElements = currentElements.filter(el => idsToToggle.includes(el.id));
+              const groupIds = new Set(selectedElements.map(el => el.elementGroupId).filter(Boolean));
+              if (groupIds.size === 1) {
+                const groupId = Array.from(groupIds)[0]!;
+                const group = currentElementGroups.find(g => g.id === groupId);
+                // If all group elements are selected, toggle group visibility
+                if (group && group.elementIds.length === idsToToggle.length) {
+                  callbacks.toggleGroupVisibility(groupId);
+                  return;
+                }
+              }
+              // Otherwise toggle individual elements
               idsToToggle.forEach(id => callbacks.toggleElementVisibility(id));
             }
             return;
@@ -5316,7 +5397,7 @@ export function Canvas() {
         callbacks.sendToBack();
         return;
       }
-      // Ctrl/Cmd+L: Toggle lock of selected element(s) or instance
+      // Ctrl/Cmd+L: Toggle lock of selected element(s), instance, or group
       if ((e.ctrlKey || e.metaKey) && e.key === "l" && !e.shiftKey) {
         if (currentSelectedInstanceId) {
           e.preventDefault();
@@ -5326,6 +5407,19 @@ export function Canvas() {
           const idsToToggle = currentSelectedElementIds.size > 0
             ? Array.from(currentSelectedElementIds)
             : [currentSelectedElementId!];
+          // Check if all selected elements belong to a single element group
+          const selectedElements = currentElements.filter(el => idsToToggle.includes(el.id));
+          const groupIds = new Set(selectedElements.map(el => el.elementGroupId).filter(Boolean));
+          if (groupIds.size === 1) {
+            const groupId = Array.from(groupIds)[0]!;
+            const group = currentElementGroups.find(g => g.id === groupId);
+            // If all group elements are selected, toggle group lock
+            if (group && group.elementIds.length === idsToToggle.length) {
+              callbacks.toggleGroupLock(groupId);
+              return;
+            }
+          }
+          // Otherwise toggle individual elements
           idsToToggle.forEach(id => callbacks.toggleElementLock(id));
         }
         return;
@@ -6948,6 +7042,10 @@ export function Canvas() {
         onRenameInstance={renameInstance}
         onReorderInstances={reorderInstance}
         onDeleteInstance={deleteComponentInstance}
+        onToggleGroupVisibility={toggleGroupVisibility}
+        onToggleGroupLock={toggleGroupLock}
+        onRenameGroup={renameGroup}
+        onReorderGroups={reorderGroups}
       />
 
       {/* Right panel collapsed strip - shows toggle buttons when panels are collapsed */}

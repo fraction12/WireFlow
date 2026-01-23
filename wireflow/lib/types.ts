@@ -263,6 +263,13 @@ export interface ElementGroup {
   elementIds: string[];
   frameId: string; // Groups are scoped to a single frame
   createdAt: string;
+  // Layers panel properties (matching element and instance behavior)
+  /** Custom display name for group in layers panel */
+  name?: string;
+  /** Whether group is visible on canvas (default: true) - applies to all elements */
+  visible?: boolean;
+  /** Whether group is locked from editing (default: false) - applies to all elements */
+  locked?: boolean;
 }
 
 // User-defined component (promoted from element group)
