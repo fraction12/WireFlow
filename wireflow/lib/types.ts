@@ -320,6 +320,13 @@ export interface ComponentInstance {
   scale?: number; // Future: scale support
   overrides?: ComponentOverride[]; // Instance-level customizations
   createdAt: string;
+  // Layers panel properties (matching element behavior)
+  /** Custom display name for instance in layers panel (defaults to component name) */
+  name?: string;
+  /** Whether instance is visible on canvas (default: true) */
+  visible?: boolean;
+  /** Whether instance is locked from editing (default: false) */
+  locked?: boolean;
 }
 
 // Override for a specific property on an element within an instance

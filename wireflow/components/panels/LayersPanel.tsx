@@ -62,6 +62,16 @@ interface LayersPanelProps {
   onToggleLock: (elementId: string) => void;
   /** Callback when element name is changed */
   onRenameElement: (elementId: string, newName: string) => void;
+  /** Callback when instance visibility is toggled */
+  onToggleInstanceVisibility: (instanceId: string) => void;
+  /** Callback when instance lock is toggled */
+  onToggleInstanceLock: (instanceId: string) => void;
+  /** Callback when instance name is changed */
+  onRenameInstance: (instanceId: string, newName: string) => void;
+  /** Callback when instances are reordered via drag-drop */
+  onReorderInstances: (fromIndex: number, toIndex: number) => void;
+  /** Callback when instance is deleted */
+  onDeleteInstance: (instanceId: string) => void;
 }
 
 // Element type to icon mapping
@@ -97,6 +107,14 @@ function getElementDisplayName(element: CanvasElement): string {
   }
 
   return ELEMENT_TYPE_NAMES[element.type] || 'Element';
+}
+
+/** Get display name for a component instance */
+function getInstanceDisplayName(instance: ComponentInstance, component: UserComponent | undefined): string {
+  // Use custom name if set
+  if (instance.name) return instance.name;
+  // Fall back to component name
+  return component?.name || 'Unknown Component';
 }
 
 /** Generate a meaningful display name for an element group */
@@ -147,6 +165,11 @@ export function LayersPanel({
   onToggleVisibility,
   onToggleLock,
   onRenameElement,
+  onToggleInstanceVisibility,
+  onToggleInstanceLock,
+  onRenameInstance,
+  onReorderInstances,
+  onDeleteInstance,
 }: LayersPanelProps) {
   // Manage content visibility timing for smooth animation
   const contentVisible = usePanelAnimation(isExpanded);
@@ -154,7 +177,9 @@ export function LayersPanel({
   // Editing state for inline rename
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+  const [editingType, setEditingType] = useState<'element' | 'instance'>('element');
   const inputRef = useRef<HTMLInputElement>(null);
+  const instanceInputRef = useRef<HTMLInputElement>(null);
 
   // Drag-drop state
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -183,27 +208,45 @@ export function LayersPanel({
 
   // Focus input when editing starts
   useEffect(() => {
-    if (editingId && inputRef.current) {
-      inputRef.current.focus();
-      inputRef.current.select();
+    if (editingId) {
+      if (editingType === 'element' && inputRef.current) {
+        inputRef.current.focus();
+        inputRef.current.select();
+      } else if (editingType === 'instance' && instanceInputRef.current) {
+        instanceInputRef.current.focus();
+        instanceInputRef.current.select();
+      }
     }
-  }, [editingId]);
+  }, [editingId, editingType]);
 
   // Start editing element name
   const startEditing = useCallback((element: CanvasElement, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditingId(element.id);
     setEditingName(element.name || getElementDisplayName(element));
+    setEditingType('element');
+  }, []);
+
+  // Start editing instance name
+  const startEditingInstance = useCallback((instance: ComponentInstance, component: UserComponent | undefined, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingId(instance.id);
+    setEditingName(instance.name || getInstanceDisplayName(instance, component));
+    setEditingType('instance');
   }, []);
 
   // Save edited name
   const saveEdit = useCallback(() => {
     if (editingId) {
-      onRenameElement(editingId, editingName);
+      if (editingType === 'element') {
+        onRenameElement(editingId, editingName);
+      } else {
+        onRenameInstance(editingId, editingName);
+      }
       setEditingId(null);
       setEditingName('');
     }
-  }, [editingId, editingName, onRenameElement]);
+  }, [editingId, editingName, editingType, onRenameElement, onRenameInstance]);
 
   // Cancel editing
   const cancelEdit = useCallback(() => {
@@ -273,13 +316,69 @@ export function LayersPanel({
     document.body.classList.remove('dragging-layer');
   }, []);
 
+  // Instance drag-drop state
+  const [draggedInstanceIndex, setDraggedInstanceIndex] = useState<number | null>(null);
+  const [dropInstanceTargetIndex, setDropInstanceTargetIndex] = useState<number | null>(null);
+  const [dropInstancePosition, setDropInstancePosition] = useState<'above' | 'below'>('above');
+
+  // Instance drag handlers
+  const handleInstanceDragStart = useCallback((displayIndex: number) => (e: React.DragEvent) => {
+    setDraggedInstanceIndex(displayIndex);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', `instance:${displayIndex}`);
+    document.body.classList.add('dragging-layer');
+  }, []);
+
+  const handleInstanceDragOver = useCallback((displayIndex: number) => (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDropInstanceTargetIndex(displayIndex);
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midpoint = rect.top + rect.height / 2;
+    setDropInstancePosition(e.clientY < midpoint ? 'above' : 'below');
+  }, []);
+
+  const handleInstanceDragLeave = useCallback(() => {
+    setDropInstanceTargetIndex(null);
+    setDropInstancePosition('above');
+  }, []);
+
+  const handleInstanceDrop = useCallback((toDisplayIndex: number, position: 'above' | 'below' = dropInstancePosition) => (e: React.DragEvent) => {
+    e.preventDefault();
+    if (draggedInstanceIndex !== null && draggedInstanceIndex !== toDisplayIndex) {
+      // Instances are sorted by creation date (newest first), so display index = array index
+      let actualToIndex = toDisplayIndex;
+
+      // Adjust target index based on drop position
+      if (position === 'below') {
+        actualToIndex = Math.min(componentInstances.length - 1, actualToIndex + 1);
+      }
+
+      if (draggedInstanceIndex !== actualToIndex) {
+        onReorderInstances(draggedInstanceIndex, actualToIndex);
+      }
+    }
+    setDraggedInstanceIndex(null);
+    setDropInstanceTargetIndex(null);
+    setDropInstancePosition('above');
+    document.body.classList.remove('dragging-layer');
+  }, [draggedInstanceIndex, dropInstancePosition, componentInstances.length, onReorderInstances]);
+
+  const handleInstanceDragEnd = useCallback(() => {
+    setDraggedInstanceIndex(null);
+    setDropInstanceTargetIndex(null);
+    setDropInstancePosition('above');
+    document.body.classList.remove('dragging-layer');
+  }, []);
+
   // Build hierarchical layer structure
   // Groups are placed at the z-index of their first (topmost in visual order) element
   type LayerItem =
     | { type: 'element'; element: CanvasElement; displayIndex: number }
     | { type: 'componentGroup'; group: ComponentGroup; elements: CanvasElement[] }
     | { type: 'elementGroup'; group: ElementGroup; elements: CanvasElement[] }
-    | { type: 'userComponentInstance'; instance: ComponentInstance; component: UserComponent | undefined };
+    | { type: 'userComponentInstance'; instance: ComponentInstance; component: UserComponent | undefined; instanceIndex: number };
 
   const buildLayerHierarchy = useCallback((): LayerItem[] => {
     const items: LayerItem[] = [];
@@ -329,9 +428,9 @@ export function LayersPanel({
     const sortedInstances = [...componentInstances].sort((a, b) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
-    sortedInstances.forEach(instance => {
+    sortedInstances.forEach((instance, instanceIndex) => {
       const component = userComponents.find(c => c.id === instance.componentId);
-      items.push({ type: 'userComponentInstance', instance, component });
+      items.push({ type: 'userComponentInstance', instance, component, instanceIndex });
     });
 
     return items;
@@ -373,9 +472,12 @@ export function LayersPanel({
       }
 
       if (item.type === 'userComponentInstance') {
+        const lowerQuery = searchQuery.toLowerCase().trim();
+        // Match by instance name
+        if (item.instance.name?.toLowerCase().includes(lowerQuery)) return true;
         // Match by component name
         const componentName = item.component?.name || 'Unknown Component';
-        return componentName.toLowerCase().includes(searchQuery.toLowerCase().trim());
+        return componentName.toLowerCase().includes(lowerQuery);
       }
 
       return true;
@@ -721,43 +823,142 @@ export function LayersPanel({
               }
 
               if (item.type === 'userComponentInstance') {
-                const { instance, component } = item;
+                const { instance, component, instanceIndex } = item;
                 const isSelected = instance.id === selectedInstanceId;
                 const isOrphaned = !component;
-                const componentName = component?.name || 'Unknown Component';
+                const isEditing = instance.id === editingId && editingType === 'instance';
+                const isHidden = instance.visible === false;
+                const isLocked = instance.locked === true;
+                const isDragging = instanceIndex === draggedInstanceIndex;
+                const isDropTarget = instanceIndex === dropInstanceTargetIndex && draggedInstanceIndex !== null && instanceIndex !== draggedInstanceIndex;
+                const isDropAbove = isDropTarget && dropInstancePosition === 'above';
+                const isDropBelow = isDropTarget && dropInstancePosition === 'below';
+                const displayName = getInstanceDisplayName(instance, component);
 
                 return (
                   <div
                     key={instance.id}
-                    onClick={() => onSelectInstance(instance.id)}
+                    draggable={!isEditing}
+                    onDragStart={handleInstanceDragStart(instanceIndex)}
+                    onDragOver={handleInstanceDragOver(instanceIndex)}
+                    onDragLeave={handleInstanceDragLeave}
+                    onDrop={handleInstanceDrop(instanceIndex)}
+                    onDragEnd={handleInstanceDragEnd}
+                    onClick={() => !isEditing && onSelectInstance(instance.id)}
                     className={`
-                      group flex items-center gap-2 px-2 py-2 border-b border-zinc-100 dark:border-zinc-800
+                      group flex items-center gap-2 px-2 py-1.5 border-b border-zinc-100 dark:border-zinc-800
                       transition-all duration-150 cursor-pointer
                       ${isSelected
                         ? 'bg-purple-50 dark:bg-purple-950 border-l-4 border-l-purple-500'
                         : 'hover:bg-zinc-50 dark:hover:bg-zinc-800/50 border-l-4 border-l-transparent'
                       }
                       ${isOrphaned ? 'opacity-70' : ''}
+                      ${isHidden ? 'opacity-50' : ''}
+                      ${isDragging ? 'opacity-50 bg-zinc-100 dark:bg-zinc-800' : ''}
+                      ${isDropAbove ? 'border-t-2 border-t-purple-500' : ''}
+                      ${isDropBelow ? 'border-b-2 border-b-purple-500' : ''}
                     `}
                     role="treeitem"
-                    aria-label={`Component instance: ${componentName}${isOrphaned ? ' (orphaned)' : ''}`}
+                    tabIndex={0}
+                    aria-selected={isSelected}
+                    aria-label={`Component instance: ${displayName}${isOrphaned ? ' (orphaned)' : ''}${isHidden ? ', hidden' : ''}${isLocked ? ', locked' : ''}`}
                   >
+                    {/* Drag handle */}
+                    <div
+                      className="flex-shrink-0 cursor-grab active:cursor-grabbing text-zinc-400 dark:text-zinc-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                      aria-label="Drag to reorder"
+                    >
+                      <GripVertical size={14} />
+                    </div>
+
                     {/* Component icon */}
                     <div className={`flex-shrink-0 ${isOrphaned ? 'text-amber-500 dark:text-amber-400' : 'text-purple-500 dark:text-purple-400'}`}>
                       {isOrphaned ? <AlertTriangle size={16} /> : <Component size={16} />}
                     </div>
 
-                    {/* Component name */}
+                    {/* Instance name (editable) */}
                     <div className="flex-1 min-w-0">
-                      <span className={`text-sm ${isOrphaned ? 'italic' : 'font-medium'} text-zinc-700 dark:text-zinc-300 truncate`}>
-                        {componentName}
-                      </span>
-                      {isOrphaned && (
-                        <span className="ml-2 text-xs text-amber-500 dark:text-amber-400">
-                          (deleted)
-                        </span>
+                      {isEditing ? (
+                        <input
+                          ref={instanceInputRef}
+                          type="text"
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          onBlur={saveEdit}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') saveEdit();
+                            if (e.key === 'Escape') cancelEdit();
+                            e.stopPropagation();
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full text-sm px-1 py-0.5 border border-purple-500 rounded bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500"
+                          aria-label="Edit instance name"
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          className="w-full flex items-center gap-1 text-left text-sm text-zinc-700 dark:text-zinc-300 truncate hover:text-purple-600 dark:hover:text-purple-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 rounded px-1 -mx-1 group/name"
+                          onDoubleClick={(e) => startEditingInstance(instance, component, e)}
+                          title={`${displayName} (double-click to rename)`}
+                        >
+                          <span className={`truncate ${isOrphaned ? 'italic' : 'font-medium'}`}>{displayName}</span>
+                          {isOrphaned && (
+                            <span className="flex-shrink-0 text-xs text-amber-500 dark:text-amber-400">
+                              (deleted)
+                            </span>
+                          )}
+                          <PencilLine
+                            size={12}
+                            className="flex-shrink-0 opacity-0 group-hover/name:opacity-60 transition-opacity"
+                            aria-hidden="true"
+                          />
+                        </button>
                       )}
                     </div>
+
+                    {/* Visibility toggle */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleInstanceVisibility(instance.id);
+                      }}
+                      className={`
+                        flex-shrink-0 p-1 rounded transition-all duration-150
+                        focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500
+                        ${isHidden
+                          ? 'text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700'
+                          : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700'
+                        }
+                      `}
+                      title={isHidden ? 'Show instance' : 'Hide instance'}
+                      aria-label={isHidden ? 'Show instance' : 'Hide instance'}
+                      aria-pressed={!isHidden}
+                    >
+                      {isHidden ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+
+                    {/* Lock toggle */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleInstanceLock(instance.id);
+                      }}
+                      className={`
+                        flex-shrink-0 p-1 rounded transition-all duration-150
+                        focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500
+                        ${isLocked
+                          ? 'text-amber-500 dark:text-amber-400 hover:text-amber-600 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950'
+                          : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700'
+                        }
+                      `}
+                      title={isLocked ? 'Unlock instance' : 'Lock instance'}
+                      aria-label={isLocked ? 'Unlock instance' : 'Lock instance'}
+                      aria-pressed={isLocked}
+                    >
+                      {isLocked ? <Lock size={14} /> : <Unlock size={14} />}
+                    </button>
                   </div>
                 );
               }

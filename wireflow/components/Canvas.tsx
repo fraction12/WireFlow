@@ -515,6 +515,50 @@ export function Canvas() {
     });
   }, [recordSnapshot]);
 
+  // Component instance layers panel handlers
+  const toggleInstanceVisibility = useCallback((instanceId: string) => {
+    recordSnapshot();
+    setComponentInstances(prev => prev.map(inst =>
+      inst.id === instanceId
+        ? { ...inst, visible: inst.visible === false ? true : false }
+        : inst
+    ));
+  }, [recordSnapshot]);
+
+  const toggleInstanceLock = useCallback((instanceId: string) => {
+    recordSnapshot();
+    setComponentInstances(prev => prev.map(inst =>
+      inst.id === instanceId
+        ? { ...inst, locked: !inst.locked }
+        : inst
+    ));
+  }, [recordSnapshot]);
+
+  const renameInstance = useCallback((instanceId: string, newName: string) => {
+    recordSnapshot();
+    setComponentInstances(prev => prev.map(inst =>
+      inst.id === instanceId
+        ? { ...inst, name: newName.trim() || undefined }
+        : inst
+    ));
+  }, [recordSnapshot]);
+
+  const reorderInstance = useCallback((fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex) return;
+    recordSnapshot();
+    // Get instances for the active frame only
+    const frameInstances = componentInstances.filter(i => i.frameId === activeFrameId);
+    const otherInstances = componentInstances.filter(i => i.frameId !== activeFrameId);
+
+    // Reorder within the frame's instances
+    const newFrameInstances = [...frameInstances];
+    const [removed] = newFrameInstances.splice(fromIndex, 1);
+    newFrameInstances.splice(toIndex, 0, removed);
+
+    // Combine with instances from other frames
+    setComponentInstances([...otherInstances, ...newFrameInstances]);
+  }, [recordSnapshot, componentInstances, activeFrameId]);
+
   // Colors state (Phase 1)
   const [currentStrokeColor, setCurrentStrokeColor] = useState(DEFAULT_STROKE_COLOR);
   const [currentFillColor, setCurrentFillColor] = useState(DEFAULT_FILL_COLOR);
@@ -1724,6 +1768,9 @@ export function Canvas() {
     // Draw component instances for the current frame
     const frameInstances = componentInstances.filter(i => i.frameId === activeFrameId);
     frameInstances.forEach((instance) => {
+      // Skip hidden instances
+      if (instance.visible === false) return;
+
       const component = userComponents.find(c => c.id === instance.componentId);
       if (!component) return;
 
@@ -2123,6 +2170,13 @@ export function Canvas() {
     // Search in reverse order (most recently placed first, which appears on top)
     for (let i = frameInstances.length - 1; i >= 0; i--) {
       const instance = frameInstances[i];
+
+      // Skip hidden instances - they can't be selected
+      if (instance.visible === false) continue;
+
+      // Skip locked instances - they can't be selected for interaction
+      if (instance.locked === true) continue;
+
       const component = userComponents.find(c => c.id === instance.componentId);
       if (!component) continue;
 
@@ -3061,7 +3115,8 @@ export function Canvas() {
     // Handle instance dragging
     if (currentTool === "select" && selectedInstanceId && dragOffset && isDrawing) {
       const instance = componentInstances.find(i => i.id === selectedInstanceId);
-      if (instance) {
+      // Don't allow dragging locked instances
+      if (instance && instance.locked !== true) {
         const rawX = x - dragOffset.x;
         const rawY = y - dragOffset.y;
 
@@ -4981,6 +5036,8 @@ export function Canvas() {
     toggleDocPanel,
     toggleElementVisibility,
     toggleElementLock,
+    toggleInstanceVisibility,
+    toggleInstanceLock,
     announce,
     enterEditMode,
     createElementGroup,
@@ -5108,8 +5165,11 @@ export function Canvas() {
             return;
           // Layer shortcuts
           case "h":
-            // Toggle visibility of selected element(s)
-            if (currentSelectedElementId || currentSelectedElementIds.size > 0) {
+            // Toggle visibility of selected element(s) or instance
+            if (currentSelectedInstanceId) {
+              e.preventDefault();
+              callbacks.toggleInstanceVisibility(currentSelectedInstanceId);
+            } else if (currentSelectedElementId || currentSelectedElementIds.size > 0) {
               e.preventDefault();
               const idsToToggle = currentSelectedElementIds.size > 0
                 ? Array.from(currentSelectedElementIds)
@@ -5256,9 +5316,12 @@ export function Canvas() {
         callbacks.sendToBack();
         return;
       }
-      // Ctrl/Cmd+L: Toggle lock of selected element(s)
+      // Ctrl/Cmd+L: Toggle lock of selected element(s) or instance
       if ((e.ctrlKey || e.metaKey) && e.key === "l" && !e.shiftKey) {
-        if (currentSelectedElementId || currentSelectedElementIds.size > 0) {
+        if (currentSelectedInstanceId) {
+          e.preventDefault();
+          callbacks.toggleInstanceLock(currentSelectedInstanceId);
+        } else if (currentSelectedElementId || currentSelectedElementIds.size > 0) {
           e.preventDefault();
           const idsToToggle = currentSelectedElementIds.size > 0
             ? Array.from(currentSelectedElementIds)
@@ -6880,6 +6943,11 @@ export function Canvas() {
         onToggleVisibility={toggleElementVisibility}
         onToggleLock={toggleElementLock}
         onRenameElement={renameElement}
+        onToggleInstanceVisibility={toggleInstanceVisibility}
+        onToggleInstanceLock={toggleInstanceLock}
+        onRenameInstance={renameInstance}
+        onReorderInstances={reorderInstance}
+        onDeleteInstance={deleteComponentInstance}
       />
 
       {/* Right panel collapsed strip - shows toggle buttons when panels are collapsed */}
