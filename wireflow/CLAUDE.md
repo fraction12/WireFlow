@@ -43,24 +43,21 @@ components/
 │   ├── renderers.ts       # Sketch-style drawing functions
 │   └── utils.ts           # ID generation, bound text helpers
 ├── panels/                 # Sidebar panel components
-│   ├── index.ts           # Barrel exports
 │   ├── ComponentPanel.tsx # Component library browser
 │   ├── DocumentationPanel.tsx # Element annotations
 │   ├── FrameList.tsx      # Frame/page management
+│   ├── LayersPanel.tsx    # Z-order, visibility, locking, drag-to-reorder
 │   ├── RightPanelStrip.tsx # Right sidebar toggle
 │   └── UnifiedStyleBar.tsx # Style controls
 ├── dialogs/                # Modal & dialog components
-│   ├── index.ts           # Barrel exports
 │   ├── ConfirmDialog.tsx  # Yes/no confirmation
 │   ├── ImageExport.tsx    # PNG/SVG export
 │   ├── KeyboardShortcutsPanel.tsx # Help panel
 │   └── WelcomeModal.tsx   # First-time user guide
 ├── theme/                  # Theme system
-│   ├── index.ts           # Barrel exports
 │   ├── ThemeProvider.tsx  # Dark/light mode context
 │   └── ThemeToggle.tsx    # Theme switcher
 ├── ui/                     # Reusable UI components
-│   ├── index.ts           # Barrel exports
 │   ├── ColorPicker.tsx    # Color selection
 │   ├── Divider.tsx        # Visual separator
 │   ├── Toast.tsx          # Notification system
@@ -76,7 +73,12 @@ lib/
 ├── colors.ts              # Color palette and utilities
 ├── textMeasurement.ts     # Text width calculation + cache
 ├── textPresets.ts         # Font presets
-└── useHistory.ts          # Undo/redo hook
+├── mcpBridge.ts           # WebSocket client for MCP server integration
+├── useHistory.ts          # Undo/redo hook
+├── usePanelAnimation.ts   # Smooth panel open/close transitions
+├── useFocusTrap.ts        # Modal focus trap for accessibility
+├── useFocusRestore.ts     # Restore focus after modal closes
+└── useRovingTabindex.ts   # Arrow key navigation for lists
 ```
 
 ### Key Files
